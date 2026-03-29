@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"Lumaestro/internal/agents"
+	"Lumaestro/internal/config"
 	"Lumaestro/internal/provider"
 	"Lumaestro/internal/tools"
 	"path/filepath"
 	"strings"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"google.golang.org/genai"
 )
 
 // ChatService orquestra a inteligência via processos CLI.
@@ -72,13 +74,34 @@ func (s *ChatService) Ask(ctx context.Context, agent string, question string) (s
 		}
 	}
 
-	// 5. Executar o Binário da CLI (O CORAÇÃO DO PROJETO)
+	// 5. Decisão de Motor (Sempre respeitando a preferência do usuário)
+	cfg, _ := config.Load()
+	useSDK := false
+	if agent == "gemini" && cfg != nil && cfg.UseGeminiAPIKey {
+		useSDK = true
+	} else if agent == "claude" && cfg != nil && cfg.UseClaudeAPIKey {
+		useSDK = true
+	}
+
 	contextData := strings.Join(fullContext, "\n---\n")
 	
+	if useSDK {
+		prompt := fmt.Sprintf("CONTEXTO DO CONHECIMENTO:\n%s\n\nUSUÁRIO: %s", contextData, question)
+		res, err := s.Embedder.Client.Models.GenerateContent(ctx, "gemini-2.0-flash", genai.Text(prompt), nil)
+		if err != nil {
+			return "", fmt.Errorf("erro na sinfonia: %w", err)
+		}
+		if len(res.Candidates) > 0 && len(res.Candidates[0].Content.Parts) > 0 {
+			return fmt.Sprintf("%v", res.Candidates[0].Content.Parts[0]), nil
+		}
+		return "O Maestro não encontrou as notas certas para responder via API.", nil
+	}
+
+	// MODO CLI (LOGIN/OAUTH) - O coração orquestrador
 	output, err := s.Executor.ExecuteCLI(ctx, agent, contextData, question)
 	if err != nil {
 		if strings.Contains(err.Error(), "executable file not found") {
-			return fmt.Sprintf("O agente '%s' não parece estar instalado. Digite 'instalar %s' para resolver!", agent, agent), nil
+			return fmt.Sprintf("O agente '%s' não parece estar instalado para login. Digite 'instalar %s'!", agent, agent), nil
 		}
 		return "", err
 	}

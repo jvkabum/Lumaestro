@@ -331,7 +331,24 @@ func (e *Executor) ExecuteCLI(ctx context.Context, agent string, contextData str
 	} else {
 		cmd = exec.CommandContext(ctx, binaryName, "-p", fullPrompt)
 	}
-	cmd.Dir = filepath.Dir(localBin) // DIRETÓRIO DE TRABALHO
+	cmd.Dir = cwd // DIRETÓRIO RAIZ
+
+	// Injeção de Variáveis de Ambiente (CRÍTICO: Sem isso o CLI morre ou trava)
+	cmd.Env = os.Environ()
+	cfg, errConfig := config.Load()
+	if errConfig == nil && cfg != nil {
+		if cfg.GeminiAPIKey != "" && cfg.UseGeminiAPIKey {
+			cmd.Env = append(cmd.Env, "GEMINI_API_KEY="+cfg.GeminiAPIKey)
+		}
+		if cfg.ClaudeAPIKey != "" && cfg.UseClaudeAPIKey {
+			cmd.Env = append(cmd.Env, "ANTHROPIC_API_KEY="+cfg.ClaudeAPIKey)
+		}
+	}
+	// Silencia avisos do Node para um log de chat mais limpo
+	cmd.Env = append(cmd.Env, "NODE_OPTIONS=--no-warnings")
+
+	// Redireciona stdin para o vazio para evitar que o CLI trave esperando input do teclado no Windows
+	cmd.Stdin = strings.NewReader("")
 
 	stdout, _ := cmd.StdoutPipe()
 	stderr, _ := cmd.StderrPipe()
@@ -343,13 +360,20 @@ func (e *Executor) ExecuteCLI(ctx context.Context, agent string, contextData str
 	var finalOutput strings.Builder
 
 	readStream := func(r io.Reader, source string) {
-		scanner := bufio.NewScanner(r)
-		for scanner.Scan() {
-			line := scanner.Text()
-			finalOutput.WriteString(line + "\n")
-			e.LogChan <- ExecutionLog{
-				Source:  source,
-				Content: line,
+		buf := make([]byte, 1024)
+		for {
+			n, err := r.Read(buf)
+			if n > 0 {
+				data := string(buf[:n])
+				finalOutput.WriteString(data)
+				// Emite cada pedaço de texto em tempo real para o Vue
+				e.LogChan <- ExecutionLog{
+					Source:  source,
+					Content: data,
+				}
+			}
+			if err != nil {
+				break
 			}
 		}
 	}

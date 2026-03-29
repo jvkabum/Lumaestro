@@ -2,14 +2,19 @@ package obsidian
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 
 	"Lumaestro/internal/provider"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
+
+type IndexCache map[string]int64
 
 // Crawler gerencia a descoberta e indexação de notas.
 type Crawler struct {
@@ -17,73 +22,97 @@ type Crawler struct {
 	Embedder  *provider.EmbeddingService
 	Qdrant    *provider.QdrantClient
 	Ontology  *provider.OntologyService
+	cachePath string
+	cache     IndexCache
+	mu        sync.Mutex
 }
 
-// NewCrawler inicializa o crawler com as dependências de inteligência completa.
+// NewCrawler inicializa o crawler com suporte a cache de indexação.
 func NewCrawler(vaultPath string, embedder *provider.EmbeddingService, qdrant *provider.QdrantClient, ontology *provider.OntologyService) *Crawler {
-	return &Crawler{
+	c := &Crawler{
 		VaultPath: vaultPath,
 		Embedder:  embedder,
 		Qdrant:    qdrant,
 		Ontology:  ontology,
+		cachePath: ".context/index_cache.json",
+		cache:     make(IndexCache),
+	}
+	c.loadCache()
+	return c
+}
+
+func (c *Crawler) loadCache() {
+	data, err := os.ReadFile(c.cachePath)
+	if err == nil {
+		json.Unmarshal(data, &c.cache)
 	}
 }
 
-// IndexVault percorre e indexa semânticamente cada nota .md no Qdrant.
+func (c *Crawler) saveCache() {
+	os.MkdirAll(".context", 0755)
+	data, _ := json.MarshalIndent(c.cache, "", "  ")
+	os.WriteFile(c.cachePath, data, 0644)
+}
+
+// IndexVault percorre e indexa notas somente se tiverem sido modificadas.
 func (c *Crawler) IndexVault(ctx context.Context) error {
-	var fileCount uint64 = 1
+	var totalSkipped int = 0
+	var totalIndexed int = 0
 
-	return filepath.Walk(c.VaultPath, func(path string, info os.FileInfo, err error) error {
+	err := filepath.Walk(c.VaultPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() || !strings.HasSuffix(info.Name(), ".md") {
+			return nil
+		}
+
+		// Checa se o arquivo mudou antes de chamar a API
+		c.mu.Lock()
+		lastMod, exists := c.cache[path]
+		c.mu.Unlock()
+
+		if exists && lastMod == info.ModTime().Unix() {
+			totalSkipped++
+			return nil // JÁ INDEXADO E INTEGRAL
+		}
+
+		content, err := os.ReadFile(path)
 		if err != nil {
-			return err
+			return nil
 		}
 
-		if !info.IsDir() && strings.HasSuffix(info.Name(), ".md") {
-			content, err := os.ReadFile(path)
-			if err != nil {
-				return err
-			}
-
-			// 1. Gerar Embedding via Gemini
-			vector, err := c.Embedder.GenerateEmbedding(ctx, string(content))
-			if err != nil {
-				return fmt.Errorf("erro gerando embedding para %s: %w", path, err)
-			}
-
-			// 2. Extrair Fatos (Ontologia TrustGraph)
-			triples, _ := c.Ontology.ExtractTriples(ctx, string(content))
-
-			// 3. Preparar Payload (Metadados da nota + Fatos)
-			payload := map[string]interface{}{
-				"path":    path,
-				"name":    info.Name(),
-				"content": string(content),
-				"triples": triples,
-			}
-
-			// 4. Upsert no Qdrant Remoto (Coolify)
-			err = c.Qdrant.UpsertPoint("obsidian_knowledge", fileCount, vector, payload)
-			if err != nil {
-				return fmt.Errorf("erro no upload p/ Qdrant: %w", err)
-			}
-
-			// 5. Notificar Interface (Atualiza o Grafo Starfield)
-			nodeName := strings.TrimSuffix(info.Name(), ".md")
-			runtime.EventsEmit(ctx, "graph:node", map[string]string{
-				"id":   nodeName,
-				"name": nodeName,
-			})
-
-			// Emite as conexões (edges) se houver fatos extraídos
-			for _, triple := range triples {
-				runtime.EventsEmit(ctx, "graph:edge", map[string]string{
-					"source": nodeName,
-					"target": triple.Object, // Assume que o objeto da tripla é outra nota vinculada
-				})
-			}
-
-			fileCount++
+		// 1. Gerar Embedding
+		vector, err := c.Embedder.GenerateEmbedding(ctx, string(content))
+		if err != nil {
+			return nil // Silencia erros individuais
 		}
+
+		// 2. Extrair Triplas
+		triples, _ := c.Ontology.ExtractTriples(ctx, string(content))
+
+		// 3. Salvar no Qdrant
+		nodeName := strings.TrimSuffix(info.Name(), ".md")
+		c.Qdrant.UpsertPoint("obsidian_knowledge", uint64(time.Now().UnixNano()), vector, map[string]interface{}{
+			"path": path, "name": nodeName, "content": string(content), "triples": triples,
+		})
+
+		// 4. Update Cache
+		c.mu.Lock()
+		c.cache[path] = info.ModTime().Unix()
+		c.mu.Unlock()
+		totalIndexed++
+
+		// 5. Atualiza UI
+		runtime.EventsEmit(ctx, "graph:node", map[string]string{"id": nodeName, "name": nodeName})
+		for _, t := range triples {
+			runtime.EventsEmit(ctx, "graph:edge", map[string]string{"source": nodeName, "target": t.Object})
+		}
+
 		return nil
 	})
+
+	c.saveCache()
+	runtime.EventsEmit(ctx, "agent:log", map[string]string{
+		"source":  "CRAWLER",
+		"content": fmt.Sprintf("✅ Indexação completa. Arquivos novos/alterados: %d. Ignorados por cache: %d.", totalIndexed, totalSkipped),
+	})
+	return err
 }

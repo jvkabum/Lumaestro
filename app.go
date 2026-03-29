@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"time"
 	"Lumaestro/internal/agents"
 	"Lumaestro/internal/config"
 	"Lumaestro/internal/obsidian"
@@ -43,10 +44,18 @@ func (a *App) startup(ctx context.Context) {
 	// Tenta inicializar os serviços logo na subida
 	a.initServices()
 
-	// Iniciar a Escuta de Logs
+	// Iniciar a Escuta de Logs e Terminal
 	go a.listenForLogs()
 	go a.listenForInstallerLogs()
 	go a.listenForTerminalOutput()
+
+	// 🚀 Auto-Start: Inicia o agente favorito automaticamente no boot se configurado
+	if a.config != nil && a.config.ActiveAgent != "" {
+		go func() {
+			time.Sleep(1500 * time.Millisecond) // Buffer p/ frontend carregar xterm.js
+			a.StartAgentSession(a.config.ActiveAgent)
+		}()
+	}
 }
 
 // initServices inicializa os motores de IA e RAG se as configurações permitirem

@@ -204,7 +204,7 @@ nav button.active {
 }
 
 .chat-area {
-  margin: 10px;
+  margin: 10px 10px 0 10px;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;

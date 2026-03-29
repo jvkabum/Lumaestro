@@ -105,7 +105,7 @@ const sendMessage = () => {
 
 <style scoped>
 .chat-input-container {
-  padding: 0 0 32px 0;
+  padding: 0;
   background: transparent;
   width: 100%;
 }
@@ -117,9 +117,9 @@ const sendMessage = () => {
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 28px;
-  padding: 16px 20px;
-  box-shadow: 0 24px 50px -12px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  border-radius: 20px; /* Reduzido o raio para combinar com o padding menor */
+  padding: 4px 12px; /* Reduzido drasticamente */
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
 }
@@ -133,12 +133,12 @@ const sendMessage = () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px; /* Reduzindo um pouco o gap para dar mais espaço */
-  margin-bottom: 12px;
-  padding-bottom: 12px;
+  gap: 12px;
+  margin-bottom: 4px; /* Reduzido para 4px */
+  padding-bottom: 4px; /* Reduzido para 4px */
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   flex-wrap: nowrap;
-  min-width: 0; /* Permite que o container encolha se necessário */
+  min-width: 0;
 }
 
 .selector-group {
@@ -226,7 +226,7 @@ textarea {
   line-height: 1.6;
   resize: none;
   outline: none;
-  padding: 8px 0;
+  padding: 4px 0; /* Reduzido de 8px */
   max-height: 300px;
   font-family: 'Inter', system-ui, sans-serif;
   overflow-y: auto;
@@ -243,15 +243,15 @@ textarea::placeholder {
   background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
   color: white;
   border: none;
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
+  width: 40px; /* Reduzido de 44px */
+  height: 40px; /* Reduzido de 44px */
+  border-radius: 12px; /* Mais proporcional ao novo tamanho */
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-  margin-bottom: 2px;
+  margin-bottom: 0px; /* Removida margem inferior */
   flex-shrink: 0;
   box-shadow: 0 8px 16px rgba(37, 99, 235, 0.3);
 }

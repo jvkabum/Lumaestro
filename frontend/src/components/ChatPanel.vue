@@ -238,7 +238,7 @@ const handleSessionEnded = () => {
   flex: 1; display: flex; flex-direction: column; min-height: 0;
 }
 .chat-scroll-boundary { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-.input-persistent-area { padding: 0 24px 20px 24px; position: relative; z-index: 5; }
+.input-persistent-area { padding: 0 24px 10px 24px; position: relative; z-index: 5; }
 
 .raw-terminal-view { flex: 1; display: flex; flex-direction: column; background: #000; }
 .terminal-overlay-header {
