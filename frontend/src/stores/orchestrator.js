@@ -1,13 +1,20 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { EventsOn } from '../../wailsjs/runtime/runtime';
-import { 
-  AskAgent, 
-  ScanVault, 
-  StartAgentSession, 
-  StopAgentSession, 
-  SendAgentInput 
-} from '../../wailsjs/go/main/App';
+
+// Helper para chamar funções do Wails com segurança (evita crash se undefined)
+const safeCall = async (pkg, func, ...args) => {
+  try {
+    if (window.go && window.go.main && window.go.main.App && window.go.main.App[func]) {
+      return await window.go.main.App[func](...args);
+    }
+    console.warn(`[Wails SafeCall] Função ${func} não encontrada (Ambiente Dev/Browser?)`);
+    return null;
+  } catch (err) {
+    console.error(`[Wails SafeCall] Erro ao chamar ${func}:`, err);
+    throw err;
+  }
+};
 
 export const useOrchestratorStore = defineStore('orchestrator', () => {
   // --- Estados Reativos (State) ---
@@ -15,22 +22,19 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   const isThinking = ref(false);
   const isTerminalMode = ref(false);
   const isRealPTY = ref(false);
-  const activeAgent = ref(null);
+  const activeAgent = ref(null);        // Agente visível no momento
+  const runningSessions = ref([]);       // Lista de agentes com sessão ativa (ex: ['gemini', 'claude'])
   const outputBuffer = ref("");
 
   // --- Inicialização de Eventos (Ouvir o Backend Go) ---
   const initListeners = () => {
-    // 1. Escuta logs da IA (Streaming)
+    // Escuta logs da IA (Streaming)
     EventsOn('agent:log', (log) => {
-      console.log("[Store] Recebido agent:log:", log);
-      
-      // Filtra logs de sistema (Scan, etc.) do Chat normal
       if (log.source === 'CRAWLER') {
          messages.value.push({ role: 'assistant', text: log.content, mode: 'system' });
          return;
       }
 
-      // Se for log do agente, tenta acumular na última bolha ou criar nova
       if (log.role === 'assistant') {
         const lastMsg = messages.value[messages.value.length - 1];
         if (lastMsg && lastMsg.role === 'assistant' && lastMsg.mode !== 'system') {
@@ -41,13 +45,36 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
       }
     });
 
-    // 2. Escuta status da Sessão PTY
+    // Escuta status da Sessão PTY
     EventsOn('terminal:started', (info) => {
       isRealPTY.value = !!info?.isRealPTY;
-      console.log("[Store] PTY Iniciado. Real:", isRealPTY.value);
+      const agent = info?.agent;
+      if (agent && !runningSessions.value.includes(agent)) {
+        runningSessions.value.push(agent);
+      }
+      if (!activeAgent.value && agent) {
+        activeAgent.value = agent;
+        isTerminalMode.value = true;
+      }
     });
 
-    // 3. Escuta logs brutos de execução do terminal
+    // Escuta encerramento de sessão  
+    EventsOn('terminal:closed', (agent) => {
+      runningSessions.value = runningSessions.value.filter(a => a !== agent);
+      if (activeAgent.value === agent) {
+        if (runningSessions.value.length > 0) {
+          activeAgent.value = runningSessions.value[0];
+        } else {
+          activeAgent.value = null;
+          isTerminalMode.value = false;
+          isRealPTY.value = false;
+        }
+      }
+      isThinking.value = false;
+      messages.value.push({ role: 'assistant', text: `Sessão ${agent} encerrada.`, mode: 'system' });
+    });
+
+    // Escuta logs brutos de execução
     EventsOn('execution:log', (log) => {
        if (log.source === 'SYSTEM') {
          messages.value.push({ role: 'assistant', text: `⚙️ ${log.content}`, mode: 'system' });
@@ -55,38 +82,27 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     });
   };
 
-  // --- Ações (Actions) ---
-  
-  // Enviar comando para IA (Modo One-Shot/Resumo)
+  // --- Ações (Actions) com SafeCall ---
   const ask = async (prompt) => {
     isThinking.value = true;
     messages.value.push({ role: 'user', text: prompt });
-    
     try {
-      const response = await AskAgent(prompt);
-      // O AskAgent do Go retorna apenas "Orquestrando...", os logs reais vêm via Evento
-      console.log("[Store] Resposta inicial:", response);
+      await safeCall('main', 'AskAgent', prompt);
     } catch (err) {
       messages.value.push({ role: 'assistant', text: `❌ Erro: ${err}`, mode: 'system' });
       isThinking.value = false;
     }
   };
 
-  // Iniciar Sessão Interativa (Terminal Real)
   const startSession = async (agent) => {
     isThinking.value = true;
     isTerminalMode.value = true;
     activeAgent.value = agent;
     
-    messages.value.push({ 
-      role: 'user', 
-      text: `/cmd ${agent}`,
-      mode: 'system' 
-    });
+    messages.value.push({ role: 'user', text: `/cmd ${agent}`, mode: 'system' });
 
     try {
-      const result = await StartAgentSession(agent);
-      console.log("[Store] Sessão Iniciada:", result);
+      await safeCall('main', 'StartAgentSession', agent);
     } catch (err) {
       messages.value.push({ role: 'assistant', text: `❌ Falha ao iniciar sessão PTY: ${err}`, mode: 'system' });
       isTerminalMode.value = false;
@@ -94,27 +110,36 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     }
   };
 
-  // Parar Sessão
-  const stopSession = async () => {
-    await StopAgentSession();
+  const switchAgent = (agent) => {
+    if (runningSessions.value.includes(agent)) {
+      activeAgent.value = agent;
+    }
+  };
+
+  const stopSession = async (agent) => {
+    const target = agent || activeAgent.value;
+    if (!target) return;
+    await safeCall('main', 'StopAgentSession', target);
+  };
+
+  const stopAllSessions = async () => {
+    for (const agent of [...runningSessions.value]) {
+      await safeCall('main', 'StopAgentSession', agent);
+    }
     isTerminalMode.value = false;
     isRealPTY.value = false;
     isThinking.value = false;
     activeAgent.value = null;
-    
-    messages.value.push({ role: 'assistant', text: "Sessão encerrada.", mode: 'system' });
   };
 
-  // Enviar Input para o PTY ativo
   const sendInput = async (text) => {
-    if (!isTerminalMode.value) return;
-    return await SendAgentInput(text);
+    if (!isTerminalMode.value || !activeAgent.value) return;
+    return await safeCall('main', 'SendAgentInput', activeAgent.value, text);
   };
 
-  // Escanear Vault Obsidian
   const runScan = async () => {
      messages.value.push({ role: 'assistant', text: "Iniciando indexação do Vault...", mode: 'system' });
-     await ScanVault();
+     await safeCall('main', 'ScanVault');
   };
 
   return {
@@ -123,10 +148,13 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     isTerminalMode,
     isRealPTY,
     activeAgent,
+    runningSessions,
     initListeners,
     ask,
     startSession,
+    switchAgent,
     stopSession,
+    stopAllSessions,
     sendInput,
     runScan
   };

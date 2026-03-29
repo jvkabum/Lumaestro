@@ -8,6 +8,7 @@ export namespace config {
 	    claude_api_key: string;
 	    use_claude_api_key: boolean;
 	    active_agent: string;
+	    auto_start_agents: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new Config(source);
@@ -22,6 +23,7 @@ export namespace config {
 	        this.claude_api_key = source["claude_api_key"];
 	        this.use_claude_api_key = source["use_claude_api_key"];
 	        this.active_agent = source["active_agent"];
+	        this.auto_start_agents = source["auto_start_agents"];
 	    }
 	}
 

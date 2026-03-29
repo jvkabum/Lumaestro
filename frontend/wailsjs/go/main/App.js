@@ -26,8 +26,8 @@ export function InstallTool(arg1) {
   return window['go']['main']['App']['InstallTool'](arg1);
 }
 
-export function ResizeTerminal(arg1, arg2) {
-  return window['go']['main']['App']['ResizeTerminal'](arg1, arg2);
+export function ResizeTerminal(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ResizeTerminal'](arg1, arg2, arg3);
 }
 
 export function SaveConfig(arg1) {
@@ -38,12 +38,12 @@ export function ScanVault() {
   return window['go']['main']['App']['ScanVault']();
 }
 
-export function SendAgentInput(arg1) {
-  return window['go']['main']['App']['SendAgentInput'](arg1);
+export function SendAgentInput(arg1, arg2) {
+  return window['go']['main']['App']['SendAgentInput'](arg1, arg2);
 }
 
-export function SendTerminalData(arg1) {
-  return window['go']['main']['App']['SendTerminalData'](arg1);
+export function SendTerminalData(arg1, arg2) {
+  return window['go']['main']['App']['SendTerminalData'](arg1, arg2);
 }
 
 export function SetupTool(arg1) {
@@ -54,6 +54,6 @@ export function StartAgentSession(arg1) {
   return window['go']['main']['App']['StartAgentSession'](arg1);
 }
 
-export function StopAgentSession() {
-  return window['go']['main']['App']['StopAgentSession']();
+export function StopAgentSession(arg1) {
+  return window['go']['main']['App']['StopAgentSession'](arg1);
 }

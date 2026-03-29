@@ -113,7 +113,7 @@ onMounted(async () => {
         </div>
 
         <aside class="glass chat-area" :style="{ width: chatWidth + 'px', minWidth: chatWidth + 'px' }">
-          <ChatPanel :logs="state.logs" />
+          <ChatPanel />
         </aside>
       </template>
 

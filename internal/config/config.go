@@ -13,7 +13,8 @@ type Config struct {
 	UseGeminiAPIKey    bool   `json:"use_gemini_api_key"`
 	ClaudeAPIKey       string `json:"claude_api_key"`
 	UseClaudeAPIKey    bool   `json:"use_claude_api_key"`
-	ActiveAgent       string `json:"active_agent"` // "gemini" ou "claude"
+	ActiveAgent       string   `json:"active_agent"`        // Agente padrão para o Chat
+	AutoStartAgents   []string `json:"auto_start_agents"`   // CLIs que ligam junto com o app (ex: ["gemini","claude"])
 }
 
 const configPath = "config.json"

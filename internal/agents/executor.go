@@ -25,8 +25,8 @@ type Executor struct {
 	ActiveSessions map[string]*CLISession
 	mu             sync.Mutex
 
-	// Canal para output bruto do terminal (bytes, não linhas)
-	TerminalOutput chan []byte
+	// Canal para output bruto do terminal (bytes tagged por agente)
+	TerminalOutput chan TerminalData
 }
 
 // CLISession representa uma sessão interativa com uma CLI.
@@ -42,12 +42,18 @@ type CLISession struct {
 	Pty *ConPTYSession
 }
 
+// TerminalData representa bytes brutos de um terminal com identificação do agente.
+type TerminalData struct {
+	Agent string
+	Data  []byte
+}
+
 // NewExecutor inicializa o executor.
 func NewExecutor() *Executor {
 	return &Executor{
 		LogChan:        make(chan ExecutionLog, 100),
 		ActiveSessions: make(map[string]*CLISession),
-		TerminalOutput: make(chan []byte, 256),
+		TerminalOutput: make(chan TerminalData, 256),
 	}
 }
 
@@ -126,7 +132,7 @@ func (e *Executor) readPTY(s *CLISession) {
 
 			// Envia bytes brutos para o frontend (xterm.js renderiza tudo)
 			select {
-			case e.TerminalOutput <- data:
+			case e.TerminalOutput <- TerminalData{Agent: s.AgentName, Data: data}:
 			default:
 				// Canal cheio — descarta para não bloquear
 			}
@@ -143,9 +149,9 @@ func (e *Executor) readPTY(s *CLISession) {
 			delete(e.ActiveSessions, s.ID)
 			e.mu.Unlock()
 
-			// Sinaliza fim da sessão com byte nil
+			// Sinaliza fim da sessão com Data nil
 			select {
-			case e.TerminalOutput <- nil:
+			case e.TerminalOutput <- TerminalData{Agent: s.AgentName, Data: nil}:
 			default:
 			}
 			return

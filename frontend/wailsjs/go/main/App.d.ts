@@ -14,18 +14,18 @@ export function GetToolsStatus():Promise<Record<string, boolean>>;
 
 export function InstallTool(arg1:string):Promise<string>;
 
-export function ResizeTerminal(arg1:number,arg2:number):Promise<void>;
+export function ResizeTerminal(arg1:string,arg2:number,arg3:number):Promise<void>;
 
 export function SaveConfig(arg1:config.Config):Promise<string>;
 
 export function ScanVault():Promise<string>;
 
-export function SendAgentInput(arg1:string):Promise<string>;
+export function SendAgentInput(arg1:string,arg2:string):Promise<string>;
 
-export function SendTerminalData(arg1:string):Promise<string>;
+export function SendTerminalData(arg1:string,arg2:string):Promise<string>;
 
 export function SetupTool(arg1:string):Promise<string>;
 
 export function StartAgentSession(arg1:string):Promise<string>;
 
-export function StopAgentSession():Promise<string>;
+export function StopAgentSession(arg1:string):Promise<string>;

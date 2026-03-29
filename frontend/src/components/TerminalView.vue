@@ -7,7 +7,7 @@ import { SendTerminalData, ResizeTerminal } from '../../wailsjs/go/main/App'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
 
 const props = defineProps({
-  agent: { type: String, default: 'gemini' },
+  agent: { type: String, required: true },
   active: { type: Boolean, default: false }
 })
 
@@ -45,7 +45,7 @@ const lumaestroTheme = {
 }
 
 const initTerminal = () => {
-  if (!terminalContainer.value) return
+  if (!terminalContainer.value || terminal) return
 
   terminal = new Terminal({
     theme: lumaestroTheme,
@@ -65,30 +65,24 @@ const initTerminal = () => {
   terminal.loadAddon(fitAddon)
   terminal.open(terminalContainer.value)
 
-  // Fit inicial após render
   nextTick(() => {
     try {
       fitAddon.fit()
-      // Notifica o backend sobre as dimensões iniciais
-      ResizeTerminal(terminal.cols, terminal.rows)
-    } catch (e) {
-      // Ignora se o container ainda não tem dimensões
-    }
+      ResizeTerminal(props.agent, terminal.cols, terminal.rows)
+    } catch (e) { /* Ignora */ }
   })
 
-  // Captura cada tecla digitada e envia para o ConPTY via Wails
-  // Usa TextEncoder para suportar UTF-8 corretamente (btoa só suporta Latin1)
+  // Envia teclas para o agente CORRETO
   terminal.onData((data) => {
     const bytes = new TextEncoder().encode(data)
     const binary = Array.from(bytes, b => String.fromCharCode(b)).join('')
-    SendTerminalData(btoa(binary))
+    SendTerminalData(props.agent, btoa(binary))
   })
 
-  // Escuta bytes brutos do ConPTY (base64) e escreve no xterm
-  // Decodifica base64 → Uint8Array → escreve bytes brutos (preserva ANSI e UTF-8)
-  EventsOn('terminal:output', (base64Data) => {
-    if (terminal) {
-      const binary = atob(base64Data)
+  // Filtra output — só escreve bytes que pertençam a ESTE agente
+  EventsOn('terminal:output', (payload) => {
+    if (terminal && payload?.agent === props.agent) {
+      const binary = atob(payload.data)
       const bytes = new Uint8Array(binary.length)
       for (let i = 0; i < binary.length; i++) {
         bytes[i] = binary.charCodeAt(i)
@@ -97,59 +91,44 @@ const initTerminal = () => {
     }
   })
 
-  // Escuta encerramento da sessão
-  EventsOn('terminal:closed', () => {
-    if (terminal) {
-      terminal.write('\r\n\x1b[1;33m── Sessão encerrada ──\x1b[0m\r\n')
+  // Escuta encerramento apenas DESTE agente
+  EventsOn('terminal:closed', (closedAgent) => {
+    if (closedAgent === props.agent) {
+      if (terminal) {
+        terminal.write('\r\n\x1b[1;33m── Sessão encerrada ──\x1b[0m\r\n')
+      }
+      emit('session-ended', props.agent)
     }
-    emit('session-ended')
   })
 
-  // ResizeObserver para auto-fit quando o container muda de tamanho
+  // Auto-fit
   resizeObserver = new ResizeObserver(() => {
     try {
       if (fitAddon && terminal) {
         fitAddon.fit()
-        ResizeTerminal(terminal.cols, terminal.rows)
+        ResizeTerminal(props.agent, terminal.cols, terminal.rows)
       }
-    } catch (e) {
-      // Ignora erros de resize durante transições
-    }
+    } catch (e) { /* Ignora */ }
   })
   resizeObserver.observe(terminalContainer.value)
 
-  // Foca o terminal
   terminal.focus()
 }
 
-// Inicializa quando o componente é montado E está ativo
 onMounted(() => {
-  if (props.active) {
-    nextTick(() => initTerminal())
-  }
+  if (props.active) nextTick(() => initTerminal())
 })
 
-// Observa mudança de active para inicializar/destruir
 watch(() => props.active, (isActive) => {
-  if (isActive && !terminal) {
-    nextTick(() => initTerminal())
-  }
+  if (isActive && !terminal) nextTick(() => initTerminal())
+  if (isActive && terminal) terminal.focus()
 })
 
-// Cleanup completo
 onUnmounted(() => {
   EventsOff('terminal:output')
   EventsOff('terminal:closed')
-
-  if (resizeObserver) {
-    resizeObserver.disconnect()
-    resizeObserver = null
-  }
-
-  if (terminal) {
-    terminal.dispose()
-    terminal = null
-  }
+  if (resizeObserver) { resizeObserver.disconnect(); resizeObserver = null }
+  if (terminal) { terminal.dispose(); terminal = null }
 })
 </script>
 
@@ -180,25 +159,14 @@ onUnmounted(() => {
   min-height: 0;
 }
 
-/* Customização fina do xterm.js */
-.terminal-viewport :deep(.xterm) {
-  padding: 4px;
-}
-
-.terminal-viewport :deep(.xterm-viewport::-webkit-scrollbar) {
-  width: 8px;
-}
-
-.terminal-viewport :deep(.xterm-viewport::-webkit-scrollbar-track) {
-  background: transparent;
-}
-
+.terminal-viewport :deep(.xterm) { padding: 4px; }
+.terminal-viewport :deep(.xterm-viewport::-webkit-scrollbar) { width: 8px; }
+.terminal-viewport :deep(.xterm-viewport::-webkit-scrollbar-track) { background: transparent; }
 .terminal-viewport :deep(.xterm-viewport::-webkit-scrollbar-thumb) {
   background: rgba(255, 255, 255, 0.05);
   border-radius: 10px;
   border: 2px solid #0a0e1a;
 }
-
 .terminal-viewport :deep(.xterm-viewport::-webkit-scrollbar-thumb:hover) {
   background: rgba(255, 255, 255, 0.1);
 }

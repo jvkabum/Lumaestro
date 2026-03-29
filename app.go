@@ -49,10 +49,18 @@ func (a *App) startup(ctx context.Context) {
 	go a.listenForInstallerLogs()
 	go a.listenForTerminalOutput()
 
-	// 🚀 Auto-Start: Inicia o agente favorito automaticamente no boot se configurado
-	if a.config != nil && a.config.ActiveAgent != "" {
+	// 🚀 Auto-Start: Inicia os agentes favoritos automaticamente no boot se configurados
+	if a.config != nil && len(a.config.AutoStartAgents) > 0 {
+		for _, agent := range a.config.AutoStartAgents {
+			agentCopy := agent
+			go func() {
+				time.Sleep(1500 * time.Millisecond)
+				a.StartAgentSession(agentCopy)
+			}()
+		}
+	} else if a.config != nil && a.config.ActiveAgent != "" {
 		go func() {
-			time.Sleep(1500 * time.Millisecond) // Buffer p/ frontend carregar xterm.js
+			time.Sleep(1500 * time.Millisecond)
 			a.StartAgentSession(a.config.ActiveAgent)
 		}()
 	}
@@ -102,15 +110,18 @@ func (a *App) listenForInstallerLogs() {
 // listenForTerminalOutput ouve os bytes brutos do ConPTY e envia para o xterm.js.
 // Os dados são encodados em base64 para transporte seguro via Wails Events.
 func (a *App) listenForTerminalOutput() {
-	for data := range a.executor.TerminalOutput {
-		if data == nil {
-			// Sessão encerrada — notifica o frontend
-			runtime.EventsEmit(a.ctx, "terminal:closed", true)
+	for td := range a.executor.TerminalOutput {
+		if td.Data == nil {
+			// Sessão encerrada — notifica o frontend com o nome do agente
+			runtime.EventsEmit(a.ctx, "terminal:closed", td.Agent)
 			continue
 		}
-		// Encoda em base64 para preservar bytes brutos (sequências ANSI, etc.)
-		encoded := base64.StdEncoding.EncodeToString(data)
-		runtime.EventsEmit(a.ctx, "terminal:output", encoded)
+		// Encoda em base64 e envia com tag do agente
+		encoded := base64.StdEncoding.EncodeToString(td.Data)
+		runtime.EventsEmit(a.ctx, "terminal:output", map[string]string{
+			"agent": td.Agent,
+			"data":  encoded,
+		})
 	}
 }
 
@@ -237,17 +248,13 @@ func (a *App) SetupTool(name string) string {
 // StartAgentSession inicia uma sessão interativa (Terminal Mode com ConPTY real).
 // O frontend deve escutar o evento "terminal:output" para receber bytes brutos.
 func (a *App) StartAgentSession(agent string) string {
-	sessionID := "maestro-session"
-	
-	// Limpeza preventiva de qualquer sessão anterior travada
-	_ = a.executor.StopSession(sessionID)
+	sessionID := agent // Cada agente tem sua própria sessão!
 
 	err := a.executor.StartSession(a.ctx, agent, sessionID)
 	if err != nil {
 		return "Erro ao iniciar sessão: " + err.Error()
 	}
 
-	// Verifica se conseguiu ConPTY real ou caiu no fallback
 	isReal := a.executor.IsTerminalSession(sessionID)
 	mode := "ONE-SHOT PROXY"
 	if isReal {
@@ -255,9 +262,9 @@ func (a *App) StartAgentSession(agent string) string {
 	}
 
 	runtime.EventsEmit(a.ctx, "terminal:started", map[string]interface{}{
-		"agent":      agent,
-		"mode":       mode,
-		"isRealPTY":  isReal,
+		"agent":     agent,
+		"mode":      mode,
+		"isRealPTY": isReal,
 	})
 
 	return fmt.Sprintf("Sessão %s iniciada [%s]", agent, mode)
@@ -265,26 +272,22 @@ func (a *App) StartAgentSession(agent string) string {
 
 // SendAgentInput envia texto para o agente ativo.
 // No modo ConPTY, os bytes são escritos direto no PTY (como teclado real).
-func (a *App) SendAgentInput(input string) string {
-	sessionID := "maestro-session"
-	err := a.executor.SendInput(sessionID, input)
+func (a *App) SendAgentInput(agent string, input string) string {
+	err := a.executor.SendInput(agent, input)
 	if err != nil {
 		return "Erro ao enviar input: " + err.Error()
 	}
 	return "OK"
 }
 
-// SendTerminalData envia bytes brutos (base64) para o PTY.
-// Usado pelo xterm.js onData — cada tecla é enviada individualmente.
-func (a *App) SendTerminalData(base64Data string) string {
-	sessionID := "maestro-session"
-
+// SendTerminalData envia bytes brutos (base64) para o PTY do agente especificado.
+func (a *App) SendTerminalData(agent string, base64Data string) string {
 	data, err := base64.StdEncoding.DecodeString(base64Data)
 	if err != nil {
 		return "Erro ao decodificar: " + err.Error()
 	}
 
-	err = a.executor.SendRawInput(sessionID, data)
+	err = a.executor.SendRawInput(agent, data)
 	if err != nil {
 		return "Erro: " + err.Error()
 	}
@@ -292,19 +295,17 @@ func (a *App) SendTerminalData(base64Data string) string {
 }
 
 // ResizeTerminal informa ao ConPTY as novas dimensões do xterm.js.
-func (a *App) ResizeTerminal(cols int, rows int) {
-	sessionID := "maestro-session"
-	a.executor.ResizePTY(sessionID, cols, rows)
+func (a *App) ResizeTerminal(agent string, cols int, rows int) {
+	a.executor.ResizePTY(agent, cols, rows)
 }
 
-// StopAgentSession encerra a sessão interativa atual.
-func (a *App) StopAgentSession() string {
-	sessionID := "maestro-session"
-	err := a.executor.StopSession(sessionID)
+// StopAgentSession encerra a sessão de um agente específico.
+func (a *App) StopAgentSession(agent string) string {
+	err := a.executor.StopSession(agent)
 	if err != nil {
 		return "Nenhuma sessão ativa encontrada ou erro: " + err.Error()
 	}
 
-	runtime.EventsEmit(a.ctx, "terminal:closed", true)
-	return "Sessão encerrada com sucesso."
+	runtime.EventsEmit(a.ctx, "terminal:closed", agent)
+	return "Sessão " + agent + " encerrada com sucesso."
 }
