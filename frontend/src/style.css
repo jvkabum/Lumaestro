@@ -1,0 +1,115 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Inter:wght@300;400;500;700&display=swap');
+
+:root {
+  font-family: 'Inter', system-ui, sans-serif;
+  line-height: 1.6;
+  font-weight: 400;
+
+  color-scheme: dark;
+  color: #e2e8f0;
+  background-color: #030712;
+
+  /* Design Tokens Premium */
+  --primary: #3b82f6;
+  --primary-glow: rgba(59, 130, 246, 0.5);
+  --accent: #06b6d4;
+  --bg-deep: #030712;
+  --bg-card: rgba(17, 24, 39, 0.7);
+  --border-color: rgba(255, 255, 255, 0.08);
+  --text-dim: #94a3b8;
+  --success: #10b981;
+  --warning: #f59e0b;
+  
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  overflow: hidden;
+  background: radial-gradient(circle at 20% 20%, #1e293b 0%, #030712 100%);
+}
+
+#app {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+}
+
+h1, h2, h3, .brand {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #f8fafc;
+}
+
+/* Premium Utilities */
+.glass {
+  background: var(--bg-card);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+}
+
+.premium-shadow {
+  box-shadow: 0 20px 50px -12px rgba(0, 0, 0, 0.8);
+}
+
+.premium-input {
+  background: rgba(0, 0, 0, 0.2) !important;
+  border: 1px solid var(--border-color) !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  color: #f8fafc !important;
+}
+
+.premium-input:focus {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 4px var(--primary-glow) !important;
+  outline: none;
+}
+
+.btn-premium {
+  background: linear-gradient(135deg, var(--primary) 0%, #1d4ed8 100%);
+  color: white;
+  font-weight: 600;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+}
+
+.btn-premium:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(59, 130, 246, 0.5);
+  filter: brightness(1.1);
+}
+
+.animate-fade-up {
+  animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--primary); }
