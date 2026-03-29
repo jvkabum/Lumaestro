@@ -52,9 +52,8 @@ const handleTerminalOutput = (dataBase64) => {
       console.warn("[Maestro] Log de Sistema:", log.content);
       // Se a sessão foi encerrada e ainda estávamos no "Iniciando...", mostramos o erro
       if ((log.content.includes("Sessão") && log.content.includes("encerrada")) || log.content.includes("❌")) {
-        if (messages.value.length > 0 && messages.value[messages.value.length - 1].isStreaming) {
-            messages.value[messages.value.length - 1].content = `⚠️ Erro na inicialização: ${log.content}. Verifique os logs no terminal ou tente configurar o login novamente.`
-            messages.value[messages.value.length - 1].isStreaming = false
+        if (messages.value.length > 0 && messages.value[messages.value.length - 1].mode === 'system') {
+            messages.value[messages.value.length - 1].text = `⚠️ Erro na inicialização: ${log.content}. Verifique os logs no terminal ou tente configurar o login novamente.`
         }
       }
     }
@@ -71,6 +70,8 @@ const handleTerminalOutput = (dataBase64) => {
   } else {
     lastAssistantMsg.text += cleanText
   }
+  
+  scrollToBottom()
 }
 
 onMounted(() => {
@@ -81,8 +82,7 @@ onUnmounted(() => {
   EventsOff('terminal:output')
 })
 
-// Auto-scroll para a última mensagem
-watch(() => props.logs.length, async () => {
+const scrollToBottom = async () => {
   await nextTick()
   if (logContainer.value) {
     logContainer.value.scrollTo({
@@ -90,26 +90,55 @@ watch(() => props.logs.length, async () => {
       behavior: 'smooth'
     })
   }
-})
+}
+
+// Auto-scroll sempre que adicionar nova mensagem no array principal
+watch(() => messages.value.length, scrollToBottom)
 
 const sendChatMessage = async (payload) => {
-  const { text, agent, mode } = payload
-  
-  // Adiciona msg do usuário ao log
-  messages.value.push({
-    role: 'user',
-    text: text
-  })
+  if (isThinking.value) return;
 
-  if (!isTerminalMode.value || activeAgent.value !== agent) {
-    // Se o agente mudou ou não iniciou, inicia nova sessão
-    messages.value.push({ role: 'assistant', text: `Iniciando sessão com ${agent.toUpperCase()}...`, mode: 'system' })
-    await startCLISession(agent)
-  }
+  const { text, agent, mode } = payload
+  const rawText = text.trim()
+
+  // Evita reenvio vazio
+  if (!rawText) return;
 
   isThinking.value = true
-  // Envia para o PTY
-  SendTerminalData(window.btoa(text + '\r'))
+  
+  // Roteamento inteligente de Comandos (Upgrades)
+  let assumedAgent = agent
+  let commandToRun = rawText + '\r'
+
+  if (rawText.startsWith('/cmd ')) {
+    assumedAgent = 'Terminal'
+    commandToRun = rawText.replace('/cmd ', '') + '\r'
+  } else if (rawText.startsWith('/critica ')) {
+    assumedAgent = 'Crítico Sénior'
+    // Aqui repassamos sem alterar commandToRun, pois a IA deve ler o prefixo ou nós podemos limpar
+  }
+
+  // Adiciona msg do usuário ao log
+  messages.value.push({ role: 'user', text: rawText })
+  scrollToBottom()
+
+  try {
+    if (!isTerminalMode.value || activeAgent.value !== assumedAgent) {
+      // Se o agente mudou ou não iniciou, inicia nova sessão
+      messages.value.push({ role: 'assistant', text: `Iniciando sessão com ${assumedAgent.toUpperCase()}...`, mode: 'system' })
+      await startCLISession(assumedAgent)
+    }
+
+    // Envia para o PTY
+    SendTerminalData(window.btoa(commandToRun))
+  } catch (error) {
+    messages.value.push({
+      role: 'assistant',
+      text: `**[Erro Crítico]** Falha de conexão com PTY: ${error}`,
+      mode: 'system'
+    })
+    isThinking.value = false
+  }
 }
 
 const copyTerminalOutput = () => {
@@ -207,9 +236,9 @@ const onSessionEnded = () => {
     </header>
 
     <!-- Área Principal do Chat (Premium) -->
-    <div v-if="!showRawTerminal" class="chat-main-area">
+    <div v-if="!showRawTerminal" class="chat-main-area" ref="logContainer">
       <ChatLog :messages="messages" :is-thinking="isThinking" />
-      <ChatInput @send="sendChatMessage" />
+      <ChatInput @send="sendChatMessage" :is-thinking="isThinking" />
     </div>
 
     <!-- Terminal Real (Visível apenas em modo Debug ou quando solicitado) -->
@@ -502,6 +531,14 @@ const onSessionEnded = () => {
   padding-right: 1.5rem;
   scroll-behavior: smooth;
   min-height: 0;
+}
+
+.chat-main-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .message-card {
