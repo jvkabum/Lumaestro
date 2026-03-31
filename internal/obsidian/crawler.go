@@ -64,7 +64,16 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 	var totalIndexed int = 0
 
 	err := filepath.Walk(c.VaultPath, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() || !strings.HasSuffix(info.Name(), ".md") {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+
+		ext := strings.ToLower(filepath.Ext(path))
+		isMD := ext == ".md"
+		isImage := ext == ".png" || ext == ".jpg" || ext == ".jpeg"
+		isPDF := ext == ".pdf"
+
+		if !isMD && !isImage && !isPDF {
 			return nil
 		}
 
@@ -88,28 +97,60 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 			return nil // JÁ INDEXADO E INTEGRAL
 		}
 
-		content, err := os.ReadFile(path)
+		rawContent, err := os.ReadFile(path)
 		if err != nil {
 			return nil
 		}
 
-		// 1. Gerar Embedding
-		vector, err := c.Embedder.GenerateEmbedding(ctx, string(content))
-		if err != nil {
-			return nil // Silencia erros individuais
+		var textContent string
+		var triples []provider.Triple
+		var links []string
+
+		if isMD {
+			textContent = string(rawContent)
+			triples, _ = c.Ontology.ExtractTriples(ctx, textContent)
+			links = extractLinks(textContent)
+		} else {
+			// Lógica Multimodal (OCR / Visão)
+			mimeType := "image/png"
+			if isPDF {
+				mimeType = "application/pdf"
+			} else if ext == ".jpg" || ext == ".jpeg" {
+				mimeType = "image/jpeg"
+			}
+
+			runtime.EventsEmit(ctx, "agent:log", map[string]string{
+				"source":  "CRAWLER",
+				"content": fmt.Sprintf("👁️ Analisando mídia: %s...", info.Name()),
+			})
+
+			desc, tri, err := c.Ontology.ProcessMedia(ctx, rawContent, mimeType)
+			if err == nil {
+				textContent = desc
+				triples = tri
+			}
 		}
 
-		// 2. Extrair Triplas
-		triples, _ := c.Ontology.ExtractTriples(ctx, string(content))
-
-		// 2.5 Extrair Integridade do Grafo (Links)
-		links := extractLinks(string(content))
+		// 1. Gerar Embedding do conhecimento extraído (Seja texto puro ou descrição da imagem)
+		vector, err := c.Embedder.GenerateEmbedding(ctx, textContent)
+		if err != nil {
+			return nil 
+		}
 
 		// 3. Salvar no Qdrant
-		nodeName = strings.TrimSuffix(info.Name(), ".md")
+		nodeName = strings.TrimSuffix(info.Name(), ext)
 		c.Qdrant.UpsertPoint("obsidian_knowledge", uint64(time.Now().UnixNano()), vector, map[string]interface{}{
-			"path": path, "name": nodeName, "content": string(content), "triples": triples, "links": links,
+			"path": path, "name": nodeName, "content": textContent, "triples": triples, "links": links, "type": ext,
 		})
+
+		// 3.5 Feedback de Aprendizado
+		if len(triples) > 0 || !isMD {
+			msg := fmt.Sprintf("🧠 [%s] Conhecimento extraído com sucesso.\n", info.Name())
+			if len(triples) > 0 {
+				msg = fmt.Sprintf("🧠 [%s] Aprendi %d novos fatos estruturados.\n", info.Name(), len(triples))
+			}
+			runtime.EventsEmit(ctx, "agent:log", map[string]string{"source": "CRAWLER", "content": msg})
+		}
 
 		// 4. Update Cache
 		c.mu.Lock()

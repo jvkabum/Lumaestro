@@ -43,38 +43,73 @@ func NewOntologyService(client *genai.Client) *OntologyService {
 
 // ExtractTriples extrai fatos estruturados de um texto usando o prompt TrustGraph.
 func (s *OntologyService) ExtractTriples(ctx context.Context, text string) ([]Triple, error) {
-	prompt := `Extraia triplas estruturadas do texto abaixo no formato JSON.
-Cada tripla deve ter "subject", "predicate" e "object".
-Use entidades e relações curtas e claras.
+	prompt := `Você é um especialista em extração de conhecimento estruturado (triplas).
+Extraia triplas semânticas do texto abaixo no formato JSON.
+
+## Classes: Person, Project, Task, Concept, Technology.
+## Relações: works_on, uses, defines, part_of, mentions.
 
 Texto:
-` + text + `
+` + text
 
-Formato de Saída (JSON Array):
-[{"subject": "A", "predicate": "B", "object": "C"}]`
-
-	// Gerar triplas usando Gemini 2.0 Flash (alta velocidade para extração)
-	res, err := s.GenAI.Models.GenerateContent(ctx, "gemini-2.0-flash", genai.Text(prompt), nil)
+	res, err := s.GenAI.Models.GenerateContent(ctx, "gemini-2.0-flash", []*genai.Content{{Parts: []*genai.Part{{Text: prompt}}}}, nil)
 	if err != nil {
 		return nil, fmt.Errorf("erro na extração de ontologia: %w", err)
 	}
 
-	// Parsing do JSON retornado
 	if len(res.Candidates) > 0 && len(res.Candidates[0].Content.Parts) > 0 {
-		rawJSON := fmt.Sprintf("%v", res.Candidates[0].Content.Parts[0])
-		
-		// Limpeza básica de markdown blocks se houver
-		rawJSON = strings.TrimPrefix(rawJSON, "```json")
-		rawJSON = strings.TrimSuffix(rawJSON, "```")
-		rawJSON = strings.TrimSpace(rawJSON)
+		return parseTriples(fmt.Sprintf("%v", res.Candidates[0].Content.Parts[0]))
+	}
+	return nil, nil
+}
 
-		var triples []Triple
-		err := json.Unmarshal([]byte(rawJSON), &triples)
-		if err != nil {
-			return nil, fmt.Errorf("erro no parsing de triplas: %w", err)
-		}
-		return triples, nil
+// ProcessMedia extrai conhecimento de arquivos visuais ou documentos (Imagens/PDFs).
+// Retorna (descrição, triplas, erro)
+func (s *OntologyService) ProcessMedia(ctx context.Context, data []byte, mimeType string) (string, []Triple, error) {
+	prompt := `Você é um especialista em visão computacional e extração de conhecimento.
+Analise este arquivo. Forneça uma descrição detalhada e extraia triplas semânticas (Person, Project, Task, Concept, Technology).
+
+Formato:
+---DESCRICAO---
+[Texto]
+---TRIPLAS---
+[JSON]`
+
+	contents := []*genai.Content{
+		{
+			Parts: []*genai.Part{
+				{InlineData: &genai.Blob{MIMEType: mimeType, Data: data}},
+				{Text: prompt},
+			},
+		},
 	}
 
-	return nil, nil
+	res, err := s.GenAI.Models.GenerateContent(ctx, "gemini-2.0-flash", contents, nil)
+	if err != nil {
+		return "", nil, fmt.Errorf("erro no processamento multimodal: %w", err)
+	}
+
+	if len(res.Candidates) > 0 && len(res.Candidates[0].Content.Parts) > 0 {
+		fullText := fmt.Sprintf("%v", res.Candidates[0].Content.Parts[0])
+		parts := strings.Split(fullText, "---TRIPLAS---")
+		description := strings.TrimSpace(strings.TrimPrefix(parts[0], "---DESCRICAO---"))
+		
+		var triples []Triple
+		if len(parts) > 1 {
+			triples, _ = parseTriples(parts[1])
+		}
+		return description, triples, nil
+	}
+	return "", nil, fmt.Errorf("nenhum conteúdo gerado")
+}
+
+func parseTriples(rawJSON string) ([]Triple, error) {
+	rawJSON = strings.TrimPrefix(rawJSON, "```json")
+	rawJSON = strings.TrimPrefix(rawJSON, "```")
+	rawJSON = strings.TrimSuffix(rawJSON, "```")
+	rawJSON = strings.TrimSpace(rawJSON)
+
+	var triples []Triple
+	err := json.Unmarshal([]byte(rawJSON), &triples)
+	return triples, err
 }
