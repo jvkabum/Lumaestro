@@ -2,13 +2,14 @@ package rag
 
 import (
 	"context"
+	"fmt"
 	"Lumaestro/internal/agents"
 	"Lumaestro/internal/provider"
 	"Lumaestro/internal/tools"
-	"path/filepath"
 	"strings"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"time"
 )
 
 // ChatService orquestra a inteligência via processos CLI.
@@ -48,20 +49,32 @@ func (s *ChatService) Ask(ctx context.Context, agent string, sessionID string, q
 		}
 	}
 
-	// 2. Gerar vetor da pergunta e buscar no Obsidian
+	// 2. Gerar vetor da pergunta e relatar início do raciocínio
+	now := time.Now().Format("15:04")
+	runtime.EventsEmit(ctx, "graph:log", fmt.Sprintf("[%s] 🔍 buscando '%s'...", now, question))
+	
 	vector, err := s.Embedder.GenerateEmbedding(ctx, question)
 	if err != nil {
+		runtime.EventsEmit(ctx, "graph:log", fmt.Sprintf("[%s] ❌ Erro ao criar semântica.", now))
 		return "", err
 	}
+	
 	notes, _ := s.Search.SearchNote(ctx, vector, 3)
+	if len(notes) > 0 {
+		runtime.EventsEmit(ctx, "graph:log", fmt.Sprintf("[%s] 📄 encontradas %d notas matrizes para a resposta.", now, len(notes)))
+	}
+
 	fullContext := s.Nav.ExpandContext(ctx, notes)
 	contextData := strings.Join(fullContext, "\n---\n")
 
-	// 3. Brilhar as notas no Grafo
+	// 3. Brilhar as notas iniciais encontradas no Grafo e lançar Log
 	for _, note := range notes {
-		if path, ok := note["path"].(string); ok {
-			noteName := strings.TrimSuffix(filepath.Base(path), ".md")
-			runtime.EventsEmit(ctx, "node:highlight", noteName)
+		if noteName, ok := note["name"].(string); ok {
+			runtime.EventsEmit(ctx, "graph:log", fmt.Sprintf("[%s] ✨ lendo notas mestre -> %s", time.Now().Format("15:04"), noteName))
+			runtime.EventsEmit(ctx, "node:active", noteName)
+			
+			// Envia o própio nó principal para o painel se ele não foi carregado
+			runtime.EventsEmit(ctx, "graph:node", map[string]string{"id": noteName, "name": noteName})
 		}
 	}
 

@@ -21,7 +21,8 @@ const maxChatWidth = 1400
 const state = reactive({
   logs: [],
   nodes: [],
-  edges: []
+  edges: [],
+  graphLogs: []
 })
 
 // ── Resize Handle Logic ──
@@ -84,6 +85,13 @@ onMounted(async () => {
   EventsOn('graph:edge', (edge) => {
     state.edges.push(edge)
   })
+
+  EventsOn('graph:log', (glog) => {
+    state.graphLogs.push(glog)
+    if(state.graphLogs.length > 20) {
+      state.graphLogs.shift() // Mantém o console UI leve (apenas os 20 últimos pensamentos)
+    }
+  })
 })
 </script>
 
@@ -106,7 +114,7 @@ onMounted(async () => {
     <main id="lumaestro-main" :class="{ 'is-orchestrator': currentView === 'orchestrator' }">
       <template v-if="currentView === 'orchestrator'">
         <div class="graph-area">
-          <GraphVisualizer :nodes="state.nodes" :edges="state.edges" />
+          <GraphVisualizer :nodes="state.nodes" :edges="state.edges" :graphLogs="state.graphLogs" />
         </div>
 
         <!-- Resize Handle (arrastável) -->

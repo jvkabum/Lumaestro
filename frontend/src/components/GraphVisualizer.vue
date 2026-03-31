@@ -1,22 +1,34 @@
 <script setup>
-import { onMounted, ref, watch, onUnmounted } from 'vue'
+import { onMounted, ref, watch, nextTick } from 'vue'
 import * as d3 from 'd3'
 import { EventsOn } from '../../wailsjs/runtime/runtime'
 import { ScanVault } from '../../wailsjs/go/main/App'
 
 const props = defineProps({
   nodes: { type: Array, default: () => [] },
-  edges: { type: Array, default: () => [] }
+  edges: { type: Array, default: () => [] },
+  graphLogs: { type: Array, default: () => [] } // Injetando os "Pensamentos da IA"
 })
 
 const svgRef = ref(null)
 const containerRef = ref(null)
-let simulation = null
-let g = null
-let svg = null
+const logContainerRef = ref(null)
 
-const initGraph = () => {
-  if (!svgRef.value || props.nodes.length === 0) return
+let simulation = null
+let svg = null
+let g = null
+let linkGroup = null
+let nodeGroup = null
+
+// Shadow State para a Fisica Limpa do D3 (Blindado contra Proxies de Vue3)
+const localNodesMap = new Map()
+const localEdgesMap = new Map()
+const localNodesList = []
+const localEdgesList = []
+
+// Setup inicial do "Palco" (SVG, Filtros, Zoom e Forças Base) apenas UMA vez!
+const mountGraphEnvironment = () => {
+  if (!svgRef.value || !containerRef.value) return
 
   const width = containerRef.value.clientWidth
   const height = containerRef.value.clientHeight
@@ -26,123 +38,151 @@ const initGraph = () => {
     .attr('height', '100%')
     .attr('viewBox', `0 0 ${width} ${height}`)
 
-  svg.selectAll("*").remove() // Limpa antes de reconstruir
+  svg.selectAll("*").remove() 
 
-  // Definições de Filtros (Glow)
+  // Efeitos GLOW Dourado
   const defs = svg.append('defs')
-  const filter = defs.append('filter')
-    .attr('id', 'glow')
-    .attr('x', '-50%')
-    .attr('y', '-50%')
-    .attr('width', '200%')
-    .attr('height', '200%')
-
-  filter.append('feGaussianBlur')
-    .attr('stdDeviation', '2.5')
-    .attr('result', 'coloredBlur')
-
+  const filter = defs.append('filter').attr('id', 'glow').attr('x', '-50%').attr('y', '-50%').attr('width', '200%').attr('height', '200%')
+  filter.append('feGaussianBlur').attr('stdDeviation', '2.5').attr('result', 'coloredBlur')
   const feMerge = filter.append('feMerge')
   feMerge.append('feMergeNode').attr('in', 'coloredBlur')
   feMerge.append('feMergeNode').attr('in', 'SourceGraphic')
+  
+  // Destaque Glow Ativo (Amarelo Raciocínio)
+  const filterActive = defs.append('filter').attr('id', 'glow-active').attr('x', '-50%').attr('y', '-50%').attr('width', '200%').attr('height', '200%')
+  filterActive.append('feGaussianBlur').attr('stdDeviation', '5').attr('result', 'coloredBlur')
+  const feMergeA = filterActive.append('feMerge')
+  feMergeA.append('feMergeNode').attr('in', 'coloredBlur')
+  feMergeA.append('feMergeNode').attr('in', 'SourceGraphic')
 
   g = svg.append('g')
 
   // Zoom behavior
-  const zoom = d3.zoom()
-    .scaleExtent([0.1, 4])
-    .on('zoom', (event) => {
-      g.attr('transform', event.transform)
-    })
-
+  const zoom = d3.zoom().scaleExtent([0.1, 4]).on('zoom', (event) => g.attr('transform', event.transform))
   svg.call(zoom)
 
-  simulation = d3.forceSimulation(props.nodes)
-    .force('link', d3.forceLink(props.edges).id(d => d.id).distance(120))
-    .force('charge', d3.forceManyBody().strength(-400))
+  // Criar camadas separadas para Nodes sobrepor Links sempre.
+  linkGroup = g.append('g').attr('class', 'links')
+  nodeGroup = g.append('g').attr('class', 'nodes')
+
+  // Inicializa Físicas Vázias.
+  simulation = d3.forceSimulation()
+    .force('link', d3.forceLink().id(d => d.id).distance(150))
+    .force('charge', d3.forceManyBody().strength(-500))
     .force('center', d3.forceCenter(width / 2, height / 2))
-    .force('collision', d3.forceCollide().radius(25))
-
-  const link = g.append('g')
-    .attr('class', 'links')
-    .selectAll('line')
-    .data(props.edges)
-    .enter().append('line')
-    .attr('stroke', 'rgba(59, 130, 246, 0.15)')
-    .attr('stroke-width', 1)
-
-  const node = g.append('g')
-    .attr('class', 'nodes')
-    .selectAll('g')
-    .data(props.nodes)
-    .enter().append('g')
-    .call(d3.drag()
-      .on('start', dragstarted)
-      .on('drag', dragged)
-      .on('end', dragended))
-
-  // Círculo LUMINOSO (Estrela)
-  node.append('circle')
-    .attr('r', 6)
-    .attr('fill', 'var(--primary)')
-    .attr('filter', 'url(#glow)')
-    .attr('class', 'node-circle')
-
-  // Label sutil
-  node.append('text')
-    .text(d => d.name || d.id)
-    .attr('x', 10)
-    .attr('y', 4)
-    .attr('class', 'node-label')
-
-  simulation.on('tick', () => {
-    link.attr('x1', d => d.source.x)
-        .attr('y1', d => d.source.y)
-        .attr('x2', d => d.target.x)
-        .attr('y2', d => d.target.y)
-
-    node.attr('transform', d => `translate(${d.x}, ${d.y})`)
-  })
-
-  function dragstarted(event, d) {
-    if (!event.active) simulation.alphaTarget(0.3).restart()
-    d.fx = d.x; d.fy = d.y
-  }
-  function dragged(event, d) {
-    d.fx = event.x; d.fy = event.y
-  }
-  function dragended(event, d) {
-    if (!event.active) simulation.alphaTarget(0)
-    d.fx = null; d.fy = null
-  }
+    .force('collision', d3.forceCollide().radius(30))
 }
 
-// Watch para recarregar o grafo se os dados mudarem
+// O Update "Cérebro Vivo": Não limpa, ele dá JOIN em dados que chegam
+const updateGraph = () => {
+  if (!simulation) return
+
+  // 1. Clonagem e Hidratação dos Shadow Arrays
+  props.nodes.forEach(n => {
+    if (!localNodesMap.has(n.id)) {
+      const clone = { ...n }
+      localNodesMap.set(n.id, clone)
+      localNodesList.push(clone)
+    }
+  })
+
+  props.edges.forEach(e => {
+    const s = e.source.id || e.source
+    const t = e.target.id || e.target
+    const key = `${s}-${t}`
+    if (!localEdgesMap.has(key)) {
+      const clone = { ...e, source: s, target: t }
+      localEdgesMap.set(key, clone)
+      localEdgesList.push(clone)
+    }
+  })
+
+  // 2. UPDATE EDGES (Energia Fluindo)
+  const links = linkGroup.selectAll("line").data(localEdgesList, d => `${d.source.id || d.source}-${d.target.id || d.target}`)
+  const linksEnter = links.enter()
+    .append("line")
+    .attr("class", "edge-flow")
+    .attr("stroke", "rgba(59, 130, 246, 0.4)")
+    .attr("stroke-width", 2)
+  links.exit().remove()
+  const allLinks = linksEnter.merge(links)
+
+  // 3. UPDATE NODES
+  const nodes = nodeGroup.selectAll("g").data(localNodesList, d => d.id)
+  const nodesEnter = nodes.enter().append("g")
+      .call(d3.drag()
+        .on("start", dragstarted)
+        .on("drag", dragged)
+        .on("end", dragended))
+
+  // Círculos LUMINOSOS
+  nodesEnter.append("circle")
+    .attr("r", 0) 
+    .attr("fill", "var(--primary)")
+    .attr("filter", "url(#glow)")
+    .attr("class", "node-circle")
+    .attr("id", d => `node-${d.id.replace(/[^a-zA-Z0-9_-]/g, '')}`)
+    .transition().duration(500).attr("r", 6)
+
+  // Nomes 
+  nodesEnter.append("text")
+    .text(d => d.name || d.id)
+    .attr("x", 12).attr("y", 4)
+    .attr("class", "node-label")
+
+  nodes.exit().remove()
+  const allNodes = nodesEnter.merge(nodes)
+
+  // 4. REINICIAR GRAVIDADES DESACOLHADAS DE VUE
+  simulation.nodes(localNodesList)
+  simulation.force("link").links(localEdgesList)
+  simulation.alpha(0.3).restart()
+
+  simulation.on("tick", () => {
+    allLinks.attr("x1", d => d.source.x).attr("y1", d => d.source.y)
+            .attr("x2", d => d.target.x).attr("y2", d => d.target.y)
+    allNodes.attr("transform", d => `translate(${d.x}, ${d.y})`)
+  })
+
+  function dragstarted(event, d) { if (!event.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; }
+  function dragged(event, d) { d.fx = event.x; d.fy = event.y; }
+  function dragended(event, d) { if (!event.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; }
+}
+
+// Reatividade
 watch(() => [props.nodes, props.edges], () => {
-  initGraph()
+  updateGraph()
+}, { deep: true })
+
+// Auto-Scroll Raciocínio (Logs descendo na telinha lateral)
+watch(() => props.graphLogs, () => {
+  nextTick(() => {
+    if (logContainerRef.value) {
+      logContainerRef.value.scrollTop = logContainerRef.value.scrollHeight
+    }
+  })
 }, { deep: true })
 
 onMounted(() => {
-  initGraph()
+  mountGraphEnvironment()
+  updateGraph()
 
-  // Listener para destaque em tempo real disparado pelo Maestro
-  EventsOn('node:highlight', (nodeId) => {
-    d3.selectAll('.node-circle')
-      .filter(d => d.id === nodeId)
-      .transition().duration(400)
-      .attr('r', 15)
-      .style('fill', '#fff')
-      .transition().duration(2000)
+  // Node Active / Highlight! Animamos dinamicamente (Energia e Foco)
+  EventsOn('node:active', (nodeId) => {
+    const cleanId = nodeId.replace(/[^a-zA-Z0-9_-]/g, '')
+    d3.select(`#node-${cleanId}`)
+      .transition().duration(300)
+      .attr('r', 18)
+      .attr('fill', '#ffd700') // Amarelo Vivo Raciocínio
+      .attr('filter', 'url(#glow-active)')
+      .transition().duration(2500) // Decaimento Natural
       .attr('r', 6)
-      .style('fill', 'var(--primary)')
+      .attr('fill', 'var(--primary)')
+      .attr('filter', 'url(#glow)')
   })
 })
 
-const resetZoom = () => {
-  svg.transition().duration(750).call(
-    d3.zoom().transform, 
-    d3.zoomIdentity
-  )
-}
+const resetZoom = () => svg.transition().duration(750).call(d3.zoom().transform, d3.zoomIdentity)
 
 const scanning = ref(false)
 const triggerScan = async () => {
@@ -153,7 +193,7 @@ const triggerScan = async () => {
   } catch (error) {
     console.error("Erro no Scan:", error)
   } finally {
-    setTimeout(() => { scanning.value = false }, 1000) // Delay estetico
+    setTimeout(() => { scanning.value = false }, 1000)
   }
 }
 </script>
@@ -162,26 +202,28 @@ const triggerScan = async () => {
   <div class="graph-wrapper animate-fade-in" ref="containerRef">
     <svg ref="svgRef" class="main-svg"></svg>
     
-    <!-- Controles Glassmorphism -->
+    <!-- Controles & Console de Logs (Painel de Pensamento Vidrado) -->
     <div class="graph-ui glass">
       <div class="ui-header">
         <span class="pulse"></span>
         <h3>Conhecimento Obsidian</h3>
       </div>
+      
       <div class="ui-actions">
         <div style="display: flex; gap: 8px;">
-          <button @click="resetZoom" class="action-btn" title="Centralizar">
-            🎯 <span>RESET VIEW</span>
-          </button>
-          <button @click="triggerScan" class="action-btn" :class="{'scanning-btn': scanning}" title="Forçar Indexação de Notas">
-            <span v-if="!scanning">🔄</span>
-            <span v-else class="spin">⏳</span>
-            <span>SCAN</span>
-          </button>
+          <button @click="resetZoom" class="action-btn" title="Centralizar">🎯 <span>RESET</span></button>
+          <button @click="triggerScan" class="action-btn" :class="{'scanning-btn': scanning}" title="Forçar Index"><span v-if="!scanning">🔄</span><span v-else class="spin">⏳</span><span>SCAN</span></button>
         </div>
         <div class="stat-item">
           <span class="val">{{ nodes.length }}</span>
           <span class="lab">NOTAS</span>
+        </div>
+      </div>
+
+      <!-- O CONSOLE VIVO DO RACIOCÍNIO IA -->
+      <div class="graph-logs-console" ref="logContainerRef" v-if="graphLogs.length > 0">
+        <div v-for="(log, idx) in graphLogs" :key="idx" class="log-entry">
+          <span class="log-text">{{ log }}</span>
         </div>
       </div>
     </div>
@@ -348,5 +390,41 @@ const triggerScan = async () => {
   opacity: 0.7;
   pointer-events: none;
   border-color: var(--primary);
+}
+
+/* 🧠 Efeitos do Raciocínio (Cérebro Artificial Vivo) */
+.edge-flow {
+  stroke-dasharray: 4 4;
+  animation: dashFlow 2s linear infinite;
+}
+
+@keyframes dashFlow {
+  to { stroke-dashoffset: -20; }
+}
+
+/* ⚙️ Console Visual Lateral */
+.graph-logs-console {
+  margin-top: 15px;
+  max-height: 180px;
+  overflow-y: auto;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  scroll-behavior: smooth;
+}
+
+.graph-logs-console::-webkit-scrollbar { width: 4px; }
+.graph-logs-console::-webkit-scrollbar-thumb { background: rgba(59, 130, 246, 0.5); border-radius: 4px; }
+
+.log-entry {
+  font-family: Consolas, 'Fira Code', monospace;
+  font-size: 0.6rem;
+  color: rgba(255,255,255,0.6);
+  border-left: 2px solid rgba(59, 130, 246, 0.5);
+  padding-left: 6px;
+  line-height: 1.4;
+  word-break: break-all;
 }
 </style>

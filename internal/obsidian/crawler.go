@@ -104,10 +104,10 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 		c.mu.Unlock()
 		totalIndexed++
 
-		// 5. Atualiza UI
+		// 5. Atualiza UI ao terminar o Parser
 		runtime.EventsEmit(ctx, "graph:node", map[string]string{"id": nodeName, "name": nodeName})
-		for _, t := range triples {
-			runtime.EventsEmit(ctx, "graph:edge", map[string]string{"source": nodeName, "target": t.Object})
+		for _, link := range links {
+			runtime.EventsEmit(ctx, "graph:edge", map[string]string{"source": nodeName, "target": link})
 		}
 
 		return nil

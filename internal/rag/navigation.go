@@ -3,6 +3,9 @@ package rag
 import (
 	"context"
 	"fmt"
+	"time"
+
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"Lumaestro/internal/config"
 	"Lumaestro/internal/provider"
@@ -58,6 +61,9 @@ func (n *GraphNavigator) ExpandContext(ctx context.Context, initialNotes []map[s
 			continue
 		}
 		visited[title] = true
+		
+		// Evento Visual: Acende o nó brilhantemente ao iniciar sua leitura formal
+		runtime.EventsEmit(ctx, "node:active", title)
 
 		content, _ := current.data["content"].(string)
 
@@ -79,6 +85,11 @@ func (n *GraphNavigator) ExpandContext(ctx context.Context, initialNotes []map[s
 							// Buscamos a nota conectada de forma cirúrgica na Collection do Qdrant
 							neighborData, err := n.Qdrant.SearchByName("obsidian_knowledge", linkName)
 							if err == nil && neighborData != nil {
+								// Avisa Frontend das Viagens Visuais
+								runtime.EventsEmit(ctx, "graph:log", fmt.Sprintf("[%s] 🔗 seguindo link → %s", time.Now().Format("15:04"), linkName))
+								runtime.EventsEmit(ctx, "graph:edge", map[string]string{"source": title, "target": linkName})
+								runtime.EventsEmit(ctx, "graph:node", map[string]string{"id": linkName, "name": linkName})
+
 								// Adiciona o vizinho à fila para próxima iteração
 								queue = append(queue, node{data: neighborData, depth: current.depth + 1})
 							}
