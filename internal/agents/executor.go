@@ -17,6 +17,7 @@ import (
 type ExecutionLog struct {
 	Source  string `json:"source"`
 	Content string `json:"content"`
+	Type    string `json:"type,omitempty"` // "thought", "message", "system"
 }
 
 // Executor gerencia a execução de processos CLI.

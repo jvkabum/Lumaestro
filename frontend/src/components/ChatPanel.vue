@@ -15,10 +15,9 @@ const { messages, isThinking, isTerminalMode, activeAgent, runningSessions, pend
 const logContainer = ref(null)
 const showRawTerminal = ref(false)
 
-// Se o modo terminal for ativado na store, forçamos a exibição aqui
-watch(isTerminalMode, (newVal) => {
-  if (newVal) showRawTerminal.value = true
-}, { immediate: true })
+// O Terminal Bruto (Raw) só deve abrir via botão ou comando explícito (/cmd)
+// para garantir que a experiência primária (Chat) não seja interrompida.
+
 
 // Inicializa a escuta de eventos do Backend Go
 onMounted(() => {
@@ -101,9 +100,10 @@ const handleSessionEnded = (agent) => {
         </button>
 
         <!-- Botão Discreto de Histórico (Relógio/Lista) -->
-        <button @click="orchestrator.toggleSidebar()" class="action-btn" :class="{ 'btn-active': orchestrator.isSidebarOpen }" title="Expandir Histórico de Sinfonias">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        <button @click="orchestrator.toggleSidebar()" class="action-btn" :class="{ 'btn-active-history': orchestrator.isSidebarOpen }" title="Expandir Histórico de Sinfonias">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="12 8 12 12 14 14"></polyline>
+            <path d="M3.05 11a9 9 0 1 1 .5 4m-.5 5v-5h5"></path>
           </svg>
         </button>
         
@@ -119,6 +119,22 @@ const handleSessionEnded = (agent) => {
     <!-- Área Principal do Chat (Premium) -->
     <div v-show="!showRawTerminal" class="chat-main-area" ref="logContainer">
       <div class="chat-scroll-boundary">
+        <!-- Tela de Harmonização Inicial (Loading Screen) -->
+        <Transition name="fade">
+          <div v-if="isThinking && messages.length === 0" class="loading-overlay glass">
+            <div class="loader-content">
+              <div class="pulsing-icon">🎻</div>
+              <div class="loader-text">
+                <h3>Afinando instrumentos...</h3>
+                <p>O Maestro está sintonizando com o Gemini.</p>
+              </div>
+              <div class="loader-bars">
+                <span></span><span></span><span></span><span></span><span></span>
+              </div>
+            </div>
+          </div>
+        </Transition>
+
         <ChatLog :messages="messages" :is-thinking="isThinking" />
       </div>
       <div class="input-persistent-area">
@@ -228,6 +244,7 @@ const handleSessionEnded = (agent) => {
   padding: 8px; border-radius: 8px; transition: all 0.2s;
 }
 .action-btn:hover { background: rgba(255, 255, 255, 0.05); color: #fff; }
+.action-btn.btn-active-history { color: #38bdf8; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.2); }
 .action-btn.btn-active { color: #3b82f6; background: rgba(59, 130, 246, 0.1); }
 
 .exit-btn-circle {
@@ -264,5 +281,81 @@ const handleSessionEnded = (agent) => {
 .back-btn {
   background: #222; border: 1px solid #333; color: #888; padding: 4px 12px;
   border-radius: 4px; cursor: pointer; font-size: 11px;
+}
+
+/* --- Loading Overlay & Splah Screen --- */
+.loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(12px);
+  z-index: 100;
+}
+
+.loader-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  text-align: center;
+}
+
+.pulsing-icon {
+  font-size: 3rem;
+  animation: heart-pulse 2s infinite ease-in-out;
+}
+
+.loader-text h3 {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 4px;
+  letter-spacing: 0.5px;
+}
+
+.loader-text p {
+  font-size: 0.9rem;
+  color: #94a3b8;
+}
+
+.loader-bars {
+  display: flex;
+  gap: 4px;
+  height: 20px;
+  align-items: flex-end;
+}
+
+.loader-bars span {
+  width: 3px;
+  height: 100%;
+  background: #3b82f6;
+  border-radius: 2px;
+  animation: bar-rise 1s infinite ease-in-out;
+}
+
+.loader-bars span:nth-child(2) { animation-delay: 0.1s; height: 70%; }
+.loader-bars span:nth-child(3) { animation-delay: 0.2s; height: 90%; }
+.loader-bars span:nth-child(4) { animation-delay: 0.3s; height: 60%; }
+.loader-bars span:nth-child(5) { animation-delay: 0.4s; height: 80%; }
+
+@keyframes heart-pulse {
+  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 10px rgba(59, 130, 246, 0.3)); }
+  50% { transform: scale(1.1); filter: drop-shadow(0 0 20px rgba(59, 130, 246, 0.6)); }
+}
+
+@keyframes bar-rise {
+  0%, 100% { height: 40%; }
+  50% { height: 100%; }
+}
+
+/* Transições */
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.5s ease;
+}
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
 }
 </style>

@@ -41,13 +41,15 @@ type ACPExecutor struct {
 
 // SessionInfo representa metadados de uma sessão ACP (Checkpoint)
 type SessionInfo struct {
-	SessionID string `json:"sessionId"`
-	CWD       string `json:"cwd"`
-	Title     string `json:"title,omitempty"`
-	UpdatedAt string `json:"updatedAt,omitempty"`
+	SessionID        string `json:"sessionId"`
+	Title            string `json:"title"`
+	CreatedAt        string `json:"createdAt"`
+	UpdatedAt        string `json:"updatedAt"`
+	File             string `json:"file"`
+	IsCurrentSession bool   `json:"isCurrentSession"`
 }
 
-// ListSessionsResponse é a resposta estruturada para o método session/list
+// ListSessionsResponse é a resposta estruturada para o método listSessions
 type ListSessionsResponse struct {
 	Sessions []SessionInfo `json:"sessions"`
 }
@@ -264,6 +266,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 	}
 
 	e.ActiveSessions[sessionID] = session
+	runtime.EventsEmit(e.Ctx, "agent:starting", agent)
 
 	// Inicia os Listeners (Stdout para RPC, Stderr para Diagnóstico)
 	go e.runRPCListener(session, stdout)
@@ -331,9 +334,15 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 
 		if targetID != "" {
 			errLoad := e.LoadSession(session, targetID)
-			if errLoad != nil {
-				fmt.Printf("[ACP] Erro ao carregar sessão (tentando nova): %v\n", errLoad)
-				targetID = "" 
+			if errLoad == nil {
+				select {
+				case session.initDone <- struct{}{}:
+				default:
+				}
+				fmt.Printf("[ACP] Sessão anterior (%s) restaurada com sucesso!\n", targetID)
+			} else {
+				fmt.Printf("[ACP] Erro ao carregar sessão anterior (tentando nova): %v\n", errLoad)
+				targetID = "" // Fallback para nova sessão
 			}
 		}
 
@@ -372,17 +381,36 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 	// Monitora o fim do processo em background
 	go func() {
 		err := cmd.Wait()
-		if err != nil {
-			e.LogChan <- ExecutionLog{
-				Source:  "ERROR",
-				Content: fmt.Sprintf("⚠️ Sessão %s morreu: %v", agent, err),
+		
+		e.Mu.Lock()
+		currentSession, isCurrentlyActive := e.ActiveSessions[sessionID]
+		// Só deve reportar se o processo que morreu for EXATAMENTE a instância que iniciamos agora,
+		// e não uma instância antiga que foi morta pelo nosso próprio 'cancel()' na abertura de uma nova.
+		stillActive := isCurrentlyActive && currentSession.Cmd == cmd
+		if stillActive {
+			delete(e.ActiveSessions, sessionID)
+		}
+		e.Mu.Unlock()
+
+		if err != nil && stillActive {
+			// Não loga se for erro de contexto cancelado intencionalmente
+			if cmdCtx.Err() == nil {
+				e.LogChan <- ExecutionLog{
+					Source:  "ERROR",
+					Content: fmt.Sprintf("⚠️ Sinfonia interrompida abruptamente: %v", err),
+				}
 			}
 		}
-		e.Mu.Lock()
-		delete(e.ActiveSessions, sessionID)
-		e.Mu.Unlock()
-		fmt.Printf("[ACP] Sessão %s encerrada do mapa.\n", agent)
-		runtime.EventsEmit(e.Ctx, "terminal:closed", agent)
+
+		if stillActive {
+			fmt.Printf("[ACP] Sessão %s encerrada do mapa.\n", agent)
+			runtime.EventsEmit(e.Ctx, "terminal:closed", agent)
+			
+			e.LogChan <- ExecutionLog{
+				Source:  "SYSTEM",
+				Content: "Sessão ACP " + agent + " encerrada.",
+			}
+		}
 	}()
 
 	return nil
@@ -391,12 +419,6 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 func (e *ACPExecutor) runRPCListener(s *ACPSession, stdout io.Reader) {
 	handler := &ACPRpcHandler{Executor: e, Session: s}
 	StartJSONRPCListener(stdout, handler)
-
-	// Quando terminar
-	e.LogChan <- ExecutionLog{
-		Source:  "SYSTEM",
-		Content: "Sessão ACP " + s.AgentName + " encerrada.",
-	}
 }
 
 func (e *ACPExecutor) runStderrMonitor(s *ACPSession, stderr io.Reader) {
@@ -460,6 +482,8 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 
 	// 2. Notificações de Streaming de Sessão (O texto real da resposta)
 	if method == "session/update" {
+		fmt.Printf("[ACP RAW] session/update Recebido: %s\n", string(params))
+
 		var p struct {
 			Update struct {
 				SessionUpdate string `json:"sessionUpdate"`
@@ -474,10 +498,22 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 			// Captura blocos de mensagem ou pensamentos
 			if update.SessionUpdate == "agent_message_chunk" || update.SessionUpdate == "agent_thought_chunk" {
 				if update.Content.Text != "" {
+					logType := "message"
+					if update.SessionUpdate == "agent_thought_chunk" {
+						logType = "thought"
+					}
+					
 					h.Executor.LogChan <- ExecutionLog{
 						Source:  h.Session.AgentName,
 						Content: update.Content.Text,
+						Type:    logType,
 					}
+				}
+			} else if update.SessionUpdate == "agent_message_error" || update.SessionUpdate == "error" {
+				// Relatar qualquer erro ou notificação inesperada
+				h.Executor.LogChan <- ExecutionLog{
+					Source:  "ERROR",
+					Content: "⚠️ Aviso do Gemini: O formato da sua mensagem (prompt) pode ter sido rejeitado internamente.",
 				}
 			}
 		}
@@ -724,16 +760,36 @@ func (e *ACPExecutor) ListSessions(s *ACPSession) ([]SessionInfo, error) {
 		return nil, err
 	}
 
-	var list ListSessionsResponse
+	var list struct {
+		Sessions []struct {
+			ID          string `json:"id"`
+			StartTime   string `json:"startTime"`
+			LastUpdated string `json:"lastUpdated"`
+			DisplayName string `json:"displayName"`
+		} `json:"sessions"`
+	}
+
 	if err := json.Unmarshal(resp.Result, &list); err != nil {
 		return nil, fmt.Errorf("falha ao decodificar lista de sessões: %v", err)
 	}
 
-	return list.Sessions, nil
+	var finalList []SessionInfo
+	for _, s := range list.Sessions {
+		finalList = append(finalList, SessionInfo{
+			SessionID: s.ID,
+			Title:     s.DisplayName,
+			CreatedAt: s.StartTime,
+			UpdatedAt: s.LastUpdated,
+		})
+	}
+
+	return finalList, nil
 }
 
 // LoadSession restaura uma sessão específica (Checkpoint).
 func (e *ACPExecutor) LoadSession(s *ACPSession, acpSessionID string) error {
+	s.ACPSessID = acpSessionID // 🚀 Salva o ID restaurado na Struct da conexão local!
+
 	id := e.getNextID()
 	cwd, _ := os.Getwd()
 	params := map[string]interface{}{

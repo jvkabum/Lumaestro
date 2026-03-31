@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, watch } from 'vue';
 import { useOrchestratorStore } from '../stores/orchestrator';
 
 const store = useOrchestratorStore();
@@ -35,6 +35,12 @@ onMounted(async () => {
     await store.fetchSessions(store.activeAgent);
   }
 });
+
+watch(() => store.activeAgent, async (newAgent) => {
+  if (newAgent) {
+    await store.fetchSessions(newAgent);
+  }
+});
 </script>
 
 <template>
@@ -47,7 +53,15 @@ onMounted(async () => {
     </div>
 
     <div class="sessions-list scroll-shadows">
-      <div v-if="store.sessions.length === 0" class="empty-state">
+      <!-- Estado de Carregamento (Skeleton Shimmer) -->
+      <template v-if="store.isThinking && store.sessions.length === 0">
+        <div v-for="i in 5" :key="i" class="skeleton-item shimmer">
+          <div class="skeleton-line title"></div>
+          <div class="skeleton-line meta"></div>
+        </div>
+      </template>
+
+      <div v-else-if="store.sessions.length === 0" class="empty-state">
         Nenhuma sinfonia gravada ainda.
       </div>
       
@@ -240,5 +254,60 @@ onMounted(async () => {
 .sessions-list::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.05);
   border-radius: 10px;
+}
+
+/* --- Skeleton Shimmer Animation --- */
+.shimmer {
+  position: relative;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.03) !important;
+}
+
+.shimmer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  transform: translateX(-100%);
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0,
+    rgba(255, 255, 255, 0.03) 20%,
+    rgba(255, 255, 255, 0.06) 60%,
+    rgba(255, 255, 255, 0)
+  );
+  animation: shimmer-anim 2s infinite;
+}
+
+@keyframes shimmer-anim {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.skeleton-item {
+  padding: 12px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.skeleton-line {
+  height: 10px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.skeleton-line.title {
+  width: 70%;
+}
+
+.skeleton-line.meta {
+  width: 40%;
+  height: 6px;
 }
 </style>

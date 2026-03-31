@@ -275,10 +275,19 @@ func (a *App) StartLoginSession(agent string) string {
 
 // StartAgentSession inicia a CLI do Gemini em modo seguro ACP (JSON RPC 2.0).
 func (a *App) StartAgentSession(agent string) error {
-	fmt.Printf("[App] Iniciando agente: %s\n", agent)
-	// No Lumaestro, mantemos um ID de controle estável por agente na UI.
 	sessionID := "acp-session-" + agent
-	
+
+	// 🛡️ Trava de Segurança: Não inicia se já houver uma sessão ativa ou iniciando para este agente.
+	a.executor.Mu.Lock()
+	_, exists := a.executor.ActiveSessions[sessionID]
+	a.executor.Mu.Unlock()
+
+	if exists {
+		fmt.Printf("[App] Agente %s já está no Ar. Orquestra pronta.\n", agent)
+		return nil
+	}
+
+	fmt.Printf("[App] Iniciando agente: %s\n", agent)
 	// No primeiro boot ou reinício, passamos loadSessionID como "LATEST" para carregar a última Sinfonia.
 	return a.executor.StartSession(a.ctx, agent, sessionID, "LATEST")
 }
@@ -313,11 +322,16 @@ func (a *App) NewAgentSession(agent string) error {
 
 // SendAgentInput via prompt RPC na sessão ACP.
 func (a *App) SendAgentInput(agent string, input string) error {
+	fmt.Printf("[App] SendAgentInput INVOCADO pela UI: agent=%s, input=%s\n", agent, input)
+	
 	sessionID := "acp-session-" + agent
 	err := a.executor.SendInput(sessionID, input)
 	if err != nil {
+		fmt.Printf("[App] ERRO no SendAgentInput: %v\n", err)
 		return fmt.Errorf("erro ao enviar input para ACP: %v", err)
 	}
+	
+	fmt.Println("[App] Input enviado com sucesso ao canal RPC!")
 	return nil
 }
 

@@ -37,13 +37,20 @@
         </div>
         
         <div class="message-content">
+          <!-- Bloco de Raciocínio (Colapsável) -->
+          <ThoughtBlock 
+            v-if="msg.role === 'assistant' && msg.thought && msg.mode !== 'system'" 
+            :thought="msg.thought" 
+            :agent="msg.agent" 
+          />
+
           <!-- Renderização Premium via Markdown-It -->
-          <div class="message-text markdown-body" v-html="renderMarkdown(msg.text)"></div>
+          <div v-if="msg.text" class="message-text markdown-body" v-html="renderMarkdown(msg.text)"></div>
           
           <!-- Metadados -->
           <div v-if="msg.role === 'assistant' && msg.agent && msg.mode !== 'system'" class="message-meta">
             <span class="agent-badge">{{ msg.agent }}</span>
-            <span v-if="isACP" class="mode-badge acp">ACP MODE</span>
+
           </div>
         </div>
       </div>
@@ -72,11 +79,11 @@
 import { ref, watch, onMounted, nextTick } from 'vue';
 import { useClipboard } from '@vueuse/core';
 import MarkdownIt from 'markdown-it';
+import ThoughtBlock from './ThoughtBlock.vue';
 
 const props = defineProps({
   messages: { type: Array, required: true },
-  isThinking: { type: Boolean, default: false },
-  isACP: { type: Boolean, default: true }
+  isThinking: { type: Boolean, default: false }
 });
 
 const md = new MarkdownIt({
@@ -304,10 +311,4 @@ onMounted(scrollToBottom);
 
 .thinking-text { font-size: 13px; color: #94a3b8; font-weight: 500; }
 
-/* ACP Badge */
-.mode-badge.acp {
-    background: rgba(139, 92, 246, 0.1);
-    color: #8b5cf6;
-    border-color: rgba(139, 92, 246, 0.2);
-}
 </style>

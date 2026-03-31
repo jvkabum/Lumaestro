@@ -293,15 +293,15 @@ nav button.active {
 /* ── Transição Sidebar (Modo Gaveta) ── */
 .slide-enter-active,
 .slide-leave-active {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  overflow: hidden;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
 }
 
 .slide-enter-from,
 .slide-leave-to {
-  transform: translateX(-30px);
+  width: 0 !important;
   opacity: 0;
-  max-width: 0;
-  margin-right: 0;
+  margin: 0 !important;
+  transform: translateX(-40px);
 }
 </style>

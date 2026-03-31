@@ -44,9 +44,17 @@ child.stderr.on('data', (data) => {
     console.error(`[STDERR] ${data.toString().trim()}`);
 });
 
+let lastSessionId = "dummy";
+
 function handleMessage(jsonStr) {
     try {
         const msg = JSON.parse(jsonStr);
+        // Atualiza ID se receber de 'session/new'
+        if (msg.result && msg.result.sessionId) {
+            lastSessionId = msg.result.sessionId;
+            console.log(`[TEST] ✅ Capturado SessionID do Gemini: ${lastSessionId}`);
+        }
+
         // Se o Gemini pedir algo, respondemos para não travar
         if (msg.method === 'client/readFile') {
             console.log(`[AUTO-REPLY] Respondendo pedido de leitura de arquivo: ${msg.params.path}`);
@@ -69,7 +77,7 @@ function send(obj) {
 
 // Pequeno delay para o Node carregar
 setTimeout(() => {
-    console.log('--- ENVIANDO INITIALIZE ---');
+    console.log('--- 1. INITIALIZE ---');
     send({
         jsonrpc: "2.0",
         id: 1,
@@ -80,11 +88,44 @@ setTimeout(() => {
             clientCapabilities: { fs: { readTextFile: true, writeTextFile: true } }
         }
     });
+
+    setTimeout(() => {
+        console.log('--- 2. AUTHENTICATE ---');
+        send({
+            jsonrpc: "2.0",
+            id: 2,
+            method: "authenticate",
+            params: { methodId: "gemini-api-key" }
+        });
+
+        setTimeout(() => {
+            console.log('--- 3. SESSION NEW ---');
+            send({
+                jsonrpc: "2.0",
+                id: 3,
+                method: "session/new",
+                params: { cwd: __dirname, mcpServers: [] }
+            });
+
+            setTimeout(() => {
+                console.log('--- 4. SESSION PROMPT ---');
+                send({
+                    jsonrpc: "2.0",
+                    id: 4,
+                    method: "session/prompt",
+                    params: {
+                        sessionId: lastSessionId, 
+                        prompt: [{ type: "text", text: "ola gemini" }]
+                    }
+                });
+            }, 3000);
+        }, 3000);
+    }, 3000);
 }, 3000);
 
 // Timeout de segurança do script
 setTimeout(() => {
-    console.log('--- FIM DO TESTE (60s) ---');
+    console.log('--- FIM DO TESTE ---');
     child.kill();
     process.exit(0);
-}, 60000);
+}, 18000);

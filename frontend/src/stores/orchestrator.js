@@ -31,6 +31,13 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   const pendingReview = ref(null);
 
   const initListeners = () => {
+    // 0. Sinal de Início do Motor (Recuperação de Sessão)
+    EventsOn('agent:starting', (agent) => {
+      console.log("[Store] Motor ligando para:", agent);
+      activeAgent.value = agent;
+      isThinking.value = true; // Ativa o modo de carregamento
+    });
+
     // 1. Logs Estruturados da IA (ACP)
     EventsOn('agent:log', (log) => {
       console.log("[Store] Logs ACP:", log);
@@ -41,22 +48,31 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
       }
 
       // Tratamento de mensagens da IA
-      const lastMsg = messages.value[messages.value.length - 1];
+      let lastMsg = messages.value[messages.value.length - 1];
       
-      // Se for um log de progresso (ex: [client/readFile] ... )
-      if (log.content.startsWith('[')) {
-          // Poderíamos criar um "Progresso de Ferramenta" aqui
-          console.log("[ACP Progress]", log.content);
+      if (!lastMsg || lastMsg.role !== 'assistant' || lastMsg.mode === 'system' || lastMsg.agent !== log.source) {
+          lastMsg = { 
+            role: 'assistant', 
+            text: '', 
+            thought: '',
+            agent: log.source || 'Maestro',
+            isPlanning: true // Começamos assumindo que ele está planejando
+          };
+          messages.value.push(lastMsg);
       }
 
-      if (lastMsg && lastMsg.role === 'assistant' && lastMsg.mode !== 'system' && lastMsg.agent === log.source) {
-          lastMsg.text += log.content;
+      // Lógica de Separação de Pensamento vs Texto (Protocolo Oficial ACP)
+      const content = log.content;
+      const logType = log.type || 'message'; // Default para compatibilidade
+
+      if (logType === 'thought') {
+          lastMsg.thought += content;
+      } else if (logType === 'message') {
+          lastMsg.isPlanning = false;
+          lastMsg.text += content;
       } else {
-          messages.value.push({ 
-            role: 'assistant', 
-            text: log.content, 
-            agent: log.source || 'Maestro' 
-          });
+          // Fallback para logs de sistema ou outros
+          lastMsg.text += content;
       }
       
       isThinking.value = false;
@@ -73,6 +89,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
       if (agent && !runningSessions.value.includes(agent)) runningSessions.value.push(agent);
       activeAgent.value = agent;
       isTerminalMode.value = true;
+      isThinking.value = false; // Destrava a tela inicial de carregamento
     });
 
     EventsOn('terminal:closed', (agent) => {
@@ -132,6 +149,12 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   };
 
   const startSession = async (agent) => {
+    // 🛡️ Trava de Segurança: Não inicia se já estiver rodando
+    if (runningSessions.value.includes(agent)) {
+      console.log(`[Store] Agente ${agent} já está ativo. Ignorando novo Start.`);
+      return;
+    }
+
     console.log(`[Store] Iniciando Sessão ACP para: ${agent}`);
     isThinking.value = true;
     isTerminalMode.value = true;
@@ -252,9 +275,14 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   };
 
   const isSidebarOpen = ref(false);
-  const toggleSidebar = () => {
+  const toggleSidebar = async () => {
     isSidebarOpen.value = !isSidebarOpen.value;
     console.log(`[Store] Histórico ${isSidebarOpen.value ? 'Aberto' : 'Fechado'}`);
+    
+    // Auto-fetch ao abrir
+    if (isSidebarOpen.value && activeAgent.value) {
+      await fetchSessions(activeAgent.value);
+    }
   };
 
   return {

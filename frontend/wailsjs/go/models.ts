@@ -2,9 +2,11 @@ export namespace agents {
 	
 	export class SessionInfo {
 	    sessionId: string;
-	    cwd: string;
-	    title?: string;
-	    updatedAt?: string;
+	    title: string;
+	    createdAt: string;
+	    updatedAt: string;
+	    file: string;
+	    isCurrentSession: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new SessionInfo(source);
@@ -13,9 +15,11 @@ export namespace agents {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.sessionId = source["sessionId"];
-	        this.cwd = source["cwd"];
 	        this.title = source["title"];
+	        this.createdAt = source["createdAt"];
 	        this.updatedAt = source["updatedAt"];
+	        this.file = source["file"];
+	        this.isCurrentSession = source["isCurrentSession"];
 	    }
 	}
 
