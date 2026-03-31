@@ -374,6 +374,23 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		return fmt.Errorf("timeout no estágio 3 do Gemini")
 	}
 
+	// 🔑 Estágio 4: Auto-Approve - Libera as mãos do Maestro
+	// Envia setSessionMode para que o Gemini CLI execute ferramentas sem pedir permissão
+	fmt.Println("[ACP] Enviando setSessionMode (auto-approve)...")
+	modeParams, _ := json.Marshal(map[string]interface{}{
+		"sessionId": session.ACPSessID,
+		"mode": map[string]interface{}{
+			"toolConfirmation": "none",
+		},
+	})
+	e.SendRPC(session, JSONRPCMessage{
+		JSONRPC: JSONRPCVersion,
+		ID:      e.getNextID(),
+		Method:  "setSessionMode",
+		Params:  modeParams,
+	})
+	fmt.Println("[ACP] Auto-approve configurado. Mãos livres!")
+
 	// Handshake Concluído! Agora sim avisamos a UI que o agente está pronto.
 	runtime.EventsEmit(e.Ctx, "terminal:started", map[string]interface{}{
 		"agent":     agent,
@@ -526,15 +543,17 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 // HandleRequest lida com os pedidos de ferramenta (hands) da IA.
 func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json.RawMessage) {
 	fmt.Printf("[ACP DEBUG] Método Recebido: %s\n", method)
-	// Normalização do método para compatibilidade entre dialetos
-	normMethod := strings.ToLower(strings.TrimPrefix(method, "client/"))
+	// Normalização do método para compatibilidade entre dialetos (client/, fs/)
+	normMethod := strings.ToLower(method)
+	normMethod = strings.TrimPrefix(normMethod, "client/")
+	normMethod = strings.TrimPrefix(normMethod, "fs/")
 
 	var result interface{}
 	var rpcErr *RPCError
 	reviewID := fmt.Sprintf("rev-%v", id)
 
 	switch normMethod {
-	case "readfile", "read_file":
+	case "readfile", "read_file", "read_text_file":
 		var p struct {
 			Path string `json:"path"`
 		}
@@ -552,7 +571,7 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			}
 		}
 
-	case "writefile", "write_file":
+	case "writefile", "write_file", "write_text_file", "write_file_content":
 		var p struct {
 			Path    string `json:"path"`
 			Content string `json:"content"`
@@ -607,7 +626,8 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			}
 		}
 
-	case "deletefile", "delete_file":
+	case "deletefile", "delete_file", "remove":
+
 		var p struct {
 			Path string `json:"path"`
 		}
@@ -653,7 +673,7 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			}
 		}
 
-	case "runcommand", "run_command", "run_shell_command":
+	case "runcommand", "run_command", "run_shell_command", "execute_command":
 		var p struct {
 			Command string   `json:"command"`
 			Args    []string `json:"args"`
@@ -684,8 +704,15 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 		}
 
 	default:
-		// 🛠️ Roteamento de Ferramentas Customizadas (ex: Lumaestro/ListVaultFiles)
-		if strings.HasPrefix(method, "Lumaestro/") {
+		// 🔑 Protocolo ACP: Pedido de Permissão para usar ferramentas
+		// O Gemini envia session/request_permission ANTES de executar qualquer ferramenta.
+		// Precisamos responder com "permitted: true" para ele prosseguir.
+		if method == "session/request_permission" {
+			fmt.Printf("[ACP PERMISSION] Permissão solicitada. Aprovando automaticamente.\n")
+			result = map[string]interface{}{
+				"permitted": true,
+			}
+		} else if strings.HasPrefix(method, "Lumaestro/") {
 			toolName := strings.TrimPrefix(method, "Lumaestro/")
 			if tool, exists := h.Executor.Tools.Tools[toolName]; exists {
 				var args map[string]interface{}
