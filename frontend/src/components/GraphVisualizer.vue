@@ -80,20 +80,36 @@ const updateGraph = () => {
   // 1. Clonagem e Hidratação dos Shadow Arrays
   props.nodes.forEach(n => {
     if (!localNodesMap.has(n.id)) {
-      const clone = { ...n }
+      const cw = containerRef.value?.clientWidth || 500
+      const ch = containerRef.value?.clientHeight || 500
+      
+      // Injeta X e Y randômicos próximos ao Eixo para a física de Colisão funcionar.
+      const clone = { 
+         ...n, 
+         x: cw / 2 + (Math.random() - 0.5) * 50,
+         y: ch / 2 + (Math.random() - 0.5) * 50
+      }
       localNodesMap.set(n.id, clone)
       localNodesList.push(clone)
     }
   })
 
+  // Higieniza as arestas (Recria a cada tick) apenas p/ bolinhas válidas e já visíveis
+  localEdgesList.length = 0
+  localEdgesMap.clear()
+
   props.edges.forEach(e => {
     const s = e.source.id || e.source
     const t = e.target.id || e.target
     const key = `${s}-${t}`
-    if (!localEdgesMap.has(key)) {
-      const clone = { ...e, source: s, target: t }
-      localEdgesMap.set(key, clone)
-      localEdgesList.push(clone)
+    
+    // BLOQUEIO DE CRASH D3: Cordas apontadas no vazio quebram a gravação
+    if (localNodesMap.has(s) && localNodesMap.has(t)) {
+        if (!localEdgesMap.has(key)) {
+          const clone = { ...e, source: s, target: t }
+          localEdgesMap.set(key, clone)
+          localEdgesList.push(clone)
+        }
     }
   })
 

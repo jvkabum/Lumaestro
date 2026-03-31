@@ -55,8 +55,12 @@ func (c *Crawler) saveCache() {
 	os.WriteFile(c.cachePath, data, 0644)
 }
 
-// IndexVault percorre e indexa notas somente se tiverem sido modificadas.
+// IndexVault percorre e indexa notas independentemente de terem Cache (Forçar Reboot Visual e DB).
 func (c *Crawler) IndexVault(ctx context.Context) error {
+	c.mu.Lock()
+	c.cache = make(map[string]int64) // 💥 DESTROI CACHE EM MEMÓRIA A CADA SCAN
+	c.mu.Unlock()
+
 	var totalSkipped int = 0
 	var totalIndexed int = 0
 
