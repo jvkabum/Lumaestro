@@ -63,6 +63,8 @@ export namespace config {
 	    active_agent: string;
 	    auto_start_agents: string[];
 	    agent_language: string;
+	    graph_depth: number;
+	    graph_context_limit: number;
 	    security: SecurityConfig;
 	
 	    static createFrom(source: any = {}) {
@@ -80,6 +82,8 @@ export namespace config {
 	        this.active_agent = source["active_agent"];
 	        this.auto_start_agents = source["auto_start_agents"];
 	        this.agent_language = source["agent_language"];
+	        this.graph_depth = source["graph_depth"];
+	        this.graph_context_limit = source["graph_context_limit"];
 	        this.security = this.convertValues(source["security"], SecurityConfig);
 	    }
 	

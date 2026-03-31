@@ -2,6 +2,7 @@
 import { onMounted, ref, watch, onUnmounted } from 'vue'
 import * as d3 from 'd3'
 import { EventsOn } from '../../wailsjs/runtime/runtime'
+import { ScanVault } from '../../wailsjs/go/main/App'
 
 const props = defineProps({
   nodes: { type: Array, default: () => [] },
@@ -142,6 +143,19 @@ const resetZoom = () => {
     d3.zoomIdentity
   )
 }
+
+const scanning = ref(false)
+const triggerScan = async () => {
+  if (scanning.value) return
+  scanning.value = true
+  try {
+    await ScanVault()
+  } catch (error) {
+    console.error("Erro no Scan:", error)
+  } finally {
+    setTimeout(() => { scanning.value = false }, 1000) // Delay estetico
+  }
+}
 </script>
 
 <template>
@@ -155,9 +169,16 @@ const resetZoom = () => {
         <h3>Conhecimento Obsidian</h3>
       </div>
       <div class="ui-actions">
-        <button @click="resetZoom" class="action-btn" title="Centralizar">
-          🎯 <span>RESET VIEW</span>
-        </button>
+        <div style="display: flex; gap: 8px;">
+          <button @click="resetZoom" class="action-btn" title="Centralizar">
+            🎯 <span>RESET VIEW</span>
+          </button>
+          <button @click="triggerScan" class="action-btn" :class="{'scanning-btn': scanning}" title="Forçar Indexação de Notas">
+            <span v-if="!scanning">🔄</span>
+            <span v-else class="spin">⏳</span>
+            <span>SCAN</span>
+          </button>
+        </div>
         <div class="stat-item">
           <span class="val">{{ nodes.length }}</span>
           <span class="lab">NOTAS</span>
@@ -216,7 +237,8 @@ const resetZoom = () => {
   z-index: 10;
   padding: 1.2rem;
   border-radius: 20px;
-  min-width: 220px;
+  min-width: 280px;
+  width: max-content;
   border: 1px solid rgba(255, 255, 255, 0.05);
   display: flex;
   flex-direction: column;
@@ -251,6 +273,7 @@ const resetZoom = () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 1.5rem;
 }
 
 .action-btn {
@@ -310,5 +333,20 @@ const resetZoom = () => {
 
 .animate-fade-in {
   animation: fadeIn 1s ease-out;
+}
+
+@keyframes spinFast {
+  100% { transform: rotate(360deg); }
+}
+
+.spin {
+  display: inline-block;
+  animation: spinFast 1s linear infinite;
+}
+
+.scanning-btn {
+  opacity: 0.7;
+  pointer-events: none;
+  border-color: var(--primary);
 }
 </style>

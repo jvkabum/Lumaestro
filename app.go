@@ -19,8 +19,9 @@ import (
 // App struct
 type App struct {
 	ctx       context.Context
-	executor  *agents.ACPExecutor
-	legacyExec *agents.Executor // Apenas para ExecuteCLI fallback se necessário, ou podemos migrar.
+	executor      *agents.ACPExecutor
+	orchestrator  *agents.Orchestrator
+	legacyExec    *agents.Executor // Apenas para ExecuteCLI fallback se necessário, ou podemos migrar.
 	ontology  *provider.OntologyService
 	crawler   *obsidian.Crawler
 	qdrant    *provider.QdrantClient
@@ -41,6 +42,7 @@ func NewApp() *App {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	a.executor = agents.NewACPExecutor()
+	a.orchestrator = agents.NewOrchestrator(a.executor)
 	a.legacyExec = agents.NewExecutor() // Mantemos temporariamente para métodos legacy
 	a.installer = tools.NewInstaller()
 
@@ -95,7 +97,7 @@ func (a *App) initServices() error {
 	a.navigator = rag.NewGraphNavigator(a.qdrant)
 	a.weaver = rag.NewKnowledgeWeaver(a.ontology, a.qdrant, a.embedder)
 	
-	a.chat = rag.NewChatService(a.legacyExec, search, a.navigator, a.embedder, a.installer)
+	a.chat = rag.NewChatService(a.legacyExec, a.orchestrator, search, a.navigator, a.embedder, a.installer)
 	a.crawler = obsidian.NewCrawler(cfg.ObsidianVaultPath, a.embedder, a.qdrant, a.ontology)
 
 	return nil
@@ -153,7 +155,8 @@ func (a *App) AskAgent(agentName string, prompt string) string {
 
 	go func() {
 		fmt.Printf("[BACKEND] Iniciando chamada de Chat para: %s\n", agentName)
-		response, err := a.chat.Ask(a.ctx, agentName, prompt)
+		// Usamos "default" como sessionID para manter o histórico em memória nesta sessão do app.
+		response, err := a.chat.Ask(a.ctx, agentName, "default", prompt)
 		if err != nil {
 			fmt.Printf("[BACKEND] ERRO no Chat: %v\n", err)
 			runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
@@ -163,12 +166,19 @@ func (a *App) AskAgent(agentName string, prompt string) string {
 			return
 		}
 
-		fmt.Printf("[BACKEND] Resposta da IA recebida (%d chars). Emitindo evento...\n", len(response))
-		runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
-			"role":    "assistant",
-			"agent":   agentName,
-			"content": response,
-		})
+		fmt.Printf("[BACKEND] Resposta da Orquestração recebida. Injetando na sessão ACP...\n")
+		
+		// Injeta a pergunta (prompt completo com RAG e histórico) na sessão ACP ativa
+		// O executor cuidará de enviar via StdIn seguindo o protocolo ndJSON
+		err = a.executor.SendInput("default", response, nil)
+		if err != nil {
+			fmt.Printf("[BACKEND] ERRO ao enviar para o agente: %v\n", err)
+			runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+				"source":  "ERROR",
+				"content": "❌ Falha ao comunicar com o agente: " + err.Error(),
+			})
+			return
+		}
 	}()
 
 	return "Orquestrando..."

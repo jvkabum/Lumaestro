@@ -3,6 +3,8 @@ package rag
 import (
 	"context"
 	"fmt"
+
+	"Lumaestro/internal/config"
 	"Lumaestro/internal/provider"
 )
 
@@ -16,33 +18,93 @@ func NewGraphNavigator(qdrant *provider.QdrantClient) *GraphNavigator {
 	return &GraphNavigator{Qdrant: qdrant}
 }
 
-// ExpandContext busca as notas vizinhas e sinapses do chat de forma recursiva.
+// ExpandContext busca as notas vizinhas de forma recursiva (com controle de depth e size).
 func (n *GraphNavigator) ExpandContext(ctx context.Context, initialNotes []map[string]interface{}) []string {
 	var fullContext []string
 	visited := make(map[string]bool)
 
-	for _, note := range initialNotes {
-		content, _ := note["content"].(string)
-		title, _ := note["name"].(string)
+	// Carregar Limites Essenciais de Configuração
+	cfg, err := config.Load()
+	depthLimit := 1
+	contextLimit := 4000
+	if err == nil && cfg != nil {
+		if cfg.GraphDepth > 0 {
+			depthLimit = cfg.GraphDepth
+		}
+		if cfg.GraphContextLimit > 0 {
+			contextLimit = cfg.GraphContextLimit
+		}
+	}
 
-		if visited[title] {
+	totalChars := 0
+
+	// 🧠 Fila para BFS (Breadth-First Search) no RAG
+	type node struct {
+		data  map[string]interface{}
+		depth int
+	}
+
+	var queue []node
+	for _, note := range initialNotes {
+		queue = append(queue, node{data: note, depth: 0})
+	}
+
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+
+		title, _ := current.data["name"].(string)
+		if visited[title] || title == "" {
 			continue
 		}
 		visited[title] = true
-		fullContext = append(fullContext, content)
 
-		// 🧠 Navegação de Sinapses: Busca o que aprendemos no chat sobre este título
-		// Fazemos uma busca exata por entidade no grafo de conhecimento.
-		synapses, err := n.Qdrant.Search("knowledge_graph", nil, 3) // Aqui simplificamos, no real faríamos um filtro por subject=title
-		if err == nil {
-			for _, syn := range synapses {
-				subj, _ := syn["subject"].(string)
-				obj, _ := syn["object"].(string)
-				
-				// Se o título da nota for o sujeito ou objeto da tripla, a sinapse é relevante!
-				if subj == title || obj == title {
-					fact, _ := syn["content"].(string)
-					fullContext = append(fullContext, fmt.Sprintf("[SINAPSE APRENDIDA]: %s", fact))
+		content, _ := current.data["content"].(string)
+
+		// Tracker de Contexto: Evitar explosão de tokens que causam lentidão e custo
+		if totalChars+len(content) > contextLimit && totalChars > 0 {
+			fullContext = append(fullContext, fmt.Sprintf("[LIMITE EXCEDIDO] Vizinhos ou partes da rede foram omitidos para preservar seu foco e custo."))
+			break
+		}
+
+		totalChars += len(content)
+		fullContext = append(fullContext, fmt.Sprintf("=== Nota: %s ===\n%s", title, content))
+
+		// 🧱 Expansão Baseada no Grafo (Links do Obsidian)
+		if current.depth < depthLimit {
+			if linksRaw, ok := current.data["links"].([]interface{}); ok {
+				for _, linkRaw := range linksRaw {
+					if linkName, ok := linkRaw.(string); ok {
+						if !visited[linkName] {
+							// Buscamos a nota conectada de forma cirúrgica na Collection do Qdrant
+							neighborData, err := n.Qdrant.SearchByName("obsidian_knowledge", linkName)
+							if err == nil && neighborData != nil {
+								// Adiciona o vizinho à fila para próxima iteração
+								queue = append(queue, node{data: neighborData, depth: current.depth + 1})
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// ⚡ Navegação de Sinapses Mistas (Ontologia Extrapolada)
+		if current.depth == 0 { // Triplas são focadas no núcleo para não gerar devaneios e "alucinação mista"
+			synapses, err := n.Qdrant.Search("knowledge_graph", nil, 3) // Simulado: Buscando por similaridade nula temporariamente
+			if err == nil {
+				for _, syn := range synapses {
+					subj, _ := syn["subject"].(string)
+					obj, _ := syn["object"].(string)
+					
+					if subj == title || obj == title {
+						fact, _ := syn["content"].(string)
+						synapseStr := fmt.Sprintf("[SINAPSE APRENDIDA]: %s", fact)
+						
+						if totalChars+len(synapseStr) < contextLimit {
+							fullContext = append(fullContext, synapseStr)
+							totalChars += len(synapseStr)
+						}
+					}
 				}
 			}
 		}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -88,10 +89,13 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 		// 2. Extrair Triplas
 		triples, _ := c.Ontology.ExtractTriples(ctx, string(content))
 
+		// 2.5 Extrair Integridade do Grafo (Links)
+		links := extractLinks(string(content))
+
 		// 3. Salvar no Qdrant
 		nodeName := strings.TrimSuffix(info.Name(), ".md")
 		c.Qdrant.UpsertPoint("obsidian_knowledge", uint64(time.Now().UnixNano()), vector, map[string]interface{}{
-			"path": path, "name": nodeName, "content": string(content), "triples": triples,
+			"path": path, "name": nodeName, "content": string(content), "triples": triples, "links": links,
 		})
 
 		// 4. Update Cache
@@ -115,4 +119,24 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 		"content": fmt.Sprintf("✅ Indexação completa. Arquivos novos/alterados: %d. Ignorados por cache: %d.", totalIndexed, totalSkipped),
 	})
 	return err
+}
+
+var linkRegex = regexp.MustCompile(`\[\[([^\]|]+)(?:\|[^\]]+)?\]\]`)
+
+// extractLinks extrai os links bidirecionais do conteúdo da nota
+func extractLinks(content string) []string {
+	matches := linkRegex.FindAllStringSubmatch(content, -1)
+	var links []string
+	seen := make(map[string]bool)
+
+	for _, match := range matches {
+		if len(match) > 1 {
+			link := strings.TrimSpace(match[1])
+			if link != "" && !seen[link] {
+				seen[link] = true
+				links = append(links, link)
+			}
+		}
+	}
+	return links
 }
