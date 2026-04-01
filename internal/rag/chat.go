@@ -59,7 +59,9 @@ func (s *ChatService) Ask(ctx context.Context, agent string, sessionID string, q
 		return "", err
 	}
 	
-	notes, _ := s.Search.SearchNote(ctx, vector, 3)
+	// 2. Busca Vetorial (RAG): Busca por proximidade semântica
+	// Aumentado de 3 para 5 para maior cobertura de contexto
+	notes, _ := s.Search.SearchNote(ctx, vector, 5)
 	if len(notes) > 0 {
 		runtime.EventsEmit(ctx, "graph:log", fmt.Sprintf("[%s] 📄 encontradas %d notas matrizes para a resposta.", now, len(notes)))
 	}

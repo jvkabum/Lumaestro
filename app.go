@@ -38,7 +38,12 @@ type App struct {
 
 // NewApp creates a new App application struct
 func NewApp() *App {
-	return &App{}
+	a := &App{}
+	a.executor = agents.NewACPExecutor()
+	a.orchestrator = agents.NewOrchestrator(a.executor)
+	a.legacyExec = agents.NewExecutor()
+	a.installer = tools.NewInstaller()
+	return a
 }
 
 // startup is called when the app starts.
@@ -47,11 +52,7 @@ func (a *App) startup(ctx context.Context) {
 	checkRogueMainFiles()
 
 	a.ctx = ctx
-	a.executor = agents.NewACPExecutor()
-	a.orchestrator = agents.NewOrchestrator(a.executor)
-	a.legacyExec = agents.NewExecutor() // Mantemos temporariamente para métodos legacy
-	a.installer = tools.NewInstaller()
-
+	
 	// Sincroniza o PATH imediatamente (Garante que claude/gemini sejam encontrados)
 	a.installer.SyncPath()
 
@@ -83,6 +84,30 @@ func (a *App) startup(ctx context.Context) {
 	}
 }
 
+// ensureCollections garante que o banco de dados Qdrant esteja pronto para uso.
+func (a *App) ensureCollections() {
+	collections := []string{"obsidian_knowledge", "knowledge_graph"}
+	dimension := 768 // Padrão para gemini-embedding-2-preview
+
+	for _, name := range collections {
+		exists, err := a.qdrant.CheckCollectionExists(name)
+		if err != nil {
+			fmt.Printf("[QDRANT] Erro ao verificar coleção %s: %v\n", name, err)
+			continue
+		}
+
+		if !exists {
+			fmt.Printf("[QDRANT] Criando coleção inexistente: %s...\n", name)
+			err := a.qdrant.CreateCollection(name, dimension)
+			if err != nil {
+				fmt.Printf("[QDRANT] Erro fatal ao criar coleção %s: %v\n", name, err)
+			} else {
+				fmt.Printf("[QDRANT] Coleção %s criada com sucesso!\n", name)
+			}
+		}
+	}
+}
+
 // initServices inicializa os motores de IA e RAG se as configurações permitirem
 func (a *App) initServices() error {
 	cfg, err := config.Load()
@@ -93,7 +118,7 @@ func (a *App) initServices() error {
 	a.config = cfg
 
 	// Inicializa Qdrant e Embeddings
-	a.qdrant = provider.NewQdrantClient(cfg.QdrantURL)
+	a.qdrant = provider.NewQdrantClient(cfg.QdrantURL, cfg.QdrantAPIKey)
 	emb, err := provider.NewEmbeddingService(a.ctx, cfg.GeminiAPIKey)
 	if err != nil {
 		return err
@@ -220,7 +245,9 @@ func (a *App) ScanVault() string {
 			return
 		}
 
-		// 2. Indexar a documentação do próprio sistema (Lumaestro Core)
+		// 2. Indexar a documentação do projeto (Lumaestro Core)
+		// Isso garante que o conhecimento 'RAG' do sistema também esteja disponível.
+		fmt.Println("[BACKEND] Indexando documentos internos do sistema...")
 		err = a.crawler.IndexSystemDocs(a.ctx, "./")
 		if err != nil {
 			fmt.Printf("[BACKEND] Aviso: Erro ao indexar docs do sistema: %v\n", err)
@@ -228,11 +255,91 @@ func (a *App) ScanVault() string {
 
 		runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
 			"source":  "CRAWLER",
-			"content": "🏛️ Sincronização semântica completa (Vault + Sistema)!",
+			"content": "🏛️ Sincronização semântica completa concluída com sucesso!",
 		})
 	}()
 
-	return "Indexação iniciada em segundo plano. Você pode continuar usando o Maestro normalmente."
+	return "Indexação iniciada em segundo plano. O Maestro agora está integrando seu Obsidian e as memórias do sistema."
+}
+
+// FullSync limpa o cache e inicia uma indexação completa atômica.
+func (a *App) FullSync() string {
+	fmt.Println("[BACKEND] 🔄 Solicitado FullSync Atômico. Limpando cache...")
+	a.crawler.PurgeCache()
+	return a.ScanVault()
+}
+
+// PurgeCache limpa todo o histórico de indexação local, forçando o Maestro a reenviar tudo para o Qdrant.
+func (a *App) PurgeCache() string {
+	err := a.crawler.PurgeCache()
+	if err != nil {
+		return fmt.Sprintf("Erro ao limpar cache: %v", err)
+	}
+	return "Cache de indexação limpo com sucesso!"
+}
+
+// RunVectorDiagnostic executa um Stress Test pontual para validar Gemini + Qdrant Cloud.
+func (a *App) RunVectorDiagnostic() map[string]interface{} {
+	fmt.Println("[BACKEND] 🧪 Iniciando Diagnóstico de Integridade Vetorial...")
+
+	// 🏗️ Garantia de Infraestrutura: Cria as coleções se não existirem antes do teste
+	if err := a.crawler.EnsureCollections(a.ctx); err != nil {
+		fmt.Printf("[BACKEND] Erro ao preparar coleções: %v\n", err)
+		return map[string]interface{}{"success": false, "error": "Falha ao preparar coleções no Qdrant: " + err.Error()}
+	}
+	
+	// 🛡️ Segurança: Garante que os serviços estejam inicializados
+	if a.embedder == nil || a.qdrant == nil {
+		fmt.Println("[BACKEND] ⚠️ Motores não inicializados. Tentando reativar...")
+		if err := a.initServices(); err != nil || a.embedder == nil {
+			return map[string]interface{}{"success": false, "error": "Motores de IA não inicializados. Verifique sua Gemini API Key."}
+		}
+	}
+
+	start := time.Now()
+	// 1. Teste de Embedding (Gemini)
+	testText := "Maestro Vector Test: Sincronização Semântica Atômica."
+	embedStart := time.Now()
+	vector, err := a.embedder.GenerateEmbedding(a.ctx, testText)
+	embedDuration := time.Since(embedStart).Milliseconds()
+
+	if err != nil {
+		return map[string]interface{}{"success": false, "error": fmt.Sprintf("Falha no Gemini: %v", err)}
+	}
+
+	// 2. Teste de Gravação e Busca (Qdrant)
+	qdrantStart := time.Now()
+	testID := uint64(999999) // ID Reservado para Testes
+	collection := "obsidian_knowledge"
+
+	// Upsert do ponto de teste
+	err = a.qdrant.UpsertPoint(collection, testID, vector, map[string]interface{}{
+		"name":    "TEST_NODE",
+		"content": testText,
+		"status":  "test",
+	})
+	if err != nil {
+		return map[string]interface{}{"success": false, "error": fmt.Sprintf("Falha no Qdrant (Upsert): %v", err)}
+	}
+
+	// Search para validar recuperação
+	res, err := a.qdrant.Search(collection, vector, 1)
+	qdrantDuration := time.Since(qdrantStart).Milliseconds()
+
+	if err != nil {
+		return map[string]interface{}{"success": false, "error": fmt.Sprintf("Falha no Qdrant (Search): %v", err)}
+	}
+
+	totalDuration := time.Since(start).Milliseconds()
+
+	return map[string]interface{}{
+		"success":        true,
+		"embed_ms":       embedDuration,
+		"qdrant_ms":      qdrantDuration,
+		"total_ms":       totalDuration,
+		"vector_preview": vector[:5], // Mostra apenas os primeiros 5 números do vetor
+		"result_found":   res != nil,
+	}
 }
 
 // CheckConnection verifica se o Qdrant está acessível
@@ -499,6 +606,40 @@ func (a *App) GetProjectDoc(name string) (string, error) {
 	}
 
 	return string(content), nil
+}
+
+func (a *App) GetNodeDetails(nodeID string) (map[string]interface{}, error) {
+	fmt.Printf("[Audit] Buscando origem de: %s\n", nodeID)
+
+	// 1. Tentar buscar em Notas do Obsidian ou Sistema (Chave: name)
+	res, err := a.qdrant.SearchByField("obsidian_knowledge", "name", nodeID)
+	
+	// Fallback: Se não achar campo exato (slug mismatch), tentar busca similar textual
+	if err != nil || res == nil {
+		fmt.Printf("[Audit] Nó '%s' não encontrado por campo exato.\n", nodeID)
+	}
+
+	if err == nil && res != nil {
+		return map[string]interface{}{
+			"path":    res["path"],
+			"content": res["content"],
+			"type":    res["type"],
+			"source":  res["document-type"], // Retorna se é "system" ou "vault"
+		}, nil
+	}
+
+	// 2. Tentar buscar em Memórias de Chat (Chave: subject)
+	res, err = a.qdrant.SearchByField("knowledge_graph", "subject", nodeID)
+	if err == nil && res != nil {
+		return map[string]interface{}{
+			"path":    "Memória de Chat",
+			"content": res["content"],
+			"type":    "memory",
+			"source":  "RAG Synapse",
+		}, nil
+	}
+
+	return nil, fmt.Errorf("origem não encontrada para o nó: %s", nodeID)
 }
 
 // AnalyzeGraphHealth analisa a integridade semântica do grafo.

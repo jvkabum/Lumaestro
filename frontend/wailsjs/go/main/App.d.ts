@@ -17,9 +17,13 @@ export function ConsolidateChatKnowledge(arg1:string,arg2:string):Promise<string
 
 export function FixEnvironment():Promise<string>;
 
+export function FullSync():Promise<string>;
+
 export function GenerateGeminiMD():Promise<string>;
 
 export function GetConfig():Promise<config.Config>;
+
+export function GetNodeDetails(arg1:string):Promise<Record<string, any>>;
 
 export function GetProjectDoc(arg1:string):Promise<string>;
 
@@ -39,9 +43,13 @@ export function NewAgentSession(arg1:string):Promise<void>;
 
 export function OpenFileInEditor(arg1:string):Promise<void>;
 
+export function PurgeCache():Promise<string>;
+
 export function ResizeTerminal(arg1:string,arg2:number,arg3:number):Promise<void>;
 
 export function ResolveConflict(arg1:string,arg2:string,arg3:string,arg4:number,arg5:string,arg6:string):Promise<string>;
+
+export function RunVectorDiagnostic():Promise<Record<string, any>>;
 
 export function SaveConfig(arg1:config.Config):Promise<string>;
 

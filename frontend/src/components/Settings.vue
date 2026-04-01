@@ -6,6 +6,7 @@ import { EventsOn } from '../../wailsjs/runtime'
 const config = ref({
   obsidian_vault_path: '',
   qdrant_url: '',
+  qdrant_api_key: '',
   gemini_api_key: '',
   use_gemini_api_key: false,
   gemini_accounts: [],
@@ -153,6 +154,23 @@ const mcpCommand = ref('')
 const mcpServers = ref('')
 const showMcpList = ref(false)
 
+// Estados para Diagnóstico Vetorial
+const isDiagnosing = ref(false)
+const diagnosticResult = ref(null)
+
+const runDiagnostic = async () => {
+  isDiagnosing.value = true
+  diagnosticResult.value = null
+  try {
+    const res = await window.go.main.App.RunVectorDiagnostic()
+    diagnosticResult.value = res
+  } catch (e) {
+    diagnosticResult.value = { success: false, error: String(e) }
+  } finally {
+    isDiagnosing.value = false
+  }
+}
+
 const addMCPServer = async () => {
   if (!mcpName.value || !mcpCommand.value) {
     alert("Preencha o Nome e o Comando para o MCP")
@@ -250,6 +268,11 @@ const newAccName = ref('')
           <input v-model="config.qdrant_url" type="text" class="maestro-input" placeholder="https://..." />
         </div>
 
+        <div class="premium-form-group">
+          <label>Qdrant API Key (Coolify)</label>
+          <input v-model="config.qdrant_api_key" type="password" class="maestro-input" placeholder="••••••••" />
+        </div>
+
         <button @click="save" class="btn-glow-blue">SALVAR ALTERAÇÕES GERAIS</button>
       </section>
 
@@ -265,7 +288,54 @@ const newAccName = ref('')
           <input v-model="config.gemini_api_key" type="password" class="maestro-input" placeholder="••••••••" />
         </div>
 
-        <div class="sec-card" style="margin-bottom: 2.5rem; padding: 1.5rem 2.5rem;">
+        <div class="premium-form-group">
+          <label>Qdrant API Key (Climb/Coolify)</label>
+          <input v-model="config.qdrant_api_key" type="password" class="maestro-input" placeholder="••••••••" />
+        </div>
+
+        <!-- PAINEL DE DIAGNÓSTICO VETORIAL -->
+        <div class="diagnostic-panel-premium glass-panel" style="margin-top: 2rem; border: 1px solid rgba(59, 130, 246, 0.2);">
+          <div class="diag-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+            <div>
+              <h3 style="margin: 0; color: #fff; font-size: 1.1rem;">Integridade Vetorial</h3>
+              <p style="margin: 0; font-size: 0.8rem; color: var(--p-text-dim);">Valide o pipeline Gemini + Qdrant Cloud</p>
+            </div>
+            <button @click="runDiagnostic" :disabled="isDiagnosing" class="btn-diag" style="padding: 0.6rem 1.2rem; border-radius: 12px; background: rgba(59, 130, 246, 0.1); border: 1px solid var(--primary); color: #fff; cursor: pointer;">
+              <span v-if="!isDiagnosing">⚡ EXECUTAR STRESS TEST</span>
+              <span v-else>⏳ PROCESSANDO...</span>
+            </button>
+          </div>
+
+          <div v-if="diagnosticResult" class="diag-results animate-fade-in" style="background: rgba(0,0,0,0.3); padding: 1.5rem; border-radius: 15px;">
+            <div v-if="diagnosticResult.success" class="res-success">
+               <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1rem;">
+                  <div class="stat-box" style="text-align: center;">
+                    <span style="font-size: 0.7rem; display: block; color: var(--p-text-dim);">GEMINI EMBED</span>
+                    <b style="color: #4ade80;">{{ diagnosticResult.embed_ms }}ms</b>
+                  </div>
+                  <div class="stat-box" style="text-align: center;">
+                    <span style="font-size: 0.7rem; display: block; color: var(--p-text-dim);">QDRANT UPSERT</span>
+                    <b style="color: #4ade80;">{{ diagnosticResult.qdrant_ms }}ms</b>
+                  </div>
+                  <div class="stat-box" style="text-align: center;">
+                    <span style="font-size: 0.7rem; display: block; color: var(--p-text-dim);">TOTAL CICLO</span>
+                    <b style="color: var(--primary);">{{ diagnosticResult.total_ms }}ms</b>
+                  </div>
+               </div>
+               <div class="vector-preview">
+                  <label style="font-size: 0.7rem; color: var(--p-text-dim);">VETOR GERADO (DUMP 5-DIM):</label>
+                  <code style="display: block; background: #000; padding: 0.8rem; border-radius: 10px; font-size: 0.8rem; color: #3b82f6; margin-top: 0.5rem; border: 1px solid rgba(59, 130, 246, 0.3);">
+                    {{ diagnosticResult.vector_preview }}...
+                  </code>
+               </div>
+            </div>
+            <div v-else class="res-error" style="color: #ef4444; font-size: 0.9rem;">
+              ❌ ERRO NO DIAGNÓSTICO: {{ diagnosticResult.error }}
+            </div>
+          </div>
+        </div>
+
+        <div class="sec-card" style="margin-top: 2rem; margin-bottom: 2.5rem; padding: 1.5rem 2.5rem;">
            <div class="sec-info">
               <h5 style="margin: 0; font-weight: 800; font-size: 1rem; color: #fff;">Modo Autônomo API</h5>
               <p style="margin: 8px 0 0; font-size: 0.8rem; color: var(--p-text-dim);">Usar chave legada em vez de Sessões OAuth.</p>

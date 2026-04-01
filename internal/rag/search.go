@@ -17,46 +17,65 @@ func NewSearchService(qdrant *provider.QdrantClient) *SearchService {
 	return &SearchService{Qdrant: qdrant}
 }
 
-// SearchNote não apenas busca o vetor, mas aplica Multi-Re-Ranking para destacar "Hubs".
+// SearchNote realiza uma busca híbrida em múltiplas coleções (Arquivos + Memórias) e aplica Re-Ranking.
 func (s *SearchService) SearchNote(ctx context.Context, vector []float32, limit int) ([]map[string]interface{}, error) {
-	// 1. Oversampling Sútil (Pegar mais para ter uma boa margem de re-ranking)
+	// 1. Busca Paralela em Coleções Distintas (Arquivos vs Memórias)
 	const oversampleFactor = 3
-	rawResults, err := s.Qdrant.SearchWithScores("obsidian_knowledge", vector, limit*oversampleFactor)
-	if err != nil {
-		return nil, err
-	}
+	searchLimit := limit * oversampleFactor
 
-	// 2. Score Híbrido (Vector: 80% / Graph Centrality Boost: 20%)
+	// Busca 1: Obsidian Vault
+	obsidianResults, _ := s.Qdrant.SearchWithScores("obsidian_knowledge", vector, searchLimit)
+	
+	// Busca 2: Memórias de Chat (Sinapses)
+	memoryResults, _ := s.Qdrant.SearchWithScores("knowledge_graph", vector, searchLimit)
+
+	// 2. Unificação e Normalização de Payloads
 	type RankedNode struct {
 		Payload map[string]interface{}
 		Score   float64
 	}
-
 	var ranked []RankedNode
-	for _, res := range rawResults {
-		vecScore, _ := res["_score"].(float64)
 
-		var graphScore float64 = 0.0
-		if linksRaw, ok := res["links"].([]interface{}); ok {
-			// Boost tático para nós centrais
-			rawBoost := float64(len(linksRaw)) * 0.03
-			if rawBoost > 0.20 {
-				rawBoost = 0.20
+	processResults := func(results []map[string]interface{}, isMemory bool) {
+		for _, res := range results {
+			vecScore, _ := res["_score"].(float64)
+			
+			// Normalização de campos para o Grafo (Memórias usam Subject, Notas usam Name)
+			if isMemory {
+				if subj, ok := res["subject"].(string); ok {
+					res["name"] = subj // Mapeia para name para consistência na UI
+				}
+				res["document-type"] = "memory"
+			} else {
+				// Garante que o tipo do documento esteja presente se falhar no payload
+				if res["document-type"] == nil {
+					res["document-type"] = "chunk"
+				}
 			}
-			graphScore = rawBoost
-		}
 
-		finalScore := vecScore + graphScore
-		res["_hybrid_score"] = finalScore
-		ranked = append(ranked, RankedNode{Payload: res, Score: finalScore})
+			// Boost de Centralidade (Centrality Bias)
+			var graphScore float64 = 0.0
+			if linksRaw, ok := res["links"].([]interface{}); ok {
+				rawBoost := float64(len(linksRaw)) * 0.03
+				if rawBoost > 0.20 { rawBoost = 0.20 }
+				graphScore = rawBoost
+			}
+
+			finalScore := vecScore + graphScore
+			res["_hybrid_score"] = finalScore
+			ranked = append(ranked, RankedNode{Payload: res, Score: finalScore})
+		}
 	}
 
-	// 3. Sorting Inteligente Descendente
+	processResults(obsidianResults, false)
+	processResults(memoryResults, true)
+
+	// 3. Sorting Global por relevância híbrida
 	sort.Slice(ranked, func(i, j int) bool {
 		return ranked[i].Score > ranked[j].Score
 	})
 
-	// 4. Trimming Final
+	// 4. Trimming Final (Top N resultados unificados)
 	finalResults := make([]map[string]interface{}, 0, limit)
 	for i, r := range ranked {
 		if i >= limit {

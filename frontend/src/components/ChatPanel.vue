@@ -9,7 +9,7 @@ import ReviewBlock from './ReviewBlock.vue'
 
 // --- Uso da Store (Pinia) ---
 const orchestrator = useOrchestratorStore()
-const { messages, isThinking, isTerminalMode, activeAgent, runningSessions, pendingReview } = storeToRefs(orchestrator)
+const { messages, isThinking, isNavigating, isTerminalMode, activeAgent, runningSessions, pendingReview } = storeToRefs(orchestrator)
 
 // --- Estados Locais de UI ---
 const logContainer = ref(null)
@@ -138,6 +138,14 @@ const handleSessionEnded = (agent) => {
         </Transition>
 
         <ChatLog :messages="messages" :is-thinking="isThinking" />
+
+        <!-- Indicador de Navegação do Grafo (Context Flow) -->
+        <Transition name="slide-up">
+          <div v-if="isNavigating" class="navigation-status glass">
+            <span class="nav-pulse"></span>
+            <span class="nav-text">Explorando Base de Conhecimento...</span>
+          </div>
+        </Transition>
       </div>
       <div class="input-persistent-area">
         <ChatInput @send="sendChatMessage" :is-thinking="isThinking" />
@@ -358,6 +366,54 @@ const handleSessionEnded = (agent) => {
   transition: opacity 0.5s ease;
 }
 .fade-enter-from, .fade-leave-to {
+  opacity: 0;
+}
+/* Indicador de Navegação (RAG Flow) */
+.navigation-status {
+  position: absolute;
+  bottom: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  border-radius: 20px;
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(79, 172, 254, 0.3);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  z-index: 100;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(10px);
+}
+
+.nav-pulse {
+  width: 8px;
+  height: 8px;
+  background: #4facfe;
+  border-radius: 50%;
+  box-shadow: 0 0 10px #4facfe;
+  animation: nav-glow 1.5s infinite;
+}
+
+@keyframes nav-glow {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.5); opacity: 0.5; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.nav-text {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #4facfe;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.slide-up-enter-active, .slide-up-leave-active {
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.slide-up-enter-from, .slide-up-leave-to {
+  transform: translate(-50%, 20px);
   opacity: 0;
 }
 </style>

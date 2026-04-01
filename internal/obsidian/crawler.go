@@ -55,8 +55,28 @@ func (c *Crawler) saveCache() {
 	os.WriteFile(c.cachePath, data, 0644)
 }
 
+// PurgeCache remove o arquivo físico e limpa a memória para forçar reindexação total.
+func (c *Crawler) PurgeCache() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	
+	fmt.Printf("[Crawler] 🔥 Iniciando PurgeCache em %s\n", c.cachePath)
+	c.cache = make(IndexCache)
+	err := os.Remove(c.cachePath)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("falha ao remover arquivo de cache: %w", err)
+	}
+	fmt.Println("[Crawler] ✅ Cache local removido com sucesso. Próximo SCAN será completo.")
+	return nil
+}
+
 // IndexVault percorre e indexa notas do Obsidian (Cofre do Usuário).
 func (c *Crawler) IndexVault(ctx context.Context) error {
+	// 🏗️ Garante que as 'gavetas' (coleções) existam no Qdrant antes de começar
+	if err := c.EnsureCollections(ctx); err != nil {
+		return err
+	}
+
 	var totalSkipped int = 0
 	var totalIndexed int = 0
 
@@ -93,6 +113,11 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 
 // IndexSystemDocs varre a raiz do projeto em busca de documentação técnica interna.
 func (c *Crawler) IndexSystemDocs(ctx context.Context, rootPath string) error {
+	// 🏗️ Garante que as 'gavetas' (coleções) existam no Qdrant antes de começar
+	if err := c.EnsureCollections(ctx); err != nil {
+		return err
+	}
+
 	var totalIndexed int = 0
 
 	err := filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error {
@@ -137,6 +162,9 @@ func (c *Crawler) IndexSystemDocs(ctx context.Context, rootPath string) error {
 
 // processFile é o núcleo de inteligência que processa, extrai triplas e salva no Qdrant
 func (c *Crawler) processFile(ctx context.Context, path string, info os.FileInfo, forcedDocType string) (bool, error) {
+	// 🔍 LOG DE DIAGNÓSTICO: Vermos exatamente o que o crawler está percorrendo
+	fmt.Printf("[Crawler] Auditando: %s\n", path)
+
 	ext := strings.ToLower(filepath.Ext(path))
 	isMD := ext == ".md"
 	isImage := ext == ".png" || ext == ".jpg" || ext == ".jpeg"
@@ -154,6 +182,7 @@ func (c *Crawler) processFile(ctx context.Context, path string, info os.FileInfo
 
 	// Lógica de Cache (Aumenta performance do Boot)
 	if exists && lastMod == info.ModTime().Unix() {
+		fmt.Printf("[Crawler] 💨 Pulando (Cache Válido): %s\n", nodeName)
 		runtime.EventsEmit(ctx, "graph:node", map[string]string{
 			"id":            nodeName,
 			"name":          nodeName,
@@ -168,6 +197,8 @@ func (c *Crawler) processFile(ctx context.Context, path string, info os.FileInfo
 		}
 		return false, nil
 	}
+
+	fmt.Printf("[Crawler] 🚀 REINDEXANDO (Cache Vazio/Novo): %s (Type: %s)\n", nodeName, forcedDocType)
 
 	rawContent, err := os.ReadFile(path)
 	if err != nil {
@@ -262,9 +293,35 @@ func extractLinks(content string) []string {
 	return links
 }
 
+// EnsureCollections verifica e cria as coleções necessárias no Qdrant.
+func (c *Crawler) EnsureCollections(ctx context.Context) error {
+	collections := []string{"obsidian_knowledge", "knowledge_graph"}
+	dimension := 3072 // Gemini Embedding v2 Dimension (768 era v1)
+
+	for _, name := range collections {
+		exists, err := c.Qdrant.CheckCollectionExists(name)
+		if err != nil {
+			return fmt.Errorf("erro ao verificar coleção %s: %w", name, err)
+		}
+
+		if !exists {
+			fmt.Printf("[Crawler] 🏗️ Criando coleção inexistente: %s (Dim: %d)\n", name, dimension)
+			runtime.EventsEmit(ctx, "agent:log", map[string]string{
+				"source":  "CRAWLER",
+				"content": fmt.Sprintf("🏗️ Preparando infraestrutura: Criando coleção '%s' (3072 dim)...", name),
+			})
+			if err := c.Qdrant.CreateCollection(name, dimension); err != nil {
+				return fmt.Errorf("falha ao criar coleção %s: %w", name, err)
+			}
+		}
+	}
+	return nil
+}
+
 func firstLines(text string, maxChars int) string {
 	if len(text) <= maxChars {
 		return text
 	}
 	return text[:maxChars] + "..."
 }
+

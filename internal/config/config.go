@@ -30,6 +30,7 @@ type GeminiAccount struct {
 type Config struct {
 	ObsidianVaultPath string         `json:"obsidian_vault_path"`
 	QdrantURL         string         `json:"qdrant_url"`
+	QdrantAPIKey      string         `json:"qdrant_api_key"`
 	GeminiAPIKey      string         `json:"gemini_api_key"` // Legado (Manter para migração)
 	UseGeminiAPIKey   bool           `json:"use_gemini_api_key"`
 	GeminiAccounts    []GeminiAccount `json:"gemini_accounts"` // 🌟 Nova lista de contas

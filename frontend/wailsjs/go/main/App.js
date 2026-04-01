@@ -30,12 +30,20 @@ export function FixEnvironment() {
   return window['go']['main']['App']['FixEnvironment']();
 }
 
+export function FullSync() {
+  return window['go']['main']['App']['FullSync']();
+}
+
 export function GenerateGeminiMD() {
   return window['go']['main']['App']['GenerateGeminiMD']();
 }
 
 export function GetConfig() {
   return window['go']['main']['App']['GetConfig']();
+}
+
+export function GetNodeDetails(arg1) {
+  return window['go']['main']['App']['GetNodeDetails'](arg1);
 }
 
 export function GetProjectDoc(arg1) {
@@ -74,12 +82,20 @@ export function OpenFileInEditor(arg1) {
   return window['go']['main']['App']['OpenFileInEditor'](arg1);
 }
 
+export function PurgeCache() {
+  return window['go']['main']['App']['PurgeCache']();
+}
+
 export function ResizeTerminal(arg1, arg2, arg3) {
   return window['go']['main']['App']['ResizeTerminal'](arg1, arg2, arg3);
 }
 
 export function ResolveConflict(arg1, arg2, arg3, arg4, arg5, arg6) {
   return window['go']['main']['App']['ResolveConflict'](arg1, arg2, arg3, arg4, arg5, arg6);
+}
+
+export function RunVectorDiagnostic() {
+  return window['go']['main']['App']['RunVectorDiagnostic']();
 }
 
 export function SaveConfig(arg1) {

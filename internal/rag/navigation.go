@@ -82,22 +82,27 @@ func (n *GraphNavigator) ExpandContext(ctx context.Context, initialNotes []map[s
 			// Busca em lote inspirada na TrustGraph
 			neighbors, err := n.Qdrant.GetPoints("obsidian_knowledge", neighborsToFetch)
 			if err == nil {
+				// 🎬 Trilha cinematográfica: monta o percurso completo da IA
+				type TrailHop struct {
+					From string `json:"from"`
+					To   string `json:"to"`
+				}
+				var trail []TrailHop
+
 				for _, nb := range neighbors {
 					name, _ := nb["name"].(string)
 					content, _ := nb["content"].(string)
-					
-					if totalChars + len(content) > contextLimit {
+
+					if totalChars+len(content) > contextLimit {
 						break
 					}
 
 					fullContext = append(fullContext, fmt.Sprintf("=== [CONTEXTO_RELACIONADO]: %s ===\n%s", name, content))
 					totalChars += len(content)
 
-					// ✨ VISUAL: Cria a "Trilha de Contexto" no Grafo
-					// No backend não sabemos todos os nomes das arestas, então emitimos o highlight por par.
+					// ✨ VISUAL: destaca link individual E coleta trilha
 					for _, note := range initialNotes {
 						parentName, _ := note["name"].(string)
-						// Se o vizinho veio deste pai, destaca o link
 						if links, ok := note["links"].([]interface{}); ok {
 							for _, l := range links {
 								if uint64(l.(float64)) == uint64(nb["id"].(float64)) {
@@ -105,26 +110,37 @@ func (n *GraphNavigator) ExpandContext(ctx context.Context, initialNotes []map[s
 										"source": parentName,
 										"target": name,
 									})
+									trail = append(trail, TrailHop{From: parentName, To: name})
 								}
 							}
 						}
 					}
+				}
+
+				// 🚀 Emite o percurso completo como uma única mensagem animável no frontend
+				if len(trail) > 0 {
+					runtime.EventsEmit(ctx, "graph:traverse", map[string]interface{}{
+						"hops":  trail,
+						"total": len(trail),
+					})
 				}
 			}
 		}
 	}
 
 	// 🚀 FASE 3: Sinapses de Chat (Memória Longa)
-	// (Mantido o padrão de busca de memórias conectadas)
+	// (Busca os últimos fatos relevantes da sessão ou conhecimentos consolidados)
 	synapses, err := n.Qdrant.Search("knowledge_graph", nil, 5) 
-	if err == nil {
+	if err == nil && synapses != nil {
 		for _, syn := range synapses {
 			fact, _ := syn["content"].(string)
-			if totalChars + len(fact) < contextLimit {
+			if fact != "" && totalChars + len(fact) < contextLimit {
 				fullContext = append(fullContext, fmt.Sprintf("[SINAPSE]: %s", fact))
 				totalChars += len(fact)
 			}
 		}
+	} else if err != nil {
+		fmt.Printf("[DEBUG-RAG] ⚠️ Falha ao buscar sinapses (ignorando): %v\n", err)
 	}
 
 	return fullContext

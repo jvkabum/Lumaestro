@@ -74,6 +74,7 @@ export namespace config {
 	export class Config {
 	    obsidian_vault_path: string;
 	    qdrant_url: string;
+	    qdrant_api_key: string;
 	    gemini_api_key: string;
 	    use_gemini_api_key: boolean;
 	    gemini_accounts: GeminiAccount[];
@@ -95,6 +96,7 @@ export namespace config {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.obsidian_vault_path = source["obsidian_vault_path"];
 	        this.qdrant_url = source["qdrant_url"];
+	        this.qdrant_api_key = source["qdrant_api_key"];
 	        this.gemini_api_key = source["gemini_api_key"];
 	        this.use_gemini_api_key = source["use_gemini_api_key"];
 	        this.gemini_accounts = this.convertValues(source["gemini_accounts"], GeminiAccount);

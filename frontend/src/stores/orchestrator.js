@@ -19,6 +19,7 @@ const safeCall = async (pkg, func, ...args) => {
 export const useOrchestratorStore = defineStore('orchestrator', () => {
   const messages = ref([]);
   const isThinking = ref(false);
+  const isNavigating = ref(false); // 🔍 Inteligência de Navegação em Tempo Real
   const isTerminalMode = ref(false);
   const activeAgent = ref(null);
   const runningSessions = ref([]);

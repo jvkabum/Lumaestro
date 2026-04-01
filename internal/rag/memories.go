@@ -44,7 +44,7 @@ func (w *KnowledgeWeaver) WeaveChatKnowledge(ctx context.Context, sessionID stri
 		vector, _ := w.Embedder.GenerateEmbedding(ctx, factText)
 
 		// 2. DETECÇÃO DE CONFLITO: Busca se já sabemos algo sobre este (Sujeito, Predicado)
-		existing, _ := w.Qdrant.SearchByName("knowledge_graph", t.Subject)
+		existing, _ := w.Qdrant.SearchByField("knowledge_graph", "subject", t.Subject)
 		if existing != nil && existing["predicate"] == t.Predicate && existing["object"] != t.Object && existing["status"] != "legacy" {
 			
 			// AGENTE VALIDADOR: Decidir se é uma atualização ou conflito duvidoso

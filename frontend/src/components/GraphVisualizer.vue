@@ -4,6 +4,9 @@ import { EventsOn } from '../../wailsjs/runtime'
 import * as THREE from 'three'
 import ForceGraph3D from '3d-force-graph'
 import { ScanVault } from '../../wailsjs/go/main/App'
+import { useOrchestratorStore } from '../stores/orchestrator'
+
+const orchestrator = useOrchestratorStore()
 
 const props = defineProps({
   nodes: { type: Array, default: () => [] },
@@ -14,8 +17,13 @@ const props = defineProps({
 
 const containerRef = ref(null)
 const logContainerRef = ref(null)
-const highlightedLinks = ref(new Set()) // Armazena IDs de links destacados
+const highlightedLinks = ref(new Set()) // Armazena IDs de links destacados (RAG trail)
+const clickedNodeLinks = ref(new Set()) // Armazena links do nó clicado atualmente
 let Graph = null
+let clickedNodeTimeout = null
+let moveInterval = null
+const keys = { w: false, a: false, s: false, d: false, q: false, e: false }
+const moveSpeed = 4 // Velocidade de voo ajustada para imersão
 
 const selectedNode = ref(null)
 const nodeDetails = ref(null)
@@ -92,8 +100,13 @@ const initGraph = () => {
     .linkColor(link => {
       const s = link.source.id || link.source
       const t = link.target.id || link.target
+
+      // Se o link está no percurso da IA ou foi clicado, acende em Ciano/Azul
+      if (clickedNodeLinks.value.has(`${s}-${t}`) || clickedNodeLinks.value.has(`${t}-${s}`)) {
+        return '#4facfe'
+      }
       
-      // Se o link está na trilha de raciocínio, acende em verde néon
+      // Se o link está na trilha de raciocínio RAG, acende em verde néon
       if (highlightedLinks.value.has(`${s}-${t}`) || highlightedLinks.value.has(`${t}-${s}`)) {
         return '#4ade80' 
       }
@@ -102,24 +115,35 @@ const initGraph = () => {
     .linkWidth(link => {
       const s = link.source.id || link.source
       const t = link.target.id || link.target
-      if (highlightedLinks.value.has(`${s}-${t}`) || highlightedLinks.value.has(`${t}-${s}`)) {
-        return 2.5 // Espessura dupla para destaque
+      if (clickedNodeLinks.value.has(`${s}-${t}`) || clickedNodeLinks.value.has(`${t}-${s}`) || 
+          highlightedLinks.value.has(`${s}-${t}`) || highlightedLinks.value.has(`${t}-${s}`)) {
+        return 2.5 // Espessura para destaque
       }
       return 0.5
     })
     .linkDirectionalParticles(link => {
       const s = link.source.id || link.source
       const t = link.target.id || link.target
-      return (highlightedLinks.value.has(`${s}-${t}`) || highlightedLinks.value.has(`${t}-${s}`)) ? 5 : 1
+      // Partículas SOMENTE nos links RAG destacados ou do nó clicado
+      if (clickedNodeLinks.value.has(`${s}-${t}`) || clickedNodeLinks.value.has(`${t}-${s}`)) return 6
+      if (highlightedLinks.value.has(`${s}-${t}`) || highlightedLinks.value.has(`${t}-${s}`)) return 4
+      return 0 // Sem partículas por padrão → visual limpo
     })
-    .linkDirectionalParticleSpeed(0.005)
+    .linkDirectionalParticleSpeed(link => {
+      const s = link.source.id || link.source
+      const t = link.target.id || link.target
+      if (clickedNodeLinks.value.has(`${s}-${t}`) || clickedNodeLinks.value.has(`${t}-${s}`)) return 0.008
+      return 0.005
+    })
     .linkDirectionalParticleWidth(link => {
       const s = link.source.id || link.source
       const t = link.target.id || link.target
-      return (highlightedLinks.value.has(`${s}-${t}`) || highlightedLinks.value.has(`${t}-${s}`)) ? 3 : 1
+      if (clickedNodeLinks.value.has(`${s}-${t}`) || clickedNodeLinks.value.has(`${t}-${s}`)) return 4
+      if (highlightedLinks.value.has(`${s}-${t}`) || highlightedLinks.value.has(`${t}-${s}`)) return 3
+      return 0
     })
     .onNodeClick(async node => {
-      // Zoom no nó ao clicar
+      // ── Zoom no nó ──
       const distance = 60
       const distRatio = 1 + distance/Math.hypot(node.x, node.y, node.z)
       Graph.cameraPosition(
@@ -128,13 +152,64 @@ const initGraph = () => {
         2000
       )
 
-      // Carregar Proveniência (Auditoria)
+      // ── Animação de partículas nos links conectados ao nó clicado ──
+      // Limpa o timeout anterior se existir
+      if (clickedNodeTimeout) clearTimeout(clickedNodeTimeout)
+
+      // Encontra todos os links conectados a este nó
+      const { links } = Graph.graphData()
+      clickedNodeLinks.value.clear()
+      links.forEach(link => {
+        const s = link.source.id || link.source
+        const t = link.target.id || link.target
+        if (s === node.id || t === node.id) {
+          clickedNodeLinks.value.add(`${s}-${t}`)
+          clickedNodeLinks.value.add(`${t}-${s}`)
+        }
+      })
+
+      // Força refresh das partículas
+      Graph.linkDirectionalParticles(Graph.linkDirectionalParticles())
+
+      // Apaga automaticamente após 5 segundos
+      clickedNodeTimeout = setTimeout(() => {
+        clickedNodeLinks.value.clear()
+        Graph.linkDirectionalParticles(Graph.linkDirectionalParticles())
+      }, 5000)
+
+      // ── Carregar Proveniência (Auditoria) ──
       selectedNode.value = node
+      nodeDetails.value = null // Reset imediato para mostrar o loader
+      nodeDetails.value = { loading: true } // Loader fluido
+      
       try {
         const details = await window.go.main.App.GetNodeDetails(node.id)
-        nodeDetails.value = details
+        if (details) {
+          nodeDetails.value = details
+        } else {
+          nodeDetails.value = {
+            path: "Origem Desconhecida",
+            content: "Não foi possível resgatar os metadados desta nota no banco de conhecimento.",
+            source: "Cache Offline"
+          }
+        }
       } catch (e) {
         console.error("Erro ao buscar detalhes:", e)
+        const errorMsg = String(e).toLowerCase()
+        
+        if (errorMsg.includes("não encontrado") || errorMsg.includes("not found")) {
+          nodeDetails.value = {
+            path: "Sinapse Não Indexada",
+            content: "O Maestro visualiza este nó, mas o conteúdo ainda não chegou ao Coolify. Por favor, clique em SCAN (ou RESET se trocou a URL) para sincronizar o grafo.",
+            source: "Cache Offline"
+          }
+        } else {
+          nodeDetails.value = {
+            path: "Falha do Motor",
+            content: `O Maestro encontrou um problema técnico ao acessar o banco: ${e}. Verifique sua conexão ou tente um RESET.`,
+            source: "Erro Interno"
+          }
+        }
       }
     })
 
@@ -276,6 +351,8 @@ watch(() => props.graphLogs, () => {
 }, { deep: true })
 
 const currentConflict = ref(null)
+// O estado 'isNavigating' agora é gerenciado globalmente pela store orchestrator
+
 onMounted(() => {
   initGraph()
   
@@ -285,12 +362,151 @@ onMounted(() => {
     console.warn("⚠️ CONFLITO DETECTADO:", conflict)
   })
 
+  // 🎮 Módulo de Movimentação Gamificada (WASD + QE)
+  const isInputFocused = () => {
+    const el = document.activeElement
+    return el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)
+  }
+
+  const handleKeyDown = (e) => {
+    if (isInputFocused()) return
+    const k = e.key.toLowerCase()
+    if (k in keys) {
+      keys[k] = true
+      if (!moveInterval) startMoving()
+    }
+  }
+
+  const handleKeyUp = (e) => {
+    const k = e.key.toLowerCase()
+    if (k in keys) keys[k] = false
+    
+    // Para o loop se todas as teclas forem soltas
+    if (!Object.values(keys).some(v => v)) {
+      if (moveInterval) {
+        cancelAnimationFrame(moveInterval)
+        moveInterval = null
+      }
+    }
+  }
+
+  const startMoving = () => {
+    const move = () => {
+      if (!Graph) return
+      
+      const camera = Graph.camera()
+      const pos = Graph.cameraPosition()
+      const direction = new THREE.Vector3()
+      camera.getWorldDirection(direction)
+      
+      const right = new THREE.Vector3().crossVectors(camera.up, direction).normalize()
+      
+      let dx = 0, dy = 0, dz = 0
+
+      if (keys.w) { dx += direction.x * moveSpeed; dy += direction.y * moveSpeed; dz += direction.z * moveSpeed; }
+      if (keys.s) { dx -= direction.x * moveSpeed; dy -= direction.y * moveSpeed; dz -= direction.z * moveSpeed; }
+      if (keys.a) { dx += right.x * moveSpeed; dy += right.y * moveSpeed; dz += right.z * moveSpeed; }
+      if (keys.d) { dx -= right.x * moveSpeed; dy -= right.y * moveSpeed; dz -= right.z * moveSpeed; }
+      if (keys.q) { dy -= moveSpeed; }
+      if (keys.e) { dy += moveSpeed; }
+
+      if (dx !== 0 || dy !== 0 || dz !== 0) {
+        Graph.cameraPosition({
+          x: pos.x + dx,
+          y: pos.y + dy,
+          z: pos.z + dz
+        })
+      }
+
+      moveInterval = requestAnimationFrame(move)
+    }
+    moveInterval = requestAnimationFrame(move)
+  }
+
+  window.addEventListener('keydown', handleKeyDown)
+  window.addEventListener('keyup', handleKeyUp)
+
+  // 🎬 Percurso Cinematográfico da IA: Anima cada hop individualmente com delay
+  window.runtime.EventsOn("graph:traverse", (data) => {
+    if (!Graph || !data?.hops?.length) return
+
+    orchestrator.isNavigating = true
+    const hops = data.hops
+    const HOPDelay = 800 // ms entre cada hop
+
+    hops.forEach((hop, i) => {
+      setTimeout(() => {
+        const { nodes } = Graph.graphData()
+
+        // 1. Voa a câmera até o nó DESTINO (To)
+        const targetNode = nodes.find(n => n.id === hop.to || n.name === hop.to)
+        if (targetNode) {
+          Graph.cameraPosition(
+            { x: targetNode.x + 80, y: targetNode.y + 60, z: targetNode.z + 80 },
+            targetNode,
+            600
+          )
+
+          // 2. Explode uma luz pontual dourada no destino e faz o nó pulsar
+          const light = new THREE.PointLight(0x4facfe, 3, 80)
+          light.position.set(targetNode.x, targetNode.y, targetNode.z)
+          Graph.scene().add(light)
+          
+          // Efeito de pulso no objeto 3D do nó
+          const nodeObj = targetNode.__threeObj
+          if (nodeObj) {
+            const originalScale = nodeObj.scale.x
+            nodeObj.scale.set(originalScale * 2.5, originalScale * 2.5, originalScale * 2.5)
+            // Retorna ao tamanho original suavemente
+            let scale = originalScale * 2.5
+            const interval = setInterval(() => {
+              scale -= 0.1
+              if (scale <= originalScale) {
+                nodeObj.scale.set(originalScale, originalScale, originalScale)
+                clearInterval(interval)
+              } else {
+                nodeObj.scale.set(scale, scale, scale)
+              }
+            }, 30)
+          }
+
+          setTimeout(() => Graph.scene().remove(light), 1200)
+        }
+
+        // 3. Acende partículas no link deste hop
+        const linkKey1 = `${hop.from}-${hop.to}`
+        const linkKey2 = `${hop.to}-${hop.from}`
+        clickedNodeLinks.value.add(linkKey1)
+        clickedNodeLinks.value.add(linkKey2)
+        Graph.linkDirectionalParticles(Graph.linkDirectionalParticles())
+
+        // 4. Remove a partícula deste hop após 3s
+        setTimeout(() => {
+          clickedNodeLinks.value.delete(linkKey1)
+          clickedNodeLinks.value.delete(linkKey2)
+          Graph.linkDirectionalParticles(Graph.linkDirectionalParticles())
+        }, 3000)
+
+        // 5. Marca como "fim da travessia" no último hop
+        if (i === hops.length - 1) {
+          setTimeout(() => { orchestrator.isNavigating = false }, 1500)
+        }
+      }, i * HOPDelay)
+    })
+  })
+
   // Resize handler
   window.addEventListener('resize', () => {
     if (Graph && containerRef.value) {
       Graph.width(containerRef.value.clientWidth)
       Graph.height(containerRef.value.clientHeight)
     }
+  })
+
+  onUnmounted(() => {
+    window.removeEventListener('keydown', handleKeyDown)
+    window.removeEventListener('keyup', handleKeyUp)
+    if (moveInterval) cancelAnimationFrame(moveInterval)
   })
 })
 
@@ -320,8 +536,22 @@ onUnmounted(() => {
   if (Graph) Graph._destructor() // Limpeza de memória
 })
 
-const resetZoom = () => {
-  if (Graph) Graph.zoomToFit(800)
+// -- NOVA LÓGICA DE SINCRONIZAÇÃO TOTAL --
+const handleFullSync = async () => {
+  if (scanning.value) return
+  
+  if (confirm("Deseja forçar uma sincronização total com o Coolify? Isso limpará o cache local.")) {
+    scanning.value = true
+    try {
+      // Chama o método atômico no Go que limpa e reindexa em sequência garantida
+      await window.go.main.App.FullSync()
+    } catch (e) {
+      console.error("Erro na sincronização:", e)
+    } finally {
+      scanning.value = false
+      if (Graph) Graph.zoomToFit(800)
+    }
+  }
 }
 
 const scanning = ref(false)
@@ -333,7 +563,8 @@ const triggerScan = async () => {
   } catch (error) {
     console.error("Erro no Scan:", error)
   } finally {
-    }
+    scanning.value = false
+  }
 }
 </script>
 
@@ -345,14 +576,15 @@ const triggerScan = async () => {
     <!-- Controles & Console de Logs (Painel de Pensamento Vidrado) -->
     <div class="graph-ui glass">
       <div class="ui-header">
-        <span class="pulse"></span>
+        <span class="pulse" :class="{ 'ai-active': orchestrator.isNavigating }"></span>
         <h3>Conhecimento Obsidian 3D</h3>
+        <span v-if="orchestrator.isNavigating" class="ai-status-label animate-pulse">IA RACIOCINANDO...</span>
       </div>
       
       <div class="ui-actions">
         <div style="display: flex; gap: 8px;">
-          <button @click="resetZoom" class="action-btn" title="Centralizar">🎯 <span>RESET</span></button>
-          <button @click="triggerScan" class="action-btn" :class="{'scanning-btn': scanning}" title="Forçar Index"><span v-if="!scanning">🔄</span><span v-else class="spin">⏳</span><span>SCAN</span></button>
+          <button @click="handleFullSync" class="action-btn" :class="{'scanning-btn': scanning}" title="Forçar Sincronização Total">🎯 <span>RESET</span></button>
+          <button @click="triggerScan" class="action-btn" :class="{'scanning-btn': scanning}" title="Sincronização Rápida"><span v-if="!scanning">🔄</span><span v-else class="spin">⏳</span><span>SCAN</span></button>
         </div>
         <div class="stat-item">
           <span class="val">{{ nodes.length }}</span>
@@ -417,7 +649,14 @@ const triggerScan = async () => {
         </header>
 
         <div class="panel-body">
-          <div v-if="nodeDetails" class="details-content">
+          <!-- Estado: Carregando -->
+          <div v-if="!nodeDetails || nodeDetails.loading" class="loading-provenance">
+            <div class="spinner"></div>
+            <span>Sintonizando Base...</span>
+          </div>
+
+          <!-- Estado: Sucesso ou Erro (com conteúdo) -->
+          <div v-else class="details-content">
             <div class="info-group">
               <label>DOCUMENTO ORIGEM</label>
               <p class="source-path">{{ nodeDetails.path || "Memória de Chat" }}</p>
@@ -430,12 +669,9 @@ const triggerScan = async () => {
               </div>
             </div>
 
-            <button v-if="nodeDetails.path" @click="openSource" class="btn-open-source">
+            <button v-if="nodeDetails.path && !nodeDetails.path.includes('indexada')" @click="openSource" class="btn-open-source">
               ABRIR ARQUIVO FONTE ✨
             </button>
-          </div>
-          <div v-else class="loading-provenance">
-            <span>Buscando linhagem...</span>
           </div>
         </div>
       </aside>
@@ -747,6 +983,31 @@ const triggerScan = async () => {
   border-radius: 50%;
   box-shadow: 0 0 8px var(--primary);
   display: inline-block;
+  transition: all 0.3s ease;
+}
+
+.pulse.ai-active {
+  background: #f472b6;
+  box-shadow: 0 0 12px #f472b6, 0 0 20px rgba(244, 114, 182, 0.4);
+  transform: scale(1.5);
+}
+
+.ai-status-label {
+  font-size: 0.6rem;
+  font-weight: 800;
+  color: #f472b6;
+  margin-left: auto;
+  letter-spacing: 1px;
+  text-shadow: 0 0 8px rgba(244, 114, 182, 0.5);
+}
+
+.animate-pulse {
+  animation: pulse-op 1.5s infinite;
+}
+
+@keyframes pulse-op {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
 
 .ui-actions {
