@@ -230,7 +230,12 @@ func (c *Crawler) processFile(ctx context.Context, path string, info os.FileInfo
 		
 		// Desambiguação (Context Graphs): Extrai o título e o início para resolver pronomes
 		contextHint := fmt.Sprintf("Arquivo: %s. Contexto inicial: %s", nodeName, firstLines(textContent, 500))
-		triples, _ = c.Ontology.ExtractTriples(ctx, textContent, contextHint)
+		triples, err = c.Ontology.ExtractTriples(ctx, textContent, contextHint)
+		if err != nil {
+			fmt.Printf("[Crawler] ⚠️ Erro ao extrair triplas de %s: %v\n", nodeName, err)
+		} else {
+			fmt.Printf("[Crawler] 🧠 %d Triplas extraídas de %s\n", len(triples), nodeName)
+		}
 		links = extractLinks(textContent)
 	} else {
 		// Visão Computacional / OCR
@@ -250,16 +255,59 @@ func (c *Crawler) processFile(ctx context.Context, path string, info os.FileInfo
 		if err == nil {
 			textContent = desc
 			triples = tri
+			}
+	}
+
+	// ══════════════════════════════════════════════════════════
+	// PASSO 1: FEEDBACK VISUAL IMEDIATO (Independente de API)
+	// Emitimos o nó e suas conexões wiki-link ANTES de chamar
+	// qualquer API externa. Isso garante que o Grafo 3D SEMPRE
+	// mostre a topologia mesmo com cota esgotada (429).
+	// ══════════════════════════════════════════════════════════
+	runtime.EventsEmit(c.ctx, "graph:node", map[string]string{
+		"id":            nodeName,
+		"name":          nodeName,
+		"document-type": forcedDocType,
+	})
+
+	// Conta links Obsidian [[wiki-links]] (100% offline, sem API)
+	linkCounts := make(map[string]int)
+	for _, l := range links {
+		linkCounts[l]++
+	}
+
+	// Adiciona peso das triplas semânticas extraídas pela IA (se houver)
+	for _, t := range triples {
+		if t.Object != "" && len(t.Object) < 50 { 
+			linkCounts[t.Object]++
 		}
 	}
 
-	// 1. Geração de Embedding
-	vector, err := c.Embedder.GenerateEmbedding(ctx, textContent)
-	if err != nil {
-		return false, err
+	// Emite TODAS as arestas imediatamente para o frontend
+	for target, weight := range linkCounts {
+		runtime.EventsEmit(c.ctx, "graph:edge", map[string]interface{}{
+			"source": nodeName, 
+			"target": target,
+			"weight": weight,
+		})
 	}
 
-	// 2. Persistência no Qdrant com Verdade Situacional
+	fmt.Printf("[Crawler] 🔗 %s: %d links emitidos para o grafo visual\n", nodeName, len(linkCounts))
+
+	// ══════════════════════════════════════════════════════════
+	// PASSO 2: PERSISTÊNCIA VETORIAL (Depende da API Gemini)
+	// Se a API falhar (429, erro de rede), o nó já está visível
+	// no grafo. O embedding será feito na próxima indexação.
+	// ══════════════════════════════════════════════════════════
+	vector, err := c.Embedder.GenerateEmbedding(ctx, textContent)
+	if err != nil {
+		fmt.Printf("[Crawler] ⚠️ Embedding falhou para %s (API indisponível): %v\n", nodeName, err)
+		// Mesmo sem embedding, atualizamos o cache para não re-processar
+		// links visuais. O próximo SCAN com API disponível fará o embedding.
+		return true, nil
+	}
+
+	// Persistência no Qdrant com Verdade Situacional
 	c.Qdrant.UpsertPoint("obsidian_knowledge", uint64(time.Now().UnixNano()), vector, map[string]interface{}{
 		"path": path, 
 		"name": nodeName, 
@@ -268,42 +316,14 @@ func (c *Crawler) processFile(ctx context.Context, path string, info os.FileInfo
 		"links": links, 
 		"type": ext, 
 		"document-type": forcedDocType,
-		"status": "active", // Marca o fato como ativo (Truth Strategy)
+		"status": "active",
 		"observed_at": time.Now().Format(time.RFC3339),
 	})
 
-	// 3. Update Cache
+	// Update Cache (só marca como "completo" se o embedding teve sucesso)
 	c.mu.Lock()
 	c.cache[path] = info.ModTime().Unix()
 	c.mu.Unlock()
-
-	// 4. Feedback Visual em Tempo Real com Reforço Sináptico
-	runtime.EventsEmit(c.ctx, "graph:node", map[string]string{
-		"id":            nodeName,
-		"name":          nodeName,
-		"document-type": forcedDocType,
-	})
-
-	// Conta links Obsidian
-	linkCounts := make(map[string]int)
-	for _, l := range links {
-		linkCounts[l]++
-	}
-
-	// Adiciona peso das triplas semânticas (IA)
-	for _, t := range triples {
-		if t.Object != "" && len(t.Object) < 50 { 
-			linkCounts[t.Object]++
-		}
-	}
-
-	for target, weight := range linkCounts {
-		runtime.EventsEmit(c.ctx, "graph:edge", map[string]interface{}{
-			"source": nodeName, 
-			"target": target,
-			"weight": weight,
-		})
-	}
 
 	return true, nil
 }

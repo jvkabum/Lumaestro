@@ -43,8 +43,12 @@ func NewOntologyService(client *genai.Client) *OntologyService {
 
 // ExtractTriples extrai fatos estruturados de um texto usando o prompt TrustGraph, com suporte a desambiguação.
 func (s *OntologyService) ExtractTriples(ctx context.Context, text string, contextHint string) ([]Triple, error) {
-	prompt := fmt.Sprintf(`Extraia triplas semânticas (Sujeito-Predicado-Objeto) baseadas NO TEXTO ABAIXO.
-Retorne APENAS o JSON.
+	prompt := fmt.Sprintf(`Extraia triplas semânticas (Sujeito-Predicado-Objeto) do texto abaixo.
+Retorne APENAS um ARRAY JSON puro. NÃO use wrappers como {"triples": [...]}.
+Exemplo exato do formato esperado:
+[
+  {"subject": "Lumaestro", "predicate": "uses", "object": "Qdrant"}
+]
 
 ## DICA DE CONTEXTO GLOBAL:
 Use esta informação para resolver pronomes como "ele", "ela", "o projeto", "a empresa": 
@@ -56,7 +60,7 @@ Use esta informação para resolver pronomes como "ele", "ela", "o projeto", "a 
 3. REGRA: Use apenas os termos acima. Atomize os fatos.
 
 Texto:
-` + text, contextHint)
+%s`, contextHint, text)
 
 	res, err := s.GenAI.Models.GenerateContent(ctx, "gemini-2.0-flash", []*genai.Content{{Parts: []*genai.Part{{Text: prompt}}}}, nil)
 	if err != nil {
