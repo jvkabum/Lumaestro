@@ -4,6 +4,11 @@ frontend/dist
 
 # Gemini / Agentes
 .gemini/
+.gemini_accounts/
 gemini-telemetry.json
 *-telemetry.json
 acp-test-script.*
+
+# Arquivos temporários de teste (NUNCA commitar - quebra wails dev!)
+tmp/
+*.test.go

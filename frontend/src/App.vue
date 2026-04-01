@@ -13,6 +13,7 @@ import { GetProjectDoc } from '../wailsjs/go/main/App'
 const orchestrator = useOrchestratorStore()
 const currentView = ref('orchestrator') // views: orchestrator, settings
 const isOnline = ref(false)
+const connectionError = ref('Aguardando sincronização com o Maestro (Frontend Booting)...')
 
 // Painel redimensionável
 const chatWidth = ref(500)
@@ -75,8 +76,18 @@ const startResize = (e) => {
 }
 
 onMounted(async () => {
-  // Verificar conexão inicial
-  isOnline.value = await CheckConnection()
+  // Verificar conexão inicial com diagnóstico visual
+  try {
+    isOnline.value = await CheckConnection()
+    if (isOnline.value) {
+      connectionError.value = "Maestro Online (Backend e Motor Vetorial Ativos)"
+    } else {
+      connectionError.value = "Backend respondeu, mas Qdrant ou Configuração falharam. Verifique as configurações."
+    }
+  } catch(e) {
+    isOnline.value = false
+    connectionError.value = "Erro Wails IPC: Falha Crítica de Comunicação com o Backend Go. (" + String(e) + ")"
+  }
   
   // Escuta troca de visualização remota (ex: vindo das Settings)
   EventsOn('view:change', (view) => {
@@ -147,7 +158,7 @@ onMounted(async () => {
         <button @click="currentView = 'settings'" :class="{ active: currentView === 'settings' }" title="Configurações">⚙️</button>
       </nav>
       <!-- Indicador de Status -->
-      <div class="status-indicator">
+      <div class="status-indicator" :title="connectionError">
          <div class="dot" :class="{ online: isOnline }"></div>
       </div>
     </aside>

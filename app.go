@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 	"Lumaestro/internal/agents"
 	"Lumaestro/internal/config"
@@ -42,6 +43,9 @@ func NewApp() *App {
 
 // startup is called when the app starts.
 func (a *App) startup(ctx context.Context) {
+	// 🛡️ Detector de arquivos Go órfãos que quebram o Wails silenciosamente
+	checkRogueMainFiles()
+
 	a.ctx = ctx
 	a.executor = agents.NewACPExecutor()
 	a.orchestrator = agents.NewOrchestrator(a.executor)
@@ -52,7 +56,9 @@ func (a *App) startup(ctx context.Context) {
 	a.installer.SyncPath()
 
 	// Tenta inicializar os serviços logo na subida
-	a.initServices()
+	if err := a.initServices(); err != nil {
+		fmt.Printf("🔴 PANICO SILENCIOSO do Backend no initServices: %v\n", err)
+	}
 
 	// Iniciar a Escuta de Logs e Terminal
 	go a.listenForLogs()
@@ -79,9 +85,10 @@ func (a *App) startup(ctx context.Context) {
 
 // initServices inicializa os motores de IA e RAG se as configurações permitirem
 func (a *App) initServices() error {
-	cfg, _ := config.Load()
-	if cfg == nil || cfg.GeminiAPIKey == "" {
-		return fmt.Errorf("configuração incompleta (API Key ausente)")
+	cfg, err := config.Load()
+	if err != nil || cfg == nil {
+		fmt.Printf("⚠️ Arquivo de configuração não encontrado ou vazio. Aguardando setup na UI...\n")
+		return nil // Não retorna erro crítico. Permite o App iniciar sem motores.
 	}
 	a.config = cfg
 
@@ -230,11 +237,14 @@ func (a *App) ScanVault() string {
 
 // CheckConnection verifica se o Qdrant está acessível
 func (a *App) CheckConnection() bool {
-	return a.qdrant != nil && a.qdrant.BaseURL != ""
+	res := a.qdrant != nil && a.qdrant.BaseURL != ""
+	fmt.Printf("[BACKEND-UI] CheckConnection disparado pelo frontend. Retornando: %v\n", res)
+	return res
 }
 
 // GetToolsStatus verifica se as IAs CLIs estão instaladas no PATH e os status de autenticação
 func (a *App) GetToolsStatus() map[string]bool {
+	// Reduzimos o ruído no log para esse porque ele é feito a cada refresh
 	return map[string]bool{
 		"gemini":      a.installer.CheckStatus("gemini"),
 		"claude":      a.installer.CheckStatus("claude"),
@@ -276,6 +286,7 @@ func (a *App) FixEnvironment() string {
 // GetConfig retorna as configurações atuais para o Vue
 func (a *App) GetConfig() *config.Config {
 	cfg, _ := config.Load()
+	fmt.Printf("[BACKEND-UI] GetConfig disparado pelo frontend. Enviando URL Qdrant: %s\n", cfg.QdrantURL)
 	return cfg
 }
 
@@ -684,4 +695,56 @@ func (a *App) SwitchGeminiAccount(name string) error {
 
 	fmt.Printf("[Maestro] 🔄 Trocando para sessão de login: %s\n", name)
 	return a.StartAgentSession("gemini")
+}
+
+// 🛡️ checkRogueMainFiles escaneia subpastas procurando arquivos .go com "package main"
+// que causariam conflito silencioso durante o build do Wails (go build ./...).
+// Se encontrar, emite um AVISO GIGANTE no terminal para o desenvolvedor.
+func checkRogueMainFiles() {
+	rogueFiles := []string{}
+
+	filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		// Ignora a raiz (main.go e app.go são legítimos), build/ e frontend/
+		dir := filepath.Dir(path)
+		if dir == "." || strings.HasPrefix(path, "build") || strings.HasPrefix(path, "frontend") {
+			return nil
+		}
+		// Só arquivos .go
+		if info.IsDir() || filepath.Ext(path) != ".go" {
+			return nil
+		}
+		// Lê as primeiras linhas para checar "package main"
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return nil
+		}
+		content := string(data)
+		if len(content) > 200 {
+			content = content[:200]
+		}
+		if strings.Contains(content, "package main") {
+			rogueFiles = append(rogueFiles, path)
+		}
+		return nil
+	})
+
+	if len(rogueFiles) > 0 {
+		fmt.Println("")
+		fmt.Println("╔══════════════════════════════════════════════════════════════╗")
+		fmt.Println("║  ⚠️  ALERTA: ARQUIVOS GO CONFLITANTES DETECTADOS!           ║")
+		fmt.Println("║                                                              ║")
+		fmt.Println("║  Os seguintes arquivos contêm 'package main' em subpastas:   ║")
+		fmt.Println("║  Isso QUEBRA o 'wails dev' silenciosamente!                  ║")
+		fmt.Println("╠══════════════════════════════════════════════════════════════╣")
+		for _, f := range rogueFiles {
+			fmt.Printf("║  🔴 %s\n", f)
+		}
+		fmt.Println("╠══════════════════════════════════════════════════════════════╣")
+		fmt.Println("║  SOLUÇÃO: Delete ou mova esses arquivos para fora do projeto ║")
+		fmt.Println("╚══════════════════════════════════════════════════════════════╝")
+		fmt.Println("")
+	}
 }

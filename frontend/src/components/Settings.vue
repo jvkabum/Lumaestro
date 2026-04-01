@@ -75,9 +75,17 @@ const scrollToConsole = async () => {
 }
 
 onMounted(async () => {
-  const savedConfig = await GetConfig()
-  if (savedConfig) {
-    config.value = savedConfig
+  try {
+    const savedConfig = await GetConfig()
+    // alert("DEBUG WAILS: " + JSON.stringify(savedConfig))
+    if (savedConfig && Object.keys(savedConfig).length > 0) {
+      // Fazemos o merge dos valores recebidos com os valores defaults locais (segurança!)
+      config.value = Object.assign({}, config.value, savedConfig)
+    } else {
+      console.warn("Nenhuma config carregada do backend. Usando defaults.")
+    }
+  } catch(e) {
+    alert("ERRO RARO DE COMUNICAÇÃO: " + e)
   }
   
   refreshStatus()
@@ -97,9 +105,13 @@ const refreshStatus = async () => {
 }
 
 const save = async () => {
-  const res = await SaveConfig(config.value)
-  alert(res)
-  refreshStatus()
+  try {
+    const res = await SaveConfig(config.value)
+    alert(res)
+    refreshStatus()
+  } catch (err) {
+    alert("Erro na comunicação Wails ao salvar: " + err)
+  }
 }
 
 const install = async (name) => {

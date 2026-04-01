@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 )
 
@@ -43,7 +44,13 @@ type Config struct {
 	Security          SecurityConfig `json:"security"`
 }
 
-const configPath = "config.json"
+func getConfigPath() string {
+	// Se existir um config.json na raiz do projeto durante o Wails Dev, usar ele!
+	if _, err := os.Stat("../../config.json"); err == nil {
+		return "../../config.json"
+	}
+	return "config.json"
+}
 
 // Save armazena as configurações em um arquivo JSON.
 func Save(cfg Config) error {
@@ -51,18 +58,21 @@ func Save(cfg Config) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(configPath, data, 0644)
+	return os.WriteFile(getConfigPath(), data, 0644)
 }
 
 // Load recupera as configurações do arquivo JSON.
 func Load() (*Config, error) {
-	data, err := os.ReadFile(configPath)
+	path := getConfigPath()
+	data, err := os.ReadFile(path)
 	if err != nil {
+		fmt.Printf("[Config] Aviso: %s não encontrado no diretorio (%v)\n", path, err)
 		return &Config{}, nil // Retorna config vazia se o arquivo não existir
 	}
 
 	var cfg Config
 	if err := json.Unmarshal(data, &cfg); err != nil {
+		fmt.Printf("[Config] ERRO CRITICO Parse JSON: %v\n", err)
 		return nil, err
 	}
 	return &cfg, nil
