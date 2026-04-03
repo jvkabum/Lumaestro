@@ -46,6 +46,10 @@ type Config struct {
 	GraphNeighborLimit int            `json:"graph_neighbor_limit"` // Máximo de vizinhos por nó (padrão: 5)
 	GraphContextLimit int            `json:"graph_context_limit"` // Limite de chars do contexto expandido (padrão: 4000)
 	Security          SecurityConfig `json:"security"`
+	
+	// ⚡ Configurações do Motor Lightning (Aprendizado por Reforço)
+	LightningEnabled   bool   `json:"lightning_enabled"`    // Ativa o rastreamento e aprendizado
+	LightningProxyPort string `json:"lightning_proxy_port"` // Porta do proxy local (padrão: 8001)
 }
 
 // GetGeminiKeys retorna a lista de chaves API do Gemini (split por vírgula).

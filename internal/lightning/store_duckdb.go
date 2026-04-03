@@ -1,0 +1,253 @@
+package lightning
+
+import (
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"sync"
+	"time"
+
+	_ "github.com/marcboeker/go-duckdb"
+)
+
+// DuckDBStore gerencia a persistência analítica do Lightning em Go.
+type DuckDBStore struct {
+	db   *sql.DB
+	path string
+	mu   sync.Mutex
+}
+
+// NewDuckDBStore inicializa o store analítico.
+func NewDuckDBStore(dbPath string) (*DuckDBStore, error) {
+	db, err := sql.Open("duckdb", dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("falha ao abrir DuckDB: %w", err)
+	}
+
+	store := &DuckDBStore{
+		db:   db,
+		path: dbPath,
+	}
+
+	if err := store.InitSchema(); err != nil {
+		return nil, fmt.Errorf("falha ao inicializar esquema DuckDB: %w", err)
+	}
+
+	return store, nil
+}
+
+// InitSchema cria as tabelas analíticas otimizadas para colunas.
+func (s *DuckDBStore) InitSchema() error {
+	queries := []string{
+		`CREATE TABLE IF NOT EXISTS spans (
+			rollout_id VARCHAR,
+			attempt_id VARCHAR,
+			sequence_id INTEGER,
+			trace_id VARCHAR,
+			span_id VARCHAR,
+			parent_id VARCHAR,
+			name VARCHAR,
+			status_code VARCHAR,
+			status_description VARCHAR,
+			attributes JSON,
+			events JSON,
+			start_time DOUBLE,
+			end_time DOUBLE,
+			prompt_tokens INTEGER,
+			completion_tokens INTEGER
+		)`,
+		`CREATE TABLE IF NOT EXISTS rollouts (
+			rollout_id VARCHAR PRIMARY KEY,
+			input JSON,
+			start_time DOUBLE,
+			end_time DOUBLE,
+			mode VARCHAR,
+			status VARCHAR,
+			metadata JSON
+		)`,
+		`CREATE TABLE IF NOT EXISTS rewards (
+			rollout_id VARCHAR,
+			reward DOUBLE,
+			timestamp DOUBLE,
+			source VARCHAR
+		)`,
+		`CREATE TABLE IF NOT EXISTS prompts (
+			id VARCHAR PRIMARY KEY,
+			agent_name VARCHAR,
+			content VARCHAR,
+			avg_reward DOUBLE,
+			created_at DOUBLE
+		)`,
+		`CREATE TABLE IF NOT EXISTS prompt_candidates (
+			id VARCHAR PRIMARY KEY,
+			agent_name VARCHAR,
+			name VARCHAR,
+			content VARCHAR,
+			critique VARCHAR,
+			status VARCHAR,
+			accuracy_score DOUBLE DEFAULT 0.0,
+			created_at DOUBLE
+		)`,
+		`CREATE TABLE IF NOT EXISTS gold_samples (
+			id VARCHAR PRIMARY KEY,
+			agent_name VARCHAR,
+			input VARCHAR,
+			output VARCHAR,
+			created_at DOUBLE
+		)`,
+	}
+
+	for _, q := range queries {
+		if _, err := s.db.Exec(q); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// InsertSpan insere um rastro (Span) no DuckDB.
+func (s *DuckDBStore) InsertSpan(span Span) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	attrJSON, _ := json.Marshal(span.Attributes)
+	eventsJSON, _ := json.Marshal(span.Events)
+
+	var parentID interface{} = nil
+	if span.ParentID != nil {
+		parentID = *span.ParentID
+	}
+
+	var endTime interface{} = nil
+	if span.EndTime != nil {
+		endTime = *span.EndTime
+	}
+
+	query := `INSERT INTO spans (
+		rollout_id, attempt_id, sequence_id, trace_id, span_id, parent_id, 
+		name, status_code, status_description, attributes, events, start_time, end_time,
+		prompt_tokens, completion_tokens
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+
+	_, err := s.db.Exec(query,
+		span.RolloutID, span.AttemptID, span.SequenceID, span.TraceID, span.SpanID, parentID,
+		span.Name, span.Status.StatusCode, span.Status.Description, string(attrJSON), string(eventsJSON),
+		span.StartTime, endTime, span.PromptTokens, span.CompletionTokens,
+	)
+
+	return err
+}
+
+// GetDB retorna a conexão bruta com o DuckDB (para Binding Wails).
+func (s *DuckDBStore) GetDB() *sql.DB {
+	return s.db
+}
+
+// InsertPrompt registra uma nova versão do System Prompt de um agente.
+func (s *DuckDBStore) InsertPrompt(agentName, content string, avgReward float64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	
+	now := float64(time.Now().Unix())
+	id := fmt.Sprintf("pmp-%.0f", now)
+	query := `INSERT INTO prompts (id, agent_name, content, avg_reward, created_at) VALUES (?, ?, ?, ?, ?)`
+	_, err := s.db.Exec(query, id, agentName, content, avgReward, now)
+	return err
+}
+
+// GetLatestPrompt retorna a versão mais recente do prompt para um agente específico.
+func (s *DuckDBStore) GetLatestPrompt(agentName string) (string, error) {
+	var content string
+	err := s.db.QueryRow(`SELECT content FROM prompts WHERE agent_name = ? ORDER BY created_at DESC LIMIT 1`, agentName).Scan(&content)
+	return content, err
+}
+
+// InsertCandidate registra uma proposta de evolução (Beam Search).
+func (s *DuckDBStore) InsertCandidate(agentName, name, content, critique string, accuracy float64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	
+	now := float64(time.Now().Unix())
+	id := fmt.Sprintf("cand-%.0f-%s", now, name)
+	query := `INSERT INTO prompt_candidates (id, agent_name, name, content, critique, status, accuracy_score, created_at) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)`
+	_, err := s.db.Exec(query, id, agentName, name, content, critique, accuracy, now)
+	return err
+}
+
+// GetPendingCandidates retorna todos os candidatos aguardando aprovação.
+func (s *DuckDBStore) GetPendingCandidates() ([]map[string]interface{}, error) {
+	rows, err := s.db.Query(`SELECT id, agent_name, name, content, critique, accuracy_score, created_at FROM prompt_candidates WHERE status = 'pending' ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var candidates []map[string]interface{}
+	for rows.Next() {
+		var id, agent, name, content, critique string
+		var accuracy, createdAt float64
+		if err := rows.Scan(&id, &agent, &name, &content, &critique, &accuracy, &createdAt); err == nil {
+			candidates = append(candidates, map[string]interface{}{
+				"id": id, "agent": agent, "name": name, "content": content, "critique": critique, "accuracy": accuracy, "date": time.Unix(int64(createdAt), 0).Format("02/01 15:04"),
+			})
+		}
+	}
+	return candidates, nil
+}
+
+// ApproveCandidate move um candidato para a tabela oficial de prompts e encerra os outros do mesmo agente.
+func (s *DuckDBStore) ApproveCandidate(candidateID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// 1. Obter dados do candidato
+	var agentName, content string
+	err := s.db.QueryRow(`SELECT agent_name, content FROM prompt_candidates WHERE id = ?`, candidateID).Scan(&agentName, &content)
+	if err != nil { return err }
+
+	// 2. Inserir como Prompt oficial (Faremos isso via transação ou comando direto)
+	now := float64(time.Now().Unix())
+	pmpID := fmt.Sprintf("pmp-%.0f", now)
+	_, err = s.db.Exec(`INSERT INTO prompts (id, agent_name, content, avg_reward, created_at) VALUES (?, ?, ?, 0.0, ?)`, pmpID, agentName, content, now)
+	if err != nil { return err }
+
+	// 3. Marcar todos os candidatos pendentes desse agente como resolvidos
+	_, err = s.db.Exec(`UPDATE prompt_candidates SET status = 'rejected' WHERE agent_name = ? AND status = 'pending'`, agentName)
+	if err != nil { return err }
+	
+	_, err = s.db.Exec(`UPDATE prompt_candidates SET status = 'approved' WHERE id = ?`, candidateID)
+	return err
+}
+
+// InsertGoldSample registra uma amostra "Gold" no DuckDB.
+func (s *DuckDBStore) InsertGoldSample(agentName, input, output string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	
+	now := float64(time.Now().Unix())
+	id := fmt.Sprintf("gold-%.0f", now)
+	query := `INSERT INTO gold_samples (id, agent_name, input, output, created_at) VALUES (?, ?, ?, ?, ?)`
+	_, err := s.db.Exec(query, id, agentName, input, output, now)
+	return err
+}
+
+// GetGoldSamples retorna os casos de ouro de um agente.
+func (s *DuckDBStore) GetGoldSamples(agentName string) ([]map[string]string, error) {
+	rows, err := s.db.Query(`SELECT input, output FROM gold_samples WHERE agent_name = ?`, agentName)
+	if err != nil { return nil, err }
+	defer rows.Close()
+
+	var samples []map[string]string
+	for rows.Next() {
+		var in, out string
+		if err := rows.Scan(&in, &out); err == nil {
+			samples = append(samples, map[string]string{"input": in, "output": out})
+		}
+	}
+	return samples, nil
+}
+
+// Close fecha a conexão com o DuckDB.
+func (s *DuckDBStore) Close() error {
+	return s.db.Close()
+}

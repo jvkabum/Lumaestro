@@ -2,6 +2,7 @@ package orchestration
 
 import (
 	"Lumaestro/internal/db"
+	"Lumaestro/internal/lightning" // ✨ Importação Lightning
 	"encoding/json"
 	"fmt"
 	"time"
@@ -64,6 +65,29 @@ func ProcessApproval(approvalID uuid.UUID, approved bool, note string) error {
 
 	if err := db.InstanceDB.Save(&approval).Error; err != nil {
 		return err
+	}
+
+	// ⚡ LIGHTNING REWARD: Transmitir a decisão humana para o cérebro analítico
+	if db.AnalyticsDB != nil {
+		if lStore, ok := db.AnalyticsDB.(*lightning.DuckDBStore); ok {
+			re := lightning.NewRewardEngine(lStore)
+			rewardValue := -1.0
+			if approved {
+				rewardValue = 1.0
+			}
+
+			// Tenta capturar o Agente para logar a recompensa corretamente
+			agentID := "unknown"
+			if approval.RequestedByAgentID != nil {
+				agentID = approval.RequestedByAgentID.String()
+			}
+
+			re.EmitReward("roll-human-"+approvalID.String(), "att-1", rewardValue, "human_approval", map[string]interface{}{
+				"agent_id": agentID,
+				"note":     note,
+				"type":     approval.Type,
+			})
+		}
 	}
 
 	// Se aprovado, podemos querer liberar o agente ou triggar uma ação específica

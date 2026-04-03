@@ -10,8 +10,11 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-// InstanceDB mantém a referência global para o banco de dados.
+// InstanceDB mantém a referência global para o banco de dados principal (SQLite).
 var InstanceDB *gorm.DB
+
+// AnalyticsDB mantém a referência global para o banco analítico (DuckDB).
+var AnalyticsDB interface{} // Será tipado como *lightning.DuckDBStore após importação no main ou via interface
 
 // InitDB inicializa o banco SQLite (sem CGO) e propaga o schema do Paperclip.
 func InitDB() error {
@@ -60,5 +63,13 @@ func InitDB() error {
 	}
 
 	log.Println("Banco de dados SQLite (Paperclip Mode) inicializado e fundido com sucesso! 🧠")
+
+	// 📊 Inicialização do Pulmão Analítico (DuckDB)
+	analyticsPath := filepath.Join(dbFolder, "analytics.db")
+	log.Printf("Inicializando Pulmão Analítico DuckDB em %s...\n", analyticsPath)
+	
+	// Nota: A inicialização real do motor Lightning será feita no main 
+	// para evitar dependência circular entre db e lightning.
+	
 	return nil
 }

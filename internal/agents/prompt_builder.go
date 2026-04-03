@@ -32,6 +32,9 @@ SEMPRE responda em Português do Brasil.`,
 Verifique erros, conformidade com os requisitos e qualidade geral.
 SEMPRE responda em Português do Brasil.`,
 	}
+
+	GlobalLightningDirective = `[MEMÓRIA COLETIVA]: Verifique as notas em '.lumaestro/lessons' no seu contexto do Obsidian. 
+Se houver lições sobre a tarefa atual, siga as recomendações para evitar falhas passadas do enxame.`
 )
 
 // PromptBuilder organiza as peças da sinfonia em uma string única para o agente.
@@ -47,6 +50,7 @@ func (b *PromptBuilder) Build(profile AgentProfile, context string, history []st
 
 	// 1. Identidade do Sistema
 	sb.WriteString(fmt.Sprintf("INSTRUÇÕES DE SISTEMA:\n%s\n\n", profile.SystemPrompt))
+	sb.WriteString(fmt.Sprintf("%s\n\n", GlobalLightningDirective))
 
 	// 2. Contexto do Obsidian (RAG)
 	if context != "" {

@@ -16,6 +16,7 @@ import (
 
 	"Lumaestro/internal/config"
 	"Lumaestro/internal/db"
+	"Lumaestro/internal/lightning"
 	"Lumaestro/internal/orchestration"
 	"Lumaestro/internal/utils"
 
@@ -54,6 +55,10 @@ type ACPExecutor struct {
 	// Turnos Ativos para AskSync
 	turnChannels map[string]chan string
 	turnMu       sync.Mutex
+
+	// ✨ Motores de Elite (Lightning)
+	LStore         *lightning.DuckDBStore
+	RewardEngine   *lightning.RewardEngine
 }
 
 // SessionInfo representa metadados de uma sessão ACP (Checkpoint)
@@ -93,6 +98,10 @@ type ACPSession struct {
 	// Estados de log para evitar flooding no terminal
 	isLoggingThought bool
 	isLoggingMessage bool
+
+	// 🧬 Telemetria Lightning (Rastreamento de Elite)
+	RolloutID string
+	AttemptID string
 }
 
 // NewACPExecutor inicializa o novo executor JSON-RPC.
@@ -108,6 +117,7 @@ func NewACPExecutor() *ACPExecutor {
 		execLock:        make(chan struct{}, 1), // Apenas 1 ferramenta por vez
 		NetLog:          utils.NewNetworkLogger(5 * time.Second),
 		turnChannels:    make(map[string]chan string),
+		pendingRequests: make(map[int]chan JSONRPCMessage),
 	}
 }
 
@@ -284,6 +294,17 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		}
 	}
 
+	// ⚡ INJEÇÃO LIGHTNING (Telemetria)
+	rolloutID := "roll-" + uuid.NewString()
+	attemptID := "att-1"
+	cmd.Env = append(cmd.Env, "LIGHTNING_ROLLOUT_ID="+rolloutID)
+	cmd.Env = append(cmd.Env, "LIGHTNING_ATTEMPT_ID="+attemptID)
+	
+	// 📡 Redirecionamento Total do Tráfego para o Interceptor
+	cmd.Env = append(cmd.Env, "HTTP_PROXY=http://localhost:8001")
+	cmd.Env = append(cmd.Env, "HTTPS_PROXY=http://localhost:8001")
+	cmd.Env = append(cmd.Env, "OPENAI_BASE_URL=http://localhost:8001/v1")
+
 	// No Windows com espaços no caminho, o CommandContext às vezes precisa de ajuda.
 	// Garantimos que o caminho seja tratado como uma string única.
 
@@ -318,6 +339,8 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		initDone:       make(chan struct{}, 1),
 		AgentID:        agentID,
 		CurrentIssueID: issueID,
+		RolloutID:      rolloutID,
+		AttemptID:      attemptID,
 	}
 
 	e.ActiveSessions[sessionID] = session
@@ -792,8 +815,29 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 								{"type": "text", "text": output},
 							},
 						}
+
+						// 🧬 AUTOREWARD (Aprendizado Técnico Autônomo)
+						go func() {
+							lowerCmd := strings.ToLower(details)
+							isTest := strings.Contains(lowerCmd, "test") || strings.Contains(lowerCmd, "build") || strings.Contains(lowerCmd, "compile")
+							if isTest && h.Executor.LStore != nil && h.Executor.RewardEngine != nil {
+								// Sucesso técnico (zero exit code implicitamente se err == nil)
+								h.Executor.RewardEngine.EmitReward(h.Session.RolloutID, h.Session.AttemptID, 0.5, "technical_success_auto", map[string]interface{}{
+									"cmd": details,
+								})
+							}
+						}()
 					} else {
 						rpcErr = &RPCError{Code: -32004, Message: err.Error()}
+						// 🧬 AUTOREWARD (Penalidade por falha técnica)
+						go func() {
+							if h.Executor.LStore != nil && h.Executor.RewardEngine != nil {
+								h.Executor.RewardEngine.EmitReward(h.Session.RolloutID, h.Session.AttemptID, -0.5, "technical_failure_auto", map[string]interface{}{
+									"cmd": details,
+									"err": err.Error(),
+								})
+							}
+						}()
 					}
 				} else {
 					rpcErr = &RPCError{Code: 403, Message: "Execução rejeitada pelo usuário"}
