@@ -1040,7 +1040,6 @@ const handleResetDB = async () => {
 .modal-title { font-weight: 900; font-size: 1.5rem; margin-bottom: 1.5rem; }
 .modal-body { color: #94a3b8; font-size: 0.95rem; line-height: 1.6; margin-bottom: 2.5rem; }
 .modal-actions { display: flex; gap: 1rem; justify-content: center; }
-</style>
 
 /* --- ACCOUNTS & ENGINES HUB --- */
 .accounts-grid-premium, .engine-cards-stack { 

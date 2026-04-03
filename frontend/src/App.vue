@@ -7,11 +7,12 @@ import GraphVisualizer from './components/GraphVisualizer.vue'
 import HistorySidebar from './components/HistorySidebar.vue'
 import Settings from './components/Settings.vue'
 import DocViewer from './components/DocViewer.vue'
+import SwarmDashboard from './components/SwarmDashboard.vue'
 import { useOrchestratorStore } from './stores/orchestrator'
 import { GetProjectDoc } from '../wailsjs/go/main/App'
 
 const orchestrator = useOrchestratorStore()
-const currentView = ref('orchestrator') // views: orchestrator, settings
+const currentView = ref('orchestrator') // views: orchestrator, settings, swarm
 const isOnline = ref(false)
 const connectionError = ref('Aguardando sincronização com o Maestro (Frontend Booting)...')
 
@@ -183,6 +184,7 @@ onMounted(async () => {
       <div class="logo">LM</div>
       <nav>
         <button @click="currentView = 'orchestrator'" :class="{ active: currentView === 'orchestrator' }" title="Cérebro & Grafo">🧠</button>
+        <button @click="currentView = 'swarm'" :class="{ active: currentView === 'swarm' }" title="Painel de Comando Executivo">🏛️</button>
         
         <div class="sidebar-divider"></div>
         
@@ -264,6 +266,10 @@ onMounted(async () => {
             </div>
           </Transition>
         </aside>
+      </template>
+
+      <template v-else-if="currentView === 'swarm'">
+        <SwarmDashboard />
       </template>
 
       <template v-else-if="currentView === 'settings'">

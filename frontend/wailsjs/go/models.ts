@@ -84,6 +84,7 @@ export namespace config {
 	    active_agent: string;
 	    auto_start_agents: string[];
 	    agent_language: string;
+	    max_concurrent_agents: number;
 	    graph_depth: number;
 	    graph_neighbor_limit: number;
 	    graph_context_limit: number;
@@ -107,6 +108,7 @@ export namespace config {
 	        this.active_agent = source["active_agent"];
 	        this.auto_start_agents = source["auto_start_agents"];
 	        this.agent_language = source["agent_language"];
+	        this.max_concurrent_agents = source["max_concurrent_agents"];
 	        this.graph_depth = source["graph_depth"];
 	        this.graph_neighbor_limit = source["graph_neighbor_limit"];
 	        this.graph_context_limit = source["graph_context_limit"];
@@ -132,6 +134,384 @@ export namespace config {
 		}
 	}
 	
+
+}
+
+export namespace db {
+	
+	export class Agent {
+	    id: number[];
+	    // Go type: time
+	    created_at: any;
+	    // Go type: time
+	    updated_at: any;
+	    name: string;
+	    role: string;
+	    status: string;
+	    reports_to?: number[];
+	    capabilities: string;
+	    budget_monthly_cents: number;
+	    spent_monthly_cents: number;
+	    // Go type: time
+	    last_heartbeat_at: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new Agent(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.created_at = this.convertValues(source["created_at"], null);
+	        this.updated_at = this.convertValues(source["updated_at"], null);
+	        this.name = source["name"];
+	        this.role = source["role"];
+	        this.status = source["status"];
+	        this.reports_to = source["reports_to"];
+	        this.capabilities = source["capabilities"];
+	        this.budget_monthly_cents = source["budget_monthly_cents"];
+	        this.spent_monthly_cents = source["spent_monthly_cents"];
+	        this.last_heartbeat_at = this.convertValues(source["last_heartbeat_at"], null);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class AgentSecret {
+	    id: number[];
+	    // Go type: time
+	    created_at: any;
+	    // Go type: time
+	    updated_at: any;
+	    agent_id: number[];
+	    key: string;
+	    value: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AgentSecret(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.created_at = this.convertValues(source["created_at"], null);
+	        this.updated_at = this.convertValues(source["updated_at"], null);
+	        this.agent_id = source["agent_id"];
+	        this.key = source["key"];
+	        this.value = source["value"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Approval {
+	    id: number[];
+	    // Go type: time
+	    created_at: any;
+	    // Go type: time
+	    updated_at: any;
+	    type: string;
+	    requested_by_agent_id?: number[];
+	    status: string;
+	    payload: string;
+	    decision_note: string;
+	    // Go type: time
+	    decided_at?: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new Approval(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.created_at = this.convertValues(source["created_at"], null);
+	        this.updated_at = this.convertValues(source["updated_at"], null);
+	        this.type = source["type"];
+	        this.requested_by_agent_id = source["requested_by_agent_id"];
+	        this.status = source["status"];
+	        this.payload = source["payload"];
+	        this.decision_note = source["decision_note"];
+	        this.decided_at = this.convertValues(source["decided_at"], null);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Document {
+	    id: number[];
+	    // Go type: time
+	    created_at: any;
+	    // Go type: time
+	    updated_at: any;
+	    title: string;
+	    format: string;
+	    latest_body: string;
+	    latest_revision_number: number;
+	    issue_id?: number[];
+	    created_by_agent_id?: number[];
+	
+	    static createFrom(source: any = {}) {
+	        return new Document(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.created_at = this.convertValues(source["created_at"], null);
+	        this.updated_at = this.convertValues(source["updated_at"], null);
+	        this.title = source["title"];
+	        this.format = source["format"];
+	        this.latest_body = source["latest_body"];
+	        this.latest_revision_number = source["latest_revision_number"];
+	        this.issue_id = source["issue_id"];
+	        this.created_by_agent_id = source["created_by_agent_id"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Goal {
+	    id: number[];
+	    // Go type: time
+	    created_at: any;
+	    // Go type: time
+	    updated_at: any;
+	    title: string;
+	    description: string;
+	    level: string;
+	    parent_id?: number[];
+	    owner_agent_id?: number[];
+	    status: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Goal(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.created_at = this.convertValues(source["created_at"], null);
+	        this.updated_at = this.convertValues(source["updated_at"], null);
+	        this.title = source["title"];
+	        this.description = source["description"];
+	        this.level = source["level"];
+	        this.parent_id = source["parent_id"];
+	        this.owner_agent_id = source["owner_agent_id"];
+	        this.status = source["status"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Issue {
+	    id: number[];
+	    // Go type: time
+	    created_at: any;
+	    // Go type: time
+	    updated_at: any;
+	    project_id?: number[];
+	    goal_id?: number[];
+	    parent_id?: number[];
+	    title: string;
+	    description: string;
+	    status: string;
+	    priority: string;
+	    assignee_agent_id?: number[];
+	    assignee_agent?: Agent;
+	    created_by_agent_id?: number[];
+	    // Go type: time
+	    started_at?: any;
+	    // Go type: time
+	    completed_at?: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new Issue(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.created_at = this.convertValues(source["created_at"], null);
+	        this.updated_at = this.convertValues(source["updated_at"], null);
+	        this.project_id = source["project_id"];
+	        this.goal_id = source["goal_id"];
+	        this.parent_id = source["parent_id"];
+	        this.title = source["title"];
+	        this.description = source["description"];
+	        this.status = source["status"];
+	        this.priority = source["priority"];
+	        this.assignee_agent_id = source["assignee_agent_id"];
+	        this.assignee_agent = this.convertValues(source["assignee_agent"], Agent);
+	        this.created_by_agent_id = source["created_by_agent_id"];
+	        this.started_at = this.convertValues(source["started_at"], null);
+	        this.completed_at = this.convertValues(source["completed_at"], null);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class IssueComment {
+	    id: number[];
+	    // Go type: time
+	    created_at: any;
+	    // Go type: time
+	    updated_at: any;
+	    issue_id: number[];
+	    author_agent_id?: number[];
+	    author_agent?: Agent;
+	    body: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new IssueComment(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.created_at = this.convertValues(source["created_at"], null);
+	        this.updated_at = this.convertValues(source["updated_at"], null);
+	        this.issue_id = source["issue_id"];
+	        this.author_agent_id = source["author_agent_id"];
+	        this.author_agent = this.convertValues(source["author_agent"], Agent);
+	        this.body = source["body"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
+export namespace orchestration {
+	
+	export class ExecSummary {
+	    total_spent_cents: number;
+	    active_agents: number;
+	    paused_agents: number;
+	    open_issues: number;
+	    done_issues: number;
+	    pending_approvals: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ExecSummary(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.total_spent_cents = source["total_spent_cents"];
+	        this.active_agents = source["active_agents"];
+	        this.paused_agents = source["paused_agents"];
+	        this.open_issues = source["open_issues"];
+	        this.done_issues = source["done_issues"];
+	        this.pending_approvals = source["pending_approvals"];
+	    }
+	}
 
 }
 
