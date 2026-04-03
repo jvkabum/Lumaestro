@@ -15,7 +15,11 @@ import (
 	"time"
 
 	"Lumaestro/internal/config"
+	"Lumaestro/internal/db"
+	"Lumaestro/internal/orchestration"
 	"Lumaestro/internal/utils"
+
+	"github.com/google/uuid"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -79,6 +83,10 @@ type ACPSession struct {
 	// Usamos buffer de 1 para evitar bloqueios ao sinalizar.
 	initDone chan struct{}
 	
+	// Governança e Orquestração Swarm
+	AgentID        uuid.UUID
+	CurrentIssueID *uuid.UUID
+
 	// Trava de escrita para garantir integridade do JSON no stdin
 	WriteMu sync.Mutex
 
@@ -185,7 +193,7 @@ func (e *ACPExecutor) SendRPC(s *ACPSession, msg JSONRPCMessage) error {
 }
 
 // StartSession inicia o Gemini CLI com a flag --acp. Se loadSessionID for fornecido, tenta restaurar essa sessão em vez de criar uma nova.
-func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID string, loadSessionID string) error {
+func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID string, loadSessionID string, agentID uuid.UUID, issueID *uuid.UUID) error {
 	e.Mu.Lock()
 	defer e.Mu.Unlock()
 	e.Ctx = ctx
@@ -265,6 +273,17 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		}
 	}
 
+	// 🔐 SISTEMA DE SEGREDOS (Enterprise Vault)
+	// Injeta API Keys específicas deste agente registradas no banco.
+	if agentID != uuid.Nil {
+		var secrets []db.AgentSecret
+		if err := db.InstanceDB.Where("agent_id = ?", agentID).Find(&secrets).Error; err == nil {
+			for _, s := range secrets {
+				cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", s.Key, s.Value))
+			}
+		}
+	}
+
 	// No Windows com espaços no caminho, o CommandContext às vezes precisa de ajuda.
 	// Garantimos que o caminho seja tratado como uma string única.
 
@@ -291,12 +310,14 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 	}
 
 	session := &ACPSession{
-		ID:        sessionID,
-		AgentName: agent,
-		Cmd:       cmd,
-		Stdin:     stdin,
-		Cancel:    cancel,
-		initDone:  make(chan struct{}, 1),
+		ID:             sessionID,
+		AgentName:      agent,
+		Cmd:            cmd,
+		Stdin:          stdin,
+		Cancel:         cancel,
+		initDone:       make(chan struct{}, 1),
+		AgentID:        agentID,
+		CurrentIssueID: issueID,
 	}
 
 	e.ActiveSessions[sessionID] = session
@@ -578,6 +599,13 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 				h.Session.isLoggingThought = false
 				h.Session.isLoggingMessage = false
 
+				// 🪙 LOGICA DE CUSTO (Paperclip Auto-Report)
+				// Em V1, simulamos um gasto fixo por turno enquanto o CLI não expõe usage.usage
+				// Isso aciona o Hard-Stop Budget se o agente gastar demais.
+				if h.Session.AgentID != uuid.Nil {
+					_ = orchestration.RegistrarCusto(h.Session.AgentID, h.Session.CurrentIssueID, "google", "gemini-1.5-flash", 800, 400, 2) // ~2 centavos por turno
+				}
+
 				// Sinaliza para o AskSync informando que o texto acabou (EOF virtual)
 				h.Executor.turnMu.Lock()
 				if ch, ok := h.Executor.turnChannels[h.Session.ID]; ok {
@@ -805,6 +833,58 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 					result = map[string]interface{}{"result": output}
 				} else {
 					rpcErr = &RPCError{Code: -32005, Message: err.Error()}
+				}
+			} else if toolName == "delegate_task" {
+				// 🤖 FERRAMENTA NATIVA: HANDOFF (DELEGAÇÃO)
+				var p struct {
+					ToAgentID   string `json:"to_agent_id"`
+					Title       string `json:"title"`
+					Description string `json:"description"`
+				}
+				if json.Unmarshal(params, &p) == nil {
+					targetID, _ := uuid.Parse(p.ToAgentID)
+					_, err := orchestration.DelegateTask(h.Session.AgentID, targetID, h.Session.CurrentIssueID, p.Title, p.Description)
+					if err == nil {
+						result = map[string]string{"success": "Trabalho delegado com sucesso!"}
+					} else {
+						rpcErr = &RPCError{Code: -32006, Message: err.Error()}
+					}
+				}
+			} else if toolName == "complete_task" {
+				// 🏁 FERRAMENTA NATIVA: CONCLUSÃO
+				if h.Session.CurrentIssueID != nil {
+					err := orchestration.CompleteTask(h.Session.AgentID, *h.Session.CurrentIssueID)
+					if err == nil {
+						result = map[string]string{"success": "Tarefa marcada como concluída e arquivada."}
+					} else {
+						rpcErr = &RPCError{Code: -32007, Message: err.Error()}
+					}
+				} else {
+					rpcErr = &RPCError{Code: 404, Message: "Nenhum ticket ativo vinculado a esta sessão para encerrar."}
+				}
+			} else if toolName == "request_approval" {
+				// ✋ FERRAMENTA NATIVA: PEDIDO DE APROVAÇÃO (PROATIVO)
+				var p struct {
+					Topic   string `json:"topic"`
+					Details string `json:"details"`
+				}
+				if json.Unmarshal(params, &p) == nil {
+					// Cria solicitação de aprovação no banco
+					approval := db.Approval{
+						Type:               "agent_request",
+						RequestedByAgentID: &h.Session.AgentID,
+						Payload:            fmt.Sprintf("TÓPICO: %s\n\nDETALHES: %s", p.Topic, p.Details),
+					}
+					if err := db.InstanceDB.Create(&approval).Error; err == nil {
+						// PAUSA O AGENTE IMEDIATAMENTE (Portão Ativo)
+						db.InstanceDB.Model(&db.Agent{}).Where("id = ?", h.Session.AgentID).Update("status", "paused")
+						result = map[string]string{
+							"success": "Solicitação enviada. A execução permanecerá pausada até que o humano aprove.",
+							"approval_id": approval.ID.String(),
+						}
+					} else {
+						rpcErr = &RPCError{Code: -32008, Message: err.Error()}
+					}
 				}
 			} else {
 				rpcErr = &RPCError{Code: -32601, Message: fmt.Sprintf("Ferramenta '%s' não registrada", toolName)}

@@ -41,6 +41,7 @@ type Config struct {
 	ActiveAgent       string         `json:"active_agent"`
 	AutoStartAgents   []string       `json:"auto_start_agents"`
 	AgentLanguage     string         `json:"agent_language"`
+	MaxConcurrentAgents int          `json:"max_concurrent_agents"` // 🌟 Limite de Enxame (Swarm)
 	GraphDepth        int            `json:"graph_depth"`         // Profundidade de navegação de links (padrão: 1)
 	GraphNeighborLimit int            `json:"graph_neighbor_limit"` // Máximo de vizinhos por nó (padrão: 5)
 	GraphContextLimit int            `json:"graph_context_limit"` // Limite de chars do contexto expandido (padrão: 4000)
