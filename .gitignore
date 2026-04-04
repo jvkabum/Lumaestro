@@ -12,3 +12,11 @@ acp-test-script.*
 # Arquivos temporários de teste (NUNCA commitar - quebra wails dev!)
 tmp/
 *.test.go
+
+# 📊 Banco de Dados Local (DuckDB / SQLite / Cache)
+.lumaestro/
+.lumaestro.json
+.context/
+*.db
+*.db-journal
+*.db.wal
