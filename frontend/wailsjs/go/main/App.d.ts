@@ -9,11 +9,15 @@ export function AddComment(arg1:string,arg2:string):Promise<string>;
 
 export function AddGeminiAccount(arg1:string):Promise<void>;
 
+export function AddGoldSample(arg1:string,arg2:string,arg3:string):Promise<string>;
+
 export function AddMCPServer(arg1:string,arg2:string):Promise<string>;
 
 export function AnalyzeGraphHealth():Promise<Record<string, any>>;
 
 export function ApproveAction(arg1:string,arg2:string):Promise<string>;
+
+export function ApprovePromptVariant(arg1:string):Promise<string>;
 
 export function AskAgent(arg1:string,arg2:string):Promise<string>;
 
@@ -26,6 +30,10 @@ export function CreateAgent(arg1:string,arg2:string,arg3:string,arg4:number):Pro
 export function CreateGoal(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<string>;
 
 export function CreateTask(arg1:string,arg2:string,arg3:string):Promise<string>;
+
+export function ExportRLHFDataset():Promise<string>;
+
+export function ExportTelemetry():Promise<string>;
 
 export function FixEnvironment():Promise<string>;
 
@@ -49,11 +57,21 @@ export function GetIssueTimeline(arg1:string):Promise<Array<db.IssueComment>>;
 
 export function GetIssues():Promise<Array<db.Issue>>;
 
+export function GetLatestSpans():Promise<Array<Record<string, any>>>;
+
+export function GetLightningStats():Promise<Record<string, any>>;
+
 export function GetNodeDetails(arg1:string):Promise<Record<string, any>>;
 
 export function GetPendingApprovals():Promise<Array<db.Approval>>;
 
 export function GetProjectDoc(arg1:string):Promise<string>;
+
+export function GetPromptCandidates():Promise<Array<Record<string, any>>>;
+
+export function GetPromptHistory(arg1:string):Promise<Array<Record<string, any>>>;
+
+export function GetSkeletalGraph():Promise<Record<string, any>>;
 
 export function GetToolsStatus():Promise<Record<string, boolean>>;
 
@@ -75,6 +93,8 @@ export function NewAgentSession(arg1:string):Promise<void>;
 
 export function OpenFileInEditor(arg1:string):Promise<void>;
 
+export function PruneGraph(arg1:number):Promise<string>;
+
 export function PurgeCache():Promise<string>;
 
 export function RejectAction(arg1:string,arg2:string):Promise<string>;
@@ -85,6 +105,8 @@ export function ResizeTerminal(arg1:string,arg2:number,arg3:number):Promise<void
 
 export function ResolveConflict(arg1:string,arg2:string,arg3:string,arg4:number,arg5:string,arg6:string):Promise<string>;
 
+export function RunReconScan():Promise<string>;
+
 export function RunVectorDiagnostic():Promise<Record<string, any>>;
 
 export function SaveConfig(arg1:config.Config):Promise<string>;
@@ -92,6 +114,8 @@ export function SaveConfig(arg1:config.Config):Promise<string>;
 export function ScanVault():Promise<string>;
 
 export function SendAgentInput(arg1:string,arg2:string,arg3:Array<Record<string, string>>):Promise<void>;
+
+export function SendMessageToSwarm(arg1:string,arg2:string):Promise<string>;
 
 export function SendTerminalData(arg1:string,arg2:string):Promise<void>;
 
@@ -112,6 +136,8 @@ export function SubmitReview(arg1:string,arg2:boolean):Promise<void>;
 export function SwitchGeminiAccount(arg1:string):Promise<void>;
 
 export function SyncAllNodes():Promise<void>;
+
+export function TriggerReflection(arg1:string):Promise<string>;
 
 export function UpdateAgentSecret(arg1:string,arg2:string,arg3:string):Promise<string>;
 

@@ -1,5 +1,10 @@
 package lightning
 
+/*
+#cgo CFLAGS: -I${SRCDIR}/../../deps/duckdb
+#cgo LDFLAGS: -L${SRCDIR}/../../deps/duckdb -lduckdb
+*/
+import "C"
 import (
 	"database/sql"
 	"encoding/json"

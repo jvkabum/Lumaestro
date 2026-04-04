@@ -10,6 +10,10 @@ export function AddGeminiAccount(arg1) {
   return window['go']['main']['App']['AddGeminiAccount'](arg1);
 }
 
+export function AddGoldSample(arg1, arg2, arg3) {
+  return window['go']['main']['App']['AddGoldSample'](arg1, arg2, arg3);
+}
+
 export function AddMCPServer(arg1, arg2) {
   return window['go']['main']['App']['AddMCPServer'](arg1, arg2);
 }
@@ -20,6 +24,10 @@ export function AnalyzeGraphHealth() {
 
 export function ApproveAction(arg1, arg2) {
   return window['go']['main']['App']['ApproveAction'](arg1, arg2);
+}
+
+export function ApprovePromptVariant(arg1) {
+  return window['go']['main']['App']['ApprovePromptVariant'](arg1);
 }
 
 export function AskAgent(arg1, arg2) {
@@ -44,6 +52,14 @@ export function CreateGoal(arg1, arg2, arg3, arg4, arg5) {
 
 export function CreateTask(arg1, arg2, arg3) {
   return window['go']['main']['App']['CreateTask'](arg1, arg2, arg3);
+}
+
+export function ExportRLHFDataset() {
+  return window['go']['main']['App']['ExportRLHFDataset']();
+}
+
+export function ExportTelemetry() {
+  return window['go']['main']['App']['ExportTelemetry']();
 }
 
 export function FixEnvironment() {
@@ -90,6 +106,14 @@ export function GetIssues() {
   return window['go']['main']['App']['GetIssues']();
 }
 
+export function GetLatestSpans() {
+  return window['go']['main']['App']['GetLatestSpans']();
+}
+
+export function GetLightningStats() {
+  return window['go']['main']['App']['GetLightningStats']();
+}
+
 export function GetNodeDetails(arg1) {
   return window['go']['main']['App']['GetNodeDetails'](arg1);
 }
@@ -100,6 +124,18 @@ export function GetPendingApprovals() {
 
 export function GetProjectDoc(arg1) {
   return window['go']['main']['App']['GetProjectDoc'](arg1);
+}
+
+export function GetPromptCandidates() {
+  return window['go']['main']['App']['GetPromptCandidates']();
+}
+
+export function GetPromptHistory(arg1) {
+  return window['go']['main']['App']['GetPromptHistory'](arg1);
+}
+
+export function GetSkeletalGraph() {
+  return window['go']['main']['App']['GetSkeletalGraph']();
 }
 
 export function GetToolsStatus() {
@@ -142,6 +178,10 @@ export function OpenFileInEditor(arg1) {
   return window['go']['main']['App']['OpenFileInEditor'](arg1);
 }
 
+export function PruneGraph(arg1) {
+  return window['go']['main']['App']['PruneGraph'](arg1);
+}
+
 export function PurgeCache() {
   return window['go']['main']['App']['PurgeCache']();
 }
@@ -162,6 +202,10 @@ export function ResolveConflict(arg1, arg2, arg3, arg4, arg5, arg6) {
   return window['go']['main']['App']['ResolveConflict'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
 
+export function RunReconScan() {
+  return window['go']['main']['App']['RunReconScan']();
+}
+
 export function RunVectorDiagnostic() {
   return window['go']['main']['App']['RunVectorDiagnostic']();
 }
@@ -176,6 +220,10 @@ export function ScanVault() {
 
 export function SendAgentInput(arg1, arg2, arg3) {
   return window['go']['main']['App']['SendAgentInput'](arg1, arg2, arg3);
+}
+
+export function SendMessageToSwarm(arg1, arg2) {
+  return window['go']['main']['App']['SendMessageToSwarm'](arg1, arg2);
 }
 
 export function SendTerminalData(arg1, arg2) {
@@ -216,6 +264,10 @@ export function SwitchGeminiAccount(arg1) {
 
 export function SyncAllNodes() {
   return window['go']['main']['App']['SyncAllNodes']();
+}
+
+export function TriggerReflection(arg1) {
+  return window['go']['main']['App']['TriggerReflection'](arg1);
 }
 
 export function UpdateAgentSecret(arg1, arg2, arg3) {

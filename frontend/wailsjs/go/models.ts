@@ -89,6 +89,8 @@ export namespace config {
 	    graph_neighbor_limit: number;
 	    graph_context_limit: number;
 	    security: SecurityConfig;
+	    lightning_enabled: boolean;
+	    lightning_proxy_port: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Config(source);
@@ -113,6 +115,8 @@ export namespace config {
 	        this.graph_neighbor_limit = source["graph_neighbor_limit"];
 	        this.graph_context_limit = source["graph_context_limit"];
 	        this.security = this.convertValues(source["security"], SecurityConfig);
+	        this.lightning_enabled = source["lightning_enabled"];
+	        this.lightning_proxy_port = source["lightning_proxy_port"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
