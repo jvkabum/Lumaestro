@@ -1,293 +1,33 @@
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
-import { GetConfig, SaveConfig, GetToolsStatus, InstallTool, SetupTool, AddGeminiAccount, SwitchGeminiAccount, LoginGeminiAccount, AddMCPServer, ListMCPServers, ResetQdrantDB } from '../../wailsjs/go/core/App'
-import { EventsOn } from '../../wailsjs/runtime'
+import { onMounted } from 'vue'
+import { useSettingsStore } from '../stores/settings'
+import { useSettingsConfig } from '../composables/useSettingsConfig'
+import { useSettingsTools } from '../composables/useSettingsTools'
+import { useSettingsMCP } from '../composables/useSettingsMCP'
+import { useSettingsAccounts } from '../composables/useSettingsAccounts'
+import { useSettingsProjects } from '../composables/useSettingsProjects'
 
-const config = ref({
-  obsidian_vault_path: '',
-  qdrant_url: '',
-  qdrant_api_key: '',
-  gemini_api_key: '',
-  use_gemini_api_key: false,
-  gemini_accounts: [],
-  claude_api_key: '',
-  use_claude_api_key: false,
-  active_agent: 'gemini',
-  auto_start_agents: [],
-  agent_language: 'Português do Brasil',
-  graph_depth: 1,
-  graph_neighbor_limit: 5,
-  graph_context_limit: 4000,
-  security: {
-    allow_read: false,
-    allow_write: false,
-    allow_create: false,
-    allow_delete: false,
-    allow_move: false,
-    allow_run_commands: false,
-    full_machine_access: false
-  }
-})
+// ── Store Pinia ──
+const store = useSettingsStore()
 
-// Helpers para auto-start toggles
-const isAutoStart = (agent) => {
-  return (config.value.auto_start_agents || []).includes(agent)
-}
+// ── Composables ──
+const { 
+  loadConfig, refreshStatus, save, initInstallerLogs, 
+  isAutoStart, toggleAutoStart, toggleExplorationMode,
+  handleResetDB, runDiagnostic, getAuthLabel, getAuthStyle
+} = useSettingsConfig()
 
-const toggleAutoStart = async (agent) => {
-  if (!config.value.auto_start_agents) {
-    config.value.auto_start_agents = []
-  }
-  const idx = config.value.auto_start_agents.indexOf(agent)
-  if (idx >= 0) {
-    config.value.auto_start_agents.splice(idx, 1)
-  } else {
-    config.value.auto_start_agents.push(agent)
-  }
-  await SaveConfig(config.value)
-}
+const { install, setup } = useSettingsTools()
+const { addMCPServer, listMCPServers } = useSettingsMCP()
+const { handleAddAccount, handleLoginAccount, handleSwitchAccount } = useSettingsAccounts()
+const { handleAddProject, handleSelectDirectory } = useSettingsProjects()
 
-const status = ref({
-  qdrant: false,
-  tools: {
-    gemini: false,
-    claude: false,
-    obsidian: false,
-    claude_auth: false,
-    gemini_auth: false
-  }
-})
-
-const installLogs = ref([])
-const installStatus = ref('')
-const logContainer = ref(null)
-
-const scrollToConsole = async () => {
-  await nextTick()
-  setTimeout(() => {
-    const view = document.querySelector('.settings-view')
-    if (view) {
-      view.scrollTo({
-        top: view.scrollHeight,
-        behavior: 'smooth'
-      })
-    }
-  }, 100)
-}
-
-onMounted(async () => {
-  try {
-    const savedConfig = await GetConfig()
-    // alert("DEBUG WAILS: " + JSON.stringify(savedConfig))
-    if (savedConfig && Object.keys(savedConfig).length > 0) {
-      // Fazemos o merge dos valores recebidos com os valores defaults locais (segurança!)
-      config.value = Object.assign({}, config.value, savedConfig)
-    } else {
-      console.warn("Nenhuma config carregada do backend. Usando defaults.")
-    }
-  } catch(e) {
-    alert("ERRO RARO DE COMUNICAÇÃO: " + e)
-  }
-  
-  // Inicializa o estado do modo de exploração
-  isExplorationMode.value = await window.go.main.App.IsExplorationMode()
-
+// ── Lifecycle ──
+onMounted(() => {
+  loadConfig()
   refreshStatus()
-
-  EventsOn('installer:log', (log) => {
-    installLogs.value.push(log)
-    if (logContainer.value) {
-      setTimeout(() => {
-        logContainer.value.scrollTop = logContainer.value.scrollHeight
-      }, 10)
-    }
-  })
+  initInstallerLogs()
 })
-
-const refreshStatus = async () => {
-  status.value.tools = await GetToolsStatus()
-}
-
-const save = async () => {
-  try {
-    const res = await SaveConfig(config.value)
-    alert(res)
-    refreshStatus()
-  } catch (err) {
-    alert("Erro na comunicação Wails ao salvar: " + err)
-  }
-}
-
-const install = async (name) => {
-  try {
-    installLogs.value = []
-    installStatus.value = `Iniciando operação para ${name}...`
-    scrollToConsole()
-    const res = await InstallTool(name)
-    installStatus.value = res ? res : "Operação finalizada."
-  } catch (err) {
-    installStatus.value = `ERRO Crítico: ${err}`
-  }
-  refreshStatus()
-}
-
-const setup = async (name) => {
-  installStatus.value = `Abrindo terminal de configuração para ${name}...`
-  scrollToConsole()
-  const res = await SetupTool(name)
-  installStatus.value = res
-}
-
-const getAuthLabel = (agent) => {
-  if (config.value[`use_${agent}_api_key`]) {
-    return 'CHAVE API ⚡'
-  }
-  return agent === 'claude' ? 'FAZER LOGIN (OAUTH)' : 'CONFIGURAR LOGIN'
-}
-
-const getAuthStyle = (agent) => {
-  if (config.value[`use_${agent}_api_key`]) {
-    return 'border-color: rgba(245, 158, 11, 0.4); color: #fde68a; background: rgba(245, 158, 11, 0.08);'
-  }
-  return 'border-color: #3b82f6;'
-}
-
-const mcpName = ref('')
-const mcpCommand = ref('')
-const mcpServers = ref('')
-const showMcpList = ref(false)
-
-// Estados para Diagnóstico Vetorial
-const isDiagnosing = ref(false)
-const diagnosticResult = ref(null)
-
-const runDiagnostic = async () => {
-  isDiagnosing.value = true
-  diagnosticResult.value = null
-  try {
-    const res = await window.go.main.App.RunVectorDiagnostic()
-    diagnosticResult.value = res
-  } catch (e) {
-    diagnosticResult.value = { success: false, error: String(e) }
-  } finally {
-    isDiagnosing.value = false
-  }
-}
-
-const addMCPServer = async () => {
-  if (!mcpName.value || !mcpCommand.value) {
-    alert("Preencha o Nome e o Comando para o MCP")
-    return
-  }
-  installLogs.value = []
-  installStatus.value = `Instalando servidor MCP: ${mcpName.value}...`
-  scrollToConsole()
-  const res = await AddMCPServer(mcpName.value, mcpCommand.value)
-  installStatus.value = "Instalação do MCP Finalizada."
-  mcpName.value = ''
-  mcpCommand.value = ''
-  alert("Retorno do Terminal:\n" + res)
-}
-
-const listMCPServers = async () => {
-  const res = await ListMCPServers()
-  mcpServers.value = res
-  showMcpList.value = true
-}
-
-// Funções de Multi-Conta
-const handleAddAccount = async () => {
-  if (!newAccName.value) return
-  await AddGeminiAccount(newAccName.value)
-  newAccName.value = ''
-  const cfg = await GetConfig()
-  if (cfg) config.value = cfg
-}
-
-const handleLoginAccount = async (name) => {
-  await LoginGeminiAccount(name)
-}
-
-const handleSwitchAccount = async (name) => {
-  await SwitchGeminiAccount(name)
-  const cfg = await GetConfig()
-  if (cfg) config.value = cfg
-}
-
-const activeTab = ref('geral')
-const newAccName = ref('')
-
-const isExplorationMode = ref(false)
-
-const geminiKeyCount = computed(() => {
-  const raw = (config.value.gemini_api_key || '').trim()
-  if (!raw) return 0
-  return raw.split(',').filter(k => k.trim() !== '').length
-})
-
-const toggleExplorationMode = async () => {
-  const res = await window.go.main.App.SetExplorationMode(isExplorationMode.value)
-  console.log(res)
-}
-
-const showResetModal = ref(false)
-const isResetting = ref(false)
-
-const handleResetDB = async () => {
-  isResetting.value = true
-  try {
-    const res = await ResetQdrantDB()
-    alert(res)
-    showResetModal.value = false
-    // Força atualização do status se necessário
-    refreshStatus()
-  } catch (e) {
-    alert("Erro ao resetar banco: " + e)
-  } finally {
-    isResetting.value = false
-  }
-}
-
-// 🪐 Estados para Painel de Repositórios / Aglomerados
-const repoPathInput = ref('')
-const coreNodeInput = ref('')
-const includeCodeToggle = ref(false)
-const repoStatusMsg = ref('')
-
-const handleAddProject = async () => {
-  if (!repoPathInput.value || !coreNodeInput.value) {
-    alert("Preencha todos os campos obrigatórios do Projeto Satélite.")
-    return
-  }
-  repoStatusMsg.value = "Aguarde... Engajando Crawlers no Repositório (Isso pode demorar dependendo da codebase)..."
-  try {
-    const res = await window.go.main.App.AddExternalProject(repoPathInput.value, coreNodeInput.value, includeCodeToggle.value)
-    if (res.success) {
-      alert("🪐 " + res.message)
-      const cfg = await GetConfig()
-      if (cfg) config.value = Object.assign({}, config.value, cfg)
-      repoPathInput.value = ''
-      coreNodeInput.value = ''
-      includeCodeToggle.value = false
-    } else {
-      alert("Erro: " + res.error)
-    }
-  } catch (e) {
-    alert("Falha Crítica ao vincular repositório: " + e)
-  }
-  repoStatusMsg.value = ''
-}
-
-const handleSelectDirectory = async () => {
-  try {
-    const dir = await window.go.main.App.SelectDirectory()
-    if (dir && dir.trim() !== '') {
-      repoPathInput.value = dir
-    }
-  } catch (e) {
-    console.warn("Navegador de pastas cancelado ou erro:", e)
-  }
-}
 </script>
 
 <template>
@@ -301,8 +41,8 @@ const handleSelectDirectory = async () => {
     <div class="tabs-nav-glass">
       <button v-for="tab in ['geral', 'qdrant', 'chaves', 'motores', 'contas', 'seguranca', 'mcp', 'repositórios']" 
               :key="tab"
-              @click="activeTab = tab" 
-              :class="{ 'active': activeTab === tab }" 
+              @click="store.activeTab = tab" 
+              :class="{ 'active': store.activeTab === tab }" 
               class="tab-btn-premium">
         {{ tab === 'contas' ? 'CONTAS GEMINI 💎' : tab.toUpperCase() }}
       </button>
@@ -310,13 +50,13 @@ const handleSelectDirectory = async () => {
 
     <div class="content-viewport">
       <!-- ABA GERAL -->
-      <section v-if="activeTab === 'geral'" class="glass-panel animate-slide-up">
+      <section v-if="store.activeTab === 'geral'" class="glass-panel animate-slide-up">
         <h2 class="section-title">Base da Sinfonia</h2>
         
         <div class="form-grid">
           <div class="premium-form-group">
             <label>Idioma Nativo do Agente</label>
-            <select v-model="config.agent_language" class="maestro-input">
+            <select v-model="store.config.agent_language" class="maestro-input">
               <option value="Português do Brasil">Português (Brasil)</option>
               <option value="English">English</option>
               <option value="Español">Español</option>
@@ -329,13 +69,13 @@ const handleSelectDirectory = async () => {
 
           <div class="premium-form-group">
             <label>Caminho do Obsidian Vault</label>
-            <input v-model="config.obsidian_vault_path" type="text" class="maestro-input" placeholder="C:\Users\...\Obsidian" />
+            <input v-model="store.config.obsidian_vault_path" type="text" class="maestro-input" placeholder="C:\Users\...\Obsidian" />
           </div>
         </div>
 
         <div class="premium-form-group">
-          <label>Alcance da Teia (Vizinhos): <span class="highlight-val">{{ config.graph_neighbor_limit }}</span></label>
-          <input v-model.number="config.graph_neighbor_limit" type="range" min="1" max="25" step="1" class="maestro-range" />
+          <label>Alcance da Teia (Vizinhos): <span class="highlight-val">{{ store.config.graph_neighbor_limit }}</span></label>
+          <input v-model.number="store.config.graph_neighbor_limit" type="range" min="1" max="25" step="1" class="maestro-range" />
         </div>
 
         <!-- SEÇÃO NEURAL -->
@@ -347,11 +87,11 @@ const handleSelectDirectory = async () => {
                 Desativado: Prioriza notas que você acessa com frequência (Sinapses Fortes).
               </p>
            </div>
-           <div class="sec-toggle-wrapper" @click="isExplorationMode = !isExplorationMode; toggleExplorationMode()" style="align-self: center;">
-             <span v-if="isExplorationMode" class="sec-label-active" style="color: #a78bfa;">PURA (BRUTA) 🔍</span>
+           <div class="sec-toggle-wrapper" @click="store.isExplorationMode = !store.isExplorationMode; toggleExplorationMode()" style="align-self: center;">
+             <span v-if="store.isExplorationMode" class="sec-label-active" style="color: #a78bfa;">PURA (BRUTA) 🔍</span>
              <span v-else class="sec-label-blocked" style="color: #f9a8d4; opacity: 0.9;">SINÁPTICA 🧠</span>
-             <div class="maestro-switch" :class="{'on': isExplorationMode}" :style="isExplorationMode ? 'border-color: #8b5cf6; box-shadow: 0 0 12px rgba(139, 92, 246, 0.4); background: rgba(139, 92, 246, 0.2);' : ''">
-               <div class="maestro-switch-thumb" :style="isExplorationMode ? 'background: #a78bfa;' : ''"></div>
+             <div class="maestro-switch" :class="{'on': store.isExplorationMode}" :style="store.isExplorationMode ? 'border-color: #8b5cf6; box-shadow: 0 0 12px rgba(139, 92, 246, 0.4); background: rgba(139, 92, 246, 0.2);' : ''">
+               <div class="maestro-switch-thumb" :style="store.isExplorationMode ? 'background: #a78bfa;' : ''"></div>
              </div>
            </div>
         </div>
@@ -365,12 +105,12 @@ const handleSelectDirectory = async () => {
         <div class="danger-zone-compact" style="margin-top: 4rem; padding: 2rem; border-top: 1px solid rgba(239, 68, 68, 0.1);">
            <h3 style="color: #ef4444; font-size: 0.8rem; letter-spacing: 2px; margin-bottom: 1rem;">CUIDADO: ZONA DE PERIGO</h3>
            <p style="color: var(--p-text-dim); font-size: 0.75rem; margin-bottom: 1.5rem;">Deseja apagar todos os vetores e memórias do banco de dados?</p>
-           <button @click="showResetModal = true" class="btn-reset-db">EXPURGAR BANCO VETORIAL (RESET)</button>
+           <button @click="store.showResetModal = true" class="btn-reset-db">EXPURGAR BANCO VETORIAL (RESET)</button>
         </div>
       </section>
 
       <!-- ABA QDRANT (MEMÓRIA VETORIAL) -->
-      <section v-if="activeTab === 'qdrant'" class="glass-panel animate-slide-up">
+      <section v-if="store.activeTab === 'qdrant'" class="glass-panel animate-slide-up">
         <h2 class="section-title">Memória Vetorial (Qdrant)</h2>
         <p class="subtitle-maestro" style="color: var(--p-text-dim); margin-bottom: 2rem; font-size: 0.9rem;">
           Configure o banco de dados que armazena o conhecimento de longo prazo e as conexões semânticas da IA.
@@ -378,12 +118,12 @@ const handleSelectDirectory = async () => {
         
         <div class="premium-form-group">
           <label>URL do Qdrant Cloud (Instância)</label>
-          <input v-model="config.qdrant_url" type="text" class="maestro-input" placeholder="http://qdrant-seu-id.sslip.io" />
+          <input v-model="store.config.qdrant_url" type="text" class="maestro-input" placeholder="http://qdrant-seu-id.sslip.io" />
         </div>
 
         <div class="premium-form-group">
           <label>Qdrant API Key (Coolify)</label>
-          <input v-model="config.qdrant_api_key" type="password" class="maestro-input" placeholder="••••••••" />
+          <input v-model="store.config.qdrant_api_key" type="password" class="maestro-input" placeholder="••••••••" />
         </div>
 
         <button @click="save" class="btn-glow-blue" style="width: 100%; margin-bottom: 1rem;">SALVAR CONFIGURAÇÃO VETORIAL</button>
@@ -395,37 +135,37 @@ const handleSelectDirectory = async () => {
               <h3 style="margin: 0; color: #fff; font-size: 1.1rem;">Integridade Vetorial</h3>
               <p style="margin: 0; font-size: 0.8rem; color: var(--p-text-dim);">Valide o pipeline Gemini + Qdrant Cloud</p>
             </div>
-            <button @click="runDiagnostic" :disabled="isDiagnosing" class="btn-diag" style="padding: 0.6rem 1.2rem; border-radius: 12px; background: rgba(59, 130, 246, 0.1); border: 1px solid var(--primary); color: #fff; cursor: pointer;">
-              <span v-if="!isDiagnosing">⚡ EXECUTAR STRESS TEST</span>
+            <button @click="runDiagnostic" :disabled="store.isDiagnosing" class="btn-diag" style="padding: 0.6rem 1.2rem; border-radius: 12px; background: rgba(59, 130, 246, 0.1); border: 1px solid var(--primary); color: #fff; cursor: pointer;">
+              <span v-if="!store.isDiagnosing">⚡ EXECUTAR STRESS TEST</span>
               <span v-else>⏳ PROCESSANDO...</span>
             </button>
           </div>
 
-          <div v-if="diagnosticResult" class="diag-results animate-fade-in" style="background: rgba(0,0,0,0.3); padding: 1.5rem; border-radius: 15px;">
-            <div v-if="diagnosticResult.success" class="res-success">
+          <div v-if="store.diagnosticResult" class="diag-results animate-fade-in" style="background: rgba(0,0,0,0.3); padding: 1.5rem; border-radius: 15px;">
+            <div v-if="store.diagnosticResult.success" class="res-success">
                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1rem;">
                   <div class="stat-box" style="text-align: center;">
                     <span style="font-size: 0.7rem; display: block; color: var(--p-text-dim);">GEMINI EMBED</span>
-                    <b style="color: #4ade80;">{{ diagnosticResult.embed_ms }}ms</b>
+                    <b style="color: #4ade80;">{{ store.diagnosticResult.embed_ms }}ms</b>
                   </div>
                   <div class="stat-box" style="text-align: center;">
                     <span style="font-size: 0.7rem; display: block; color: var(--p-text-dim);">QDRANT UPSERT</span>
-                    <b style="color: #4ade80;">{{ diagnosticResult.qdrant_ms }}ms</b>
+                    <b style="color: #4ade80;">{{ store.diagnosticResult.qdrant_ms }}ms</b>
                   </div>
                   <div class="stat-box" style="text-align: center;">
                     <span style="font-size: 0.7rem; display: block; color: var(--p-text-dim);">TOTAL CICLO</span>
-                    <b style="color: var(--primary);">{{ diagnosticResult.total_ms }}ms</b>
+                    <b style="color: var(--primary);">{{ store.diagnosticResult.total_ms }}ms</b>
                   </div>
                </div>
                <div class="vector-preview">
                   <label style="font-size: 0.7rem; color: var(--p-text-dim);">VETOR GERADO (DUMP 5-DIM):</label>
                   <code style="display: block; background: #000; padding: 0.8rem; border-radius: 10px; font-size: 0.8rem; color: #3b82f6; margin-top: 0.5rem; border: 1px solid rgba(59, 130, 246, 0.3);">
-                    {{ diagnosticResult.vector_preview }}...
+                    {{ store.diagnosticResult.vector_preview }}...
                   </code>
                </div>
             </div>
             <div v-else class="res-error" style="color: #ef4444; font-size: 0.9rem;">
-              ❌ ERRO NO DIAGNÓSTICO: {{ diagnosticResult.error }}
+              ❌ ERRO NO DIAGNÓSTICO: {{ store.diagnosticResult.error }}
             </div>
           </div>
         </div>
@@ -433,12 +173,12 @@ const handleSelectDirectory = async () => {
         <div class="danger-zone-compact" style="margin-top: 2rem; padding: 1.5rem; border: 1px solid rgba(239, 68, 68, 0.1); border-radius: 12px; background: rgba(239, 68, 68, 0.02);">
            <h3 style="color: #ef4444; font-size: 0.7rem; letter-spacing: 2px; margin-bottom: 0.5rem;">ZONA DE PURGA</h3>
            <p style="color: var(--p-text-dim); font-size: 0.7rem; margin-bottom: 1rem;">Deseja apagar todos os vetores deste banco? Esta ação é irreversível.</p>
-           <button @click="showResetModal = true" class="btn-reset-db" style="padding: 10px 20px; font-size: 0.7rem;">RESETAR BANCO QDRANT</button>
+           <button @click="store.showResetModal = true" class="btn-reset-db" style="padding: 10px 20px; font-size: 0.7rem;">RESETAR BANCO QDRANT</button>
         </div>
       </section>
 
       <!-- ABA CHAVES (INJEÇÃO DE CHAVES DIRETAS) -->
-      <section v-if="activeTab === 'chaves'" class="glass-panel animate-slide-up">
+      <section v-if="store.activeTab === 'chaves'" class="glass-panel animate-slide-up">
         <h2 class="section-title">Chaves de API (Conexão Legada)</h2>
         <p style="color: var(--p-text-dim); margin-bottom: 2rem; font-size: 0.9rem;">
           Gerencie injeções diretas de tokens de acesso para execução em modo bypass em vez do sistema nativo OAuth.
@@ -447,12 +187,12 @@ const handleSelectDirectory = async () => {
         <div class="premium-form-group">
           <label style="display: flex; align-items: center; justify-content: space-between;">
             <span>Gemini API Keys (Pool de Failover)</span>
-            <span v-if="geminiKeyCount > 0" style="background: rgba(59, 130, 246, 0.15); color: #3b82f6; padding: 3px 10px; border-radius: 8px; font-size: 0.65rem; font-weight: 900; letter-spacing: 1px;">
-              {{ geminiKeyCount }} CHAVE{{ geminiKeyCount > 1 ? 'S' : '' }} 🔑
+            <span v-if="store.geminiKeyCount > 0" style="background: rgba(59, 130, 246, 0.15); color: #3b82f6; padding: 3px 10px; border-radius: 8px; font-size: 0.65rem; font-weight: 900; letter-spacing: 1px;">
+              {{ store.geminiKeyCount }} CHAVE{{ store.geminiKeyCount > 1 ? 'S' : '' }} 🔑
             </span>
           </label>
           <textarea 
-            v-model="config.gemini_api_key" 
+            v-model="store.config.gemini_api_key" 
             class="maestro-input" 
             placeholder="AIzaSy...chave1, AIzaSy...chave2, AIzaSy...chave3"
             rows="3"
@@ -469,14 +209,14 @@ const handleSelectDirectory = async () => {
               <p style="margin: 8px 0 0; font-size: 0.8rem; color: var(--p-text-dim);">Usar chave legada em vez de Sessões OAuth.</p>
            </div>
            <label class="hybrid-toggle-maestro">
-              <input type="checkbox" v-model="config.use_gemini_api_key" />
+              <input type="checkbox" v-model="store.config.use_gemini_api_key" />
               <span class="m-slider-sec"></span>
            </label>
         </div>
 
         <div class="premium-form-group">
           <label>Claude API Key</label>
-          <input v-model="config.claude_api_key" type="password" class="maestro-input" placeholder="••••••••" :disabled="!config.use_claude_api_key" />
+          <input v-model="store.config.claude_api_key" type="password" class="maestro-input" placeholder="••••••••" :disabled="!store.config.use_claude_api_key" />
         </div>
 
         <div class="sec-card" style="margin-bottom: 2.5rem; padding: 1.5rem 2.5rem;">
@@ -485,7 +225,7 @@ const handleSelectDirectory = async () => {
               <p style="margin: 8px 0 0; font-size: 0.8rem; color: var(--p-text-dim);">Habilitar injeção direta de chave Anthropic.</p>
            </div>
            <label class="hybrid-toggle-maestro">
-              <input type="checkbox" v-model="config.use_claude_api_key" />
+              <input type="checkbox" v-model="store.config.use_claude_api_key" />
               <span class="m-slider-sec"></span>
            </label>
         </div>
@@ -494,7 +234,7 @@ const handleSelectDirectory = async () => {
       </section>
 
       <!-- ABA MOTORES (O CÉREBRO) -->
-      <section v-if="activeTab === 'motores'" class="glass-panel animate-slide-up">
+      <section v-if="store.activeTab === 'motores'" class="glass-panel animate-slide-up">
         <h2 class="section-title">Hub de Motores e Orquestração</h2>
         <p style="color: var(--p-text-dim); margin-bottom: 2rem; font-size: 0.9rem;">
           Estação de controle dos núcleos de inteligência. Acompanhe a disponibilidade binária e inicie os daemons em background.
@@ -512,9 +252,9 @@ const handleSelectDirectory = async () => {
                       </div>
                       <div>
                         <h4 style="margin: 0; font-weight: 900; color: #fff; font-size: 1.3rem; letter-spacing: 2px;">{{ tool.toUpperCase() }}</h4>
-                        <div class="engine-status-badge" :style="status.tools[tool] ? '' : 'border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.05);'">
-                          <span class="status-dot" :style="status.tools[tool] ? '' : 'background: #ef4444; box-shadow: none;'"></span> 
-                          {{ status.tools[tool] ? 'SISTEMA PRONTO' : 'NÃO INSTALADO' }}
+                        <div class="engine-status-badge" :style="store.status.tools[tool] ? '' : 'border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.05);'">
+                          <span class="status-dot" :style="store.status.tools[tool] ? '' : 'background: #ef4444; box-shadow: none;'"></span> 
+                          {{ store.status.tools[tool] ? 'SISTEMA PRONTO' : 'NÃO INSTALADO' }}
                         </div>
                       </div>
                    </div>
@@ -540,7 +280,7 @@ const handleSelectDirectory = async () => {
                    <button @click="install(tool)" class="unit-btn-solid" style="flex: 1.5;">
                      SINCRONIZAR
                    </button>
-                   <button v-if="status.tools[tool]" @click="setup(tool)" class="unit-btn-glow" :style="getAuthStyle(tool)" style="flex: 1;">
+                   <button v-if="store.status.tools[tool]" @click="setup(tool)" class="unit-btn-glow" :style="getAuthStyle(tool)" style="flex: 1;">
                       {{ getAuthLabel(tool) }}
                    </button>
                 </div>
@@ -550,7 +290,7 @@ const handleSelectDirectory = async () => {
       </section>
 
       <!-- ABA CONTAS GEMINI (OAUTH) -->
-      <section v-if="activeTab === 'contas'" class="glass-panel animate-slide-up">
+      <section v-if="store.activeTab === 'contas'" class="glass-panel animate-slide-up">
         <h2 class="section-title">Identidades Gemini OAuth</h2>
         <p class="subtitle-maestro" style="color: var(--p-text-dim); margin-bottom: 3rem; font-size: 1rem;">
           Gerencie múltiplas sessões isoladas do Google para alternar quotas de API e perfis em tempo real.
@@ -559,7 +299,7 @@ const handleSelectDirectory = async () => {
         <div class="premium-form-group" style="display: flex; gap: 1.5rem; align-items: flex-end; margin-bottom: 4rem;">
           <div style="flex: 1;">
             <label>Nome da Nova Identidade</label>
-            <input v-model="newAccName" placeholder="Ex: Trabalho, Pessoal, Pesquisa..." class="maestro-input" @keyup.enter="handleAddAccount" />
+            <input v-model="store.newAccName" placeholder="Ex: Trabalho, Pessoal, Pesquisa..." class="maestro-input" @keyup.enter="handleAddAccount" />
           </div>
           <button @click="handleAddAccount" class="btn-glow-blue" style="height: 60px; padding: 0 30px; font-size: 0.8rem;">
             CRIAR IDENTIDADE 💎
@@ -567,7 +307,7 @@ const handleSelectDirectory = async () => {
         </div>
 
         <div class="accounts-grid-premium">
-          <div v-for="acc in config.gemini_accounts" :key="acc.name" class="profile-card" :class="{ 'active-profile': acc.active }" style="display: flex; flex-direction: column;">
+          <div v-for="acc in store.config.gemini_accounts" :key="acc.name" class="profile-card" :class="{ 'active-profile': acc.active }" style="display: flex; flex-direction: column;">
             <div class="profile-header" style="display: flex; align-items: center; gap: 1.5rem; margin-bottom: 2.5rem;">
               <div class="avatar-glow" style="flex-shrink: 0;">{{ acc.name[0].toUpperCase() }}</div>
               <div class="profile-meta" style="min-width: 0; flex: 1;">
@@ -595,7 +335,7 @@ const handleSelectDirectory = async () => {
       </section>
 
       <!-- ABA SEGURANÇA (FIREWALL PREMIER) -->
-      <section v-if="activeTab === 'seguranca'" class="glass-panel animate-slide-up" style="border-color: rgba(239, 68, 68, 0.15);">
+      <section v-if="store.activeTab === 'seguranca'" class="glass-panel animate-slide-up" style="border-color: rgba(239, 68, 68, 0.15);">
          <div class="header-with-badge" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 3rem;">
            <div>
               <h2 class="section-title" style="color: #ef4444; letter-spacing: 6px;">🛡️ Firewall da Sinfonia</h2>
@@ -621,16 +361,16 @@ const handleSelectDirectory = async () => {
                    </p>
                 </div>
                 
-                <div class="sec-toggle-wrapper" @click="config.security[key] = !config.security[key]">
+                <div class="sec-toggle-wrapper" @click="store.config.security[key] = !store.config.security[key]">
                    <div class="maestro-switch" :class="{ 
-                     'on': config.security[key], 
-                     'critical-on': config.security[key] && (key === 'full_machine_access' || key === 'allow_run_commands' || key === 'allow_delete')
+                     'on': store.config.security[key], 
+                     'critical-on': store.config.security[key] && (key === 'full_machine_access' || key === 'allow_run_commands' || key === 'allow_delete')
                    }">
                      <div class="maestro-switch-thumb" :class="{
-                       'critical-thumb': config.security[key] && (key === 'full_machine_access' || key === 'allow_run_commands' || key === 'allow_delete')
+                       'critical-thumb': store.config.security[key] && (key === 'full_machine_access' || key === 'allow_run_commands' || key === 'allow_delete')
                      }"></div>
                    </div>
-                   <span v-if="config.security[key]" class="sec-label-active" :style="(key === 'full_machine_access' || key === 'allow_run_commands' || key === 'allow_delete') ? 'color: #ef4444;' : 'color: #22c55e;'">
+                   <span v-if="store.config.security[key]" class="sec-label-active" :style="(key === 'full_machine_access' || key === 'allow_run_commands' || key === 'allow_delete') ? 'color: #ef4444;' : 'color: #22c55e;'">
                      {{ (key === 'full_machine_access' || key === 'allow_run_commands') ? '⚠️ PERIGO' : 'ATIVO ✓' }}
                    </span>
                    <span v-else class="sec-label-blocked">🔒 BLOQUEADO</span>
@@ -643,30 +383,30 @@ const handleSelectDirectory = async () => {
       </section>
 
       <!-- ABA MCP -->
-      <section v-if="activeTab === 'mcp'" class="glass-panel animate-slide-up">
+      <section v-if="store.activeTab === 'mcp'" class="glass-panel animate-slide-up">
         <h2 class="section-title">Model Context Protocol (MCP)</h2>
         <div class="mcp-restored-form">
            <div class="premium-form-group">
               <label>Identificador do Servidor</label>
-              <input v-model="mcpName" placeholder="Ex: postgres, shopify, memory" class="maestro-input" />
+              <input v-model="store.mcpName" placeholder="Ex: postgres, shopify, memory" class="maestro-input" />
            </div>
            <div class="premium-form-group">
               <label>Comando de Execução (Shell)</label>
-              <input v-model="mcpCommand" placeholder="Ex: npx -y @modelcontextprotocol/server-postgres" class="maestro-input" />
+              <input v-model="store.mcpCommand" placeholder="Ex: npx -y @modelcontextprotocol/server-postgres" class="maestro-input" />
            </div>
            <div class="mcp-actions-row" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin-top: 2rem;">
               <button @click="addMCPServer" class="btn-glow-blue" style="width: 100%;">INSTALAR SERVIDOR ⚡</button>
-              <button @click="listMCPServers" class="btn-outline" style="width: 100%;">LISTAR REGISTRADOS 📋</button>
+              <button @click="liststore.mcpServers" class="btn-outline" style="width: 100%;">LISTAR REGISTRADOS 📋</button>
            </div>
-           <div v-if="showMcpList" class="mcp-output-container">
+           <div v-if="store.showMcpList" class="mcp-output-container">
               <div class="output-header">SERVIDORES CONFIGURADOS</div>
-              <pre class="mcp-output-box">{{ mcpServers }}</pre>
+              <pre class="mcp-output-box">{{ store.mcpServers }}</pre>
            </div>
         </div>
       </section>
 
       <!-- ABA REPOSITÓRIOS (Code RAG & Aglomerados Radiais) -->
-      <section v-if="activeTab === 'repositórios'" class="glass-panel animate-slide-up">
+      <section v-if="store.activeTab === 'repositórios'" class="glass-panel animate-slide-up">
         <h2 class="section-title">Aglomerados Estelares (Repositórios Radiais)</h2>
         <p style="color: var(--p-text-dim); margin-bottom: 2rem; font-size: 0.9rem;">
           Injete pastas de projetos locais no Grafo do Lumaestro. Estes projetos formarão órbitas concêntricas independentes (RAG Radial) protegidas de poluição vetorial, orbitando seu respectivo <b>Nó Núcleo</b>.
@@ -677,7 +417,7 @@ const handleSelectDirectory = async () => {
              <div class="premium-form-group">
                 <label>Caminho Absoluto do Repositório</label>
                 <div style="display: flex; gap: 10px;">
-                  <input v-model="repoPathInput" placeholder="Ex: C:\git\Lumaestro" class="maestro-input" style="border-color: rgba(139, 92, 246, 0.4); flex: 1;" />
+                  <input v-model="store.repoPathInput" placeholder="Ex: C:\git\Lumaestro" class="maestro-input" style="border-color: rgba(139, 92, 246, 0.4); flex: 1;" />
                   <button @click="handleSelectDirectory" class="btn-glow-blue" style="flex: 0 0 auto; padding: 0 24px; font-size: 1.2rem; background: linear-gradient(135deg, #a855f7, #6366f1); border: 1px solid rgba(168, 85, 247, 0.5); border-radius: 14px;" title="Navegar e Escolher Pasta">
                     📁
                   </button>
@@ -685,7 +425,7 @@ const handleSelectDirectory = async () => {
              </div>
              <div class="premium-form-group">
                 <label>Nome do Núcleo Satélite (Core Node)</label>
-                <input v-model="coreNodeInput" placeholder="Ex: ProjetoLumaestro" class="maestro-input" style="border-color: rgba(139, 92, 246, 0.4);" />
+                <input v-model="store.coreNodeInput" placeholder="Ex: ProjetoLumaestro" class="maestro-input" style="border-color: rgba(139, 92, 246, 0.4);" />
              </div>
            </div>
 
@@ -696,26 +436,26 @@ const handleSelectDirectory = async () => {
                  <p style="margin: 8px 0 0; font-size: 0.8rem; color: var(--p-text-dim);">Ativando isto, além de .MD e Imagens, a IA irá ler, processar e gerar semânticas de todos os códigos .js, .go, .py e .ts.</p>
               </div>
               <label class="hybrid-toggle-maestro">
-                 <input type="checkbox" v-model="includeCodeToggle" />
+                 <input type="checkbox" v-model="store.includeCodeToggle" />
                  <span class="m-slider-sec" style="background: rgba(16, 185, 129, 0.1);"></span>
               </label>
            </div>
 
-           <button @click="handleAddProject" :disabled="repoStatusMsg !== ''" class="btn-glow-blue" style="width: 100%; background: linear-gradient(135deg, #a855f7, #6366f1); border: 1px solid rgba(168, 85, 247, 0.5);">
-              <span v-if="repoStatusMsg === ''">VINCULAR REPOSITÓRIO À SINFORNIA 🪐</span>
-              <span v-else>{{ repoStatusMsg }}</span>
+           <button @click="handleAddProject" :disabled="store.repoStatusMsg !== ''" class="btn-glow-blue" style="width: 100%; background: linear-gradient(135deg, #a855f7, #6366f1); border: 1px solid rgba(168, 85, 247, 0.5);">
+              <span v-if="store.repoStatusMsg === ''">VINCULAR REPOSITÓRIO À SINFORNIA 🪐</span>
+              <span v-else>{{ store.repoStatusMsg }}</span>
            </button>
         </div>
 
         <div style="margin-top: 4rem;">
           <h3 style="font-size: 1rem; color: #fff; letter-spacing: 2px; margin-bottom: 1.5rem;">SISTEMAS SOLARES (Orquestrados)</h3>
           
-          <div v-if="!config.external_projects || config.external_projects.length === 0" style="color: var(--p-text-dim); text-align: center; padding: 2rem; border-radius: 12px; border: 1px dashed rgba(255,255,255,0.1);">
+          <div v-if="!store.config.external_projects || store.config.external_projects.length === 0" style="color: var(--p-text-dim); text-align: center; padding: 2rem; border-radius: 12px; border: 1px dashed rgba(255,255,255,0.1);">
              O Universo ainda não possui outros projetos em órbita.
           </div>
           
           <div v-else class="satellites-grid">
-             <div v-for="proj in config.external_projects" :key="proj.path" class="satellite-card">
+             <div v-for="proj in store.config.external_projects" :key="proj.path" class="satellite-card">
                <div class="sat-core">
                  <div class="sat-ring-icon">🪐</div>
                  <h4 class="sat-node-name">{{ proj.core_node }}</h4>
@@ -735,30 +475,30 @@ const handleSelectDirectory = async () => {
     </div>
 
     <!-- Terminal de Logs (Restored Logic) -->
-    <footer class="maestro-terminal-v2" v-show="installStatus !== '' || installLogs.length > 0">
+    <footer class="maestro-terminal-v2" v-show="store.installStatus !== '' || store.installLogs.length > 0">
       <div class="t-bar">
          <span class="t-title">SYSTEM_ORCHESTRATOR_OUTPUT</span>
          <div class="t-pulse"><span></span> ACTIVE</div>
       </div>
-      <div class="t-contents" ref="logContainer">
-        <div v-for="(log, i) in installLogs" :key="i" class="t-entry">> {{ log }}</div>
-        <div v-if="installStatus" class="t-status">>> {{ installStatus }}</div>
+      <div class="t-contents" ref="store.logContainer">
+        <div v-for="(log, i) in store.installLogs" :key="i" class="t-entry">> {{ log }}</div>
+        <div v-if="store.installStatus" class="t-status">>> {{ store.installStatus }}</div>
       </div>
     </footer>
 
     <!-- MODAL DE CONFIRMAÇÃO DE RESET -->
-    <div v-if="showResetModal" class="premium-modal-overlay">
+    <div v-if="store.showResetModal" class="premium-modal-overlay">
        <div class="premium-modal-content warning-modal">
           <div class="modal-icon">☢️</div>
           <h2 class="modal-title">Reset Atômico do Banco</h2>
           <div class="modal-body">
-             <p>Você está prestes a excluir **todas as coleções do Qdrant** ({{ config.qdrant_url }}) e limpar o cache local.</p>
+             <p>Você está prestes a excluir **todas as coleções do Qdrant** ({{ store.config.qdrant_url }}) e limpar o cache local.</p>
              <p class="warning-text">Esta ação é irreversível. O Maestro esquecerá todas as conexões neurais feitas até agora.</p>
           </div>
           <div class="modal-actions">
-             <button @click="showResetModal = false" :disabled="isResetting" class="btn-cancel">ABORTAR</button>
-             <button @click="handleResetDB" :disabled="isResetting" class="btn-confirm-delete">
-                {{ isResetting ? 'LIMPANDO...' : 'SIM, APAGAR TUDO' }}
+             <button @click="store.showResetModal = false" :disabled="store.isResetting" class="btn-cancel">ABORTAR</button>
+             <button @click="handleResetDB" :disabled="store.isResetting" class="btn-confirm-delete">
+                {{ store.isResetting ? 'LIMPANDO...' : 'SIM, APAGAR TUDO' }}
              </button>
           </div>
        </div>
@@ -767,770 +507,5 @@ const handleSelectDirectory = async () => {
 </template>
 
 <style scoped>
-/* --- SISTEMA DE DESIGN PREMIER --- */
-.settings-view { 
-  --p-bg: #030712;
-  --p-accent: #3b82f6;
-  --p-accent-glow: rgba(59, 130, 246, 0.4);
-  --p-glass: rgba(255, 255, 255, 0.04);
-  --p-border: rgba(255, 255, 255, 0.08);
-  --p-text: #f8fafc;
-  --p-text-dim: #94a3b8;
-  --p-error: #ef4444;
-
-  padding: 4rem 6rem; 
-  color: var(--p-text); 
-  background: var(--p-bg); 
-  background-image: 
-    radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.05) 0px, transparent 50%),
-    radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.05) 0px, transparent 50%);
-  background-attachment: fixed; /* Evita que o gradiente deforme no scroll */
-  
-  width: 100%;
-  flex: 1 0 auto; /* Permite que o container expanda com o conteúdo num flex parent */
-  min-height: 100%;
-
-  box-sizing: border-box;
-  font-family: 'Outfit', 'Inter', sans-serif; 
-  overflow: visible;
-}
-
-.brand-badge { 
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(139, 92, 246, 0.2));
-  color: #fff;
-  padding: 6px 14px; 
-  border-radius: 20px; 
-  font-size: 0.65rem; 
-  font-weight: 900; 
-  letter-spacing: 2px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  display: inline-block; 
-  margin-bottom: 1.5rem;
-  text-transform: uppercase;
-}
-
-.gradient-text { 
-  font-size: 4rem; 
-  font-weight: 900; 
-  letter-spacing: -3px;
-  background: linear-gradient(135deg, #fff 20%, #64748b 100%); 
-  -webkit-background-clip: text; 
-  background-clip: text;
-  color: transparent; 
-  margin-bottom: 0.5rem; 
-}
-
-.subtitle { color: var(--p-text-dim); font-size: 1.1rem; margin-bottom: 3rem; font-weight: 400; }
-
-.tabs-nav-glass { 
-  display: flex; 
-  gap: 8px; 
-  margin-bottom: 4rem; 
-  background: rgba(255,255,255,0.01); 
-  padding: 8px; 
-  border-radius: 16px; 
-  width: fit-content;
-  border: 1px solid var(--p-border);
-}
-
-.tab-btn-premium { 
-  background: none; 
-  border: none; 
-  padding: 12px 28px; 
-  color: var(--p-text-dim); 
-  font-weight: 700; 
-  font-size: 0.85rem;
-  cursor: pointer; 
-  border-radius: 12px; 
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
-.tab-btn-premium.active { 
-  color: #fff; 
-  background: var(--p-accent);
-  box-shadow: 0 0 25px var(--p-accent-glow);
-}
-
-.glass-panel { 
-  background: var(--p-glass); 
-  border: 1px solid var(--p-border); 
-  border-radius: 32px; 
-  padding: 4rem; 
-  backdrop-filter: blur(40px);
-  box-shadow: 0 40px 100px rgba(0,0,0,0.5);
-}
-
-.section-title { 
-  font-size: 0.8rem; 
-  text-transform: uppercase; 
-  color: var(--p-accent); 
-  font-weight: 900;
-  letter-spacing: 4px; 
-  margin-bottom: 3rem; 
-  display: flex;
-  align-items: center;
-  gap: 15px;
-}
-
-.section-title::after { content: ''; flex: 1; height: 1px; background: linear-gradient(to right, var(--p-border), transparent); }
-
-/* Inputs & Form */
-.premium-form-group { margin-bottom: 2.5rem; }
-.premium-form-group label { 
-  display: block; 
-  font-weight: 800; 
-  font-size: 0.85rem; 
-  color: var(--p-text-dim); 
-  margin-bottom: 1rem; 
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
-.maestro-input { 
-  background: rgba(0, 0, 0, 0.6) !important; 
-  border: 1px solid var(--p-border) !important; 
-  color: #fff !important; 
-  padding: 18px 24px !important; 
-  border-radius: 14px !important; 
-  width: 100%; 
-  font-size: 0.95rem !important;
-  transition: all 0.3s ease;
-  font-family: 'Inter', sans-serif;
-}
-
-.maestro-input:focus { 
-  border-color: var(--p-accent) !important; 
-  box-shadow: 0 0 40px rgba(59, 130, 246, 0.15) !important; 
-  background: #000 !important;
-  outline: none;
-}
-
-.btn-glow-blue { 
-  background: linear-gradient(135deg, #3b82f6, #2563eb); 
-  border: none; 
-  color: #fff; 
-  font-weight: 800; 
-  padding: 20px 40px; 
-  border-radius: 18px; 
-  cursor: pointer; 
-  transition: 0.4s;
-  letter-spacing: 1px;
-  font-size: 0.9rem;
-}
-
-.btn-glow-blue:hover { 
-  transform: translateY(-3px) scale(1.02); 
-  box-shadow: 0 15px 40px var(--p-accent-glow);
-}
-
-.maestro-range { 
-  width: 100%; 
-  height: 6px; 
-  appearance: none;
-  -webkit-appearance: none; 
-  background: rgba(255,255,255,0.08); 
-  border-radius: 10px; 
-  margin: 15px 0;
-  outline: none;
-  border: 1px solid rgba(255,255,255,0.02);
-  box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);
-}
-
-.maestro-range::-webkit-slider-thumb { 
-  -webkit-appearance: none; 
-  width: 22px; 
-  height: 22px; 
-  background: #3b82f6; 
-  border-radius: 50%; 
-  cursor: pointer;
-  box-shadow: 0 0 15px rgba(59, 130, 246, 0.5), inset 0 0 4px rgba(255,255,255,0.5);
-  border: 2px solid #000;
-  transition: 0.3s;
-}
-
-.maestro-range::-webkit-slider-thumb:hover { transform: scale(1.2); filter: brightness(1.2); }
-
-.highlight-val { color: var(--p-accent); font-weight: 900; margin-left: 8px; font-size: 1.1rem; }
-
-/* Security Matrix */
-.security-grid-comprehensive { 
-  display: grid; 
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); 
-  gap: 1.5rem; 
-}
-
-.sec-card { 
-  padding: 2.5rem; 
-  display: flex; 
-  justify-content: space-between; 
-  align-items: center; 
-  background: rgba(255,255,255,0.02); 
-  border-radius: 24px; 
-  border: 1px solid var(--p-border);
-  transition: all 0.3s;
-}
-
-.sec-card:hover { border-color: var(--p-accent); background: rgba(59, 130, 246, 0.03); }
-
-.sec-card.critical-sec {
-  border-color: rgba(239, 68, 68, 0.2);
-  background: rgba(239, 68, 68, 0.02);
-}
-
-.sec-card.critical-sec:hover {
-  border-color: #ef4444;
-  box-shadow: 0 0 30px rgba(239, 68, 68, 0.15);
-}
-
-/* Toggle Segurança Elite */
-.hybrid-toggle-maestro {
-  cursor: pointer;
-  user-select: none;
-}
-
-.m-slider-sec {
-  position: relative;
-  display: inline-block;
-  width: 48px;
-  height: 24px;
-  background: #1e293b;
-  border-radius: 20px;
-  transition: 0.3s;
-}
-
-.m-slider-sec::before {
-  content: '';
-  position: absolute;
-  width: 16px;
-  height: 16px;
-  left: 4px;
-  bottom: 4px;
-  background: #475569;
-  border-radius: 50%;
-  transition: 0.3s;
-}
-
-/* Novo Switch Explicito (Auto-Boot) */
-.auto-boot-container {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  cursor: pointer;
-  padding: 6px 10px;
-  border-radius: 12px;
-  border: 1px solid transparent;
-  transition: 0.2s;
-}
-.auto-boot-container:hover {
-  background: rgba(255,255,255,0.02);
-  border-color: rgba(255,255,255,0.05);
-}
-
-.maestro-switch {
-  width: 38px; height: 20px;
-  background: #1e293b;
-  border-radius: 20px;
-  position: relative;
-  transition: 0.3s;
-  border: 1px solid rgba(255,255,255,0.05);
-  box-sizing: border-box;
-}
-
-.maestro-switch.on {
-  background: rgba(59, 130, 246, 0.15);
-  border-color: #3b82f6;
-  box-shadow: 0 0 12px rgba(59, 130, 246, 0.2);
-}
-
-.maestro-switch-thumb {
-  width: 14px; height: 14px;
-  background: #64748b;
-  border-radius: 50%;
-  position: absolute; top: 2px; left: 2px;
-  transition: 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
-  box-shadow: 0 2px 4px rgba(0,0,0,0.5);
-  box-sizing: border-box;
-}
-
-.maestro-switch.on .maestro-switch-thumb {
-  transform: translateX(18px);
-  background: #3b82f6;
-}
-
-.hybrid-toggle-maestro input:checked + .m-slider-sec { background: var(--p-accent); }
-.critical-sec .hybrid-toggle-maestro input:checked + .m-slider-sec { background: #ef4444; }
-
-.hybrid-toggle-maestro input:checked + .m-slider-sec::before { 
-  transform: translateX(24px); 
-  background: #fff; 
-  box-shadow: 0 0 10px #fff;
-}
-
-.hybrid-toggle-maestro input { display: none; }
-
-.btn-glow-red {
-  background: linear-gradient(135deg, #ef4444, #991b1b);
-  border: none;
-  color: #fff;
-  font-weight: 900;
-  padding: 22px;
-  border-radius: 18px;
-  cursor: pointer;
-  transition: 0.4s;
-  letter-spacing: 2px;
-  box-shadow: 0 10px 30px rgba(239, 68, 68, 0.2);
-}
-
-.btn-glow-red:hover { 
-  transform: translateY(-3px); 
-  box-shadow: 0 10px 30px rgba(239, 68, 68, 0.3);
-}
-
-/* Reset DB Styles */
-.btn-reset-db {
-  background: rgba(239, 68, 68, 0.05);
-  border: 1px solid rgba(239, 68, 68, 0.2);
-  color: #ef4444;
-  padding: 12px 24px;
-  border-radius: 12px;
-  font-weight: 800;
-  font-size: 0.7rem;
-  cursor: pointer;
-  transition: all 0.3s;
-}
-
-.btn-reset-db:hover {
-  background: #ef4444;
-  color: white;
-  box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
-}
-
-.warning-modal {
-  border: 1px solid rgba(239, 68, 68, 0.3) !important;
-}
-
-.warning-text {
-  color: #fca5a5;
-  font-weight: bold;
-  margin-top: 1rem;
-  font-size: 0.85rem;
-}
-
-.btn-confirm-delete {
-  background: #ef4444;
-  color: white;
-  border: none;
-  padding: 14px 28px;
-  border-radius: 12px;
-  font-weight: 800;
-  cursor: pointer;
-}
-
-.btn-cancel {
-  background: rgba(255, 255, 255, 0.05);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 14px 28px;
-  border-radius: 12px;
-  font-weight: 800;
-  cursor: pointer;
-}
-
-.premium-modal-overlay {
-  position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0, 0, 0, 0.85);
-  backdrop-filter: blur(10px);
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2rem;
-}
-
-.premium-modal-content {
-  background: #0d1117;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 3rem;
-  border-radius: 32px;
-  max-width: 500px;
-  width: 100%;
-  text-align: center;
-}
-
-.modal-icon { font-size: 3rem; margin-bottom: 1.5rem; }
-.modal-title { font-weight: 900; font-size: 1.5rem; margin-bottom: 1.5rem; }
-.modal-body { color: #94a3b8; font-size: 0.95rem; line-height: 1.6; margin-bottom: 2.5rem; }
-.modal-actions { display: flex; gap: 1rem; justify-content: center; }
-
-/* --- ACCOUNTS & ENGINES HUB --- */
-.accounts-grid-premium, .engine-cards-stack { 
-  display: grid; 
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); 
-  gap: 1.5rem; 
-  margin-top: 1.5rem;
-}
-
-.profile-card, .engine-unit { 
-  background: rgba(255, 255, 255, 0.02); 
-  border: 1px solid var(--p-border); 
-  border-radius: 24px; 
-  padding: 2rem; 
-  position: relative;
-  transition: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  overflow: hidden;
-  backdrop-filter: blur(10px);
-}
-
-.profile-card:hover, .engine-unit:hover {
-  border-color: var(--p-accent);
-  background: rgba(59, 130, 246, 0.04);
-  transform: translateY(-5px);
-  box-shadow: 0 20px 40px rgba(0,0,0,0.3);
-}
-
-.profile-card.active-profile { border-color: var(--p-accent); background: rgba(59, 130, 246, 0.06); }
-
-.avatar-glow, .unit-icon { 
-  width: 50px; height: 50px; 
-  background: linear-gradient(135deg, #3b82f6, #8b5cf6); 
-  border-radius: 14px; 
-  display: flex; align-items: center; justify-content: center; 
-  font-weight: 900; font-size: 1.2rem;
-  box-shadow: 0 0 20px rgba(59, 130, 246, 0.4);
-  margin-bottom: 1.5rem;
-}
-
-.unit-head h4 { font-size: 1.1rem; font-weight: 900; letter-spacing: 2px; color: #fff; margin: 0 0 1rem 0; text-transform: uppercase; }
-
-.unit-actions, .profile-actions { display: flex; gap: 10px; margin-top: 1rem; }
-
-.btn-util, .unit-btn { 
-  background: var(--p-glass); 
-  border: 1px solid var(--p-border); 
-  color: #fff; 
-  padding: 12px 16px; 
-  border-radius: 12px; 
-  font-weight: 800; 
-  font-size: 0.75rem; 
-  cursor: pointer; 
-  transition: 0.3s;
-  flex: 1;
-  text-transform: uppercase;
-}
-
-.btn-util:hover, .unit-btn:hover { background: #fff; color: #000; box-shadow: 0 0 20px rgba(255,255,255,0.2); }
-.unit-btn.auth { border-color: var(--p-accent); color: var(--p-accent); }
-.unit-btn.auth:hover { background: var(--p-accent); color: #fff; }
-
-.unit-footer { margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--p-border); }
-.mini-toggle { display: flex; align-items: center; gap: 12px; font-size: 0.7rem; font-weight: 900; color: var(--p-text-dim); cursor: pointer; }
-.m-slider { position: relative; width: 40px; height: 20px; background: #1e293b; border-radius: 20px; transition: 0.3s; }
-.m-slider::before { content: ''; position: absolute; width: 12px; height: 12px; left: 4px; bottom: 4px; background: #64748b; border-radius: 50%; transition: 0.3s; }
-input:checked + .m-slider { background: var(--p-accent); }
-input:checked + .m-slider::before { transform: translateX(20px); background: #fff; box-shadow: 0 0 10px #fff; }
-.mini-toggle input { display: none; }
-
-/* --- TERMINAL OUTPUT --- */
-.maestro-terminal-v2 { 
-  position: fixed; 
-  bottom: 2.5rem; 
-  right: 2.5rem; 
-  width: 500px; 
-  background: #000; 
-  border: 1px solid var(--p-border); 
-  border-radius: 20px; 
-  box-shadow: 0 30px 60px rgba(0,0,0,0.8);
-  z-index: 1000;
-  backdrop-filter: blur(20px);
-}
-
-.t-bar { 
-  padding: 15px 20px; 
-  background: rgba(255,255,255,0.02); 
-  display: flex; 
-  justify-content: space-between; 
-  font-size: 0.65rem; 
-  color: #475569; 
-  font-weight: 900; 
-  border-bottom: 1px solid var(--p-border);
-}
-
-.t-contents { padding: 2rem; font-family: 'Fira Code', monospace; font-size: 0.8rem; max-height: 250px; overflow-y: auto; color: #94a3b8; line-height: 1.6; }
-.t-entry { margin-bottom: 6px; }
-.mcp-restored-form { display: flex; flex-direction: column; gap: 1rem; }
-.mcp-actions-row { display: flex; gap: 1rem; margin-top: 1rem; }
-
-.btn-outline {
-  background: transparent;
-  border: 1px solid var(--p-border);
-  color: var(--p-text-dim);
-  padding: 16px 32px;
-  border-radius: 12px;
-  font-weight: 800;
-  font-size: 0.8rem;
-  cursor: pointer;
-  transition: 0.3s;
-  text-transform: uppercase;
-}
-
-.btn-outline:hover { border-color: #fff; color: #fff; background: rgba(255,255,255,0.05); }
-
-.mcp-output-container { margin-top: 2rem; }
-.output-header { font-size: 0.65rem; font-weight: 900; color: var(--p-accent); letter-spacing: 2px; margin-bottom: 10px; }
-
-.mcp-output-box { 
-  background: #000; 
-  padding: 2rem; 
-  border-radius: 16px; 
-  color: #4ade80; 
-  font-size: 0.85rem; 
-  border: 1px solid var(--p-border); 
-  font-family: 'Fira Code', monospace;
-  overflow: auto;
-  max-height: 300px;
-}
-
-/* Custom Scrollbar */
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--p-border); border-radius: 10px; }
-::-webkit-scrollbar-thumb:hover { background: var(--p-accent); }
-
-/* --- ENGINE SHOWCASE LUXURY DESIGN --- */
-.engine-showcase-card {
-  position: relative;
-  border-top: 1px solid rgba(255,255,255,0.1);
-  background: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.4) 100%);
-}
-
-.engine-glow-backdrop {
-  position: absolute;
-  top: -50px; left: -50px; right: -50px; height: 150px;
-  background: radial-gradient(ellipse at top left, rgba(59, 130, 246, 0.15) 0%, transparent 70%);
-  z-index: 1;
-  pointer-events: none;
-}
-
-.engine-showcase-card.claude .engine-glow-backdrop {
-  background: radial-gradient(ellipse at top left, rgba(249, 115, 22, 0.12) 0%, transparent 70%);
-}
-
-.engine-status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.55rem;
-  letter-spacing: 1.5px;
-  font-weight: 900;
-  padding: 4px 10px;
-  border-radius: 20px;
-  background: rgba(74, 222, 128, 0.08);
-  color: #4ade80;
-  border: 1px solid rgba(74, 222, 128, 0.2);
-  margin-top: 8px;
-}
-
-.status-dot { 
-  width: 6px; height: 6px; 
-  background: #4ade80; 
-  border-radius: 50%; 
-  box-shadow: 0 0 8px #4ade80; 
-}
-
-.unit-btn-solid {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #fff;
-  padding: 14px 20px;
-  border-radius: 14px;
-  font-weight: 800;
-  font-size: 0.75rem;
-  cursor: pointer;
-  transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
-.unit-btn-solid:hover {
-  background: var(--p-accent);
-  border-color: var(--p-accent);
-  box-shadow: 0 10px 25px rgba(59, 130, 246, 0.3);
-  transform: translateY(-2px);
-}
-
-.unit-btn-glow {
-  background: transparent;
-  border: 1px solid var(--p-border);
-  color: var(--p-text-dim);
-  padding: 14px 20px;
-  border-radius: 14px;
-  font-weight: 800;
-  font-size: 0.75rem;
-  cursor: pointer;
-  transition: 0.3s;
-  text-transform: uppercase;
-}
-.unit-btn-glow:hover {
-  background: rgba(255,255,255,0.1);
-  color: #fff;
-  border-color: rgba(255,255,255,0.2);
-}
-
-/* --- Toggles de Segurança (Firewall) --- */
-.sec-toggle-wrapper {
-  display: flex; align-items: center; gap: 12px; cursor: pointer;
-  padding: 8px 12px;
-  border-radius: 12px;
-  transition: background 0.2s;
-}
-.sec-toggle-wrapper:hover { background: rgba(255,255,255,0.03); }
-
-.sec-label-active { font-size: 0.7rem; font-weight: 900; letter-spacing: 1.5px; white-space: nowrap; }
-.sec-label-blocked { font-size: 0.7rem; font-weight: 900; color: #64748b; letter-spacing: 1.5px; opacity: 0.8; white-space: nowrap; }
-
-.maestro-switch.critical-on { background: rgba(239, 68, 68, 0.15); border-color: #ef4444; box-shadow: 0 0 12px rgba(239, 68, 68, 0.2); }
-.maestro-switch.on.critical-on .maestro-switch-thumb.critical-thumb { background: #ef4444; }
-
-/* Botões Utilitários (Cards de Login) */
-.btn-util {
-  background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #fff;
-  padding: 12px 16px;
-  border-radius: 14px;
-  font-weight: 800;
-  font-size: 0.75rem;
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  flex: 1; /* Preenche o espaço igualitariamente */
-  letter-spacing: 1px;
-}
-
-.btn-util:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.2);
-  transform: translateY(-2px);
-  box-shadow: 0 5px 15px rgba(0,0,0,0.2);
-}
-
-.btn-util.btn-danger {
-  border-color: rgba(239, 68, 68, 0.2);
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.05);
-}
-
-.btn-util.btn-danger:hover {
-  background: #ef4444;
-  color: #fff;
-  box-shadow: 0 5px 20px rgba(239, 68, 68, 0.4);
-}
-
-/* --- SATELLITE CARDS (GLASSMORPHISM PREMIUM) --- */
-.satellites-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-  gap: 1.5rem;
-}
-
-.satellite-card {
-  background: linear-gradient(145deg, rgba(139, 92, 246, 0.08) 0%, rgba(15, 15, 20, 0.6) 100%);
-  border: 1px solid rgba(139, 92, 246, 0.15);
-  border-top: 2px solid #8b5cf6;
-  border-radius: 16px;
-  padding: 1.5rem 1.8rem;
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  position: relative;
-  overflow: hidden;
-}
-
-.satellite-card::before {
-  content: '';
-  position: absolute;
-  top: -50%; left: -50%; width: 200%; height: 200%;
-  background: radial-gradient(circle at center, rgba(139, 92, 246, 0.1) 0%, transparent 40%);
-  opacity: 0;
-  transition: 0.5s;
-  pointer-events: none;
-}
-
-.satellite-card:hover {
-  transform: translateY(-4px) scale(1.01);
-  border-color: rgba(139, 92, 246, 0.4);
-  box-shadow: 0 15px 40px -10px rgba(139, 92, 246, 0.25);
-}
-
-.satellite-card:hover::before { opacity: 1; }
-
-.sat-core {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 1.5rem;
-}
-
-.sat-ring-icon {
-  font-size: 2.2rem;
-  filter: drop-shadow(0 0 12px rgba(139, 92, 246, 0.5));
-}
-
-.sat-node-name {
-  margin: 0;
-  flex: 1;
-  color: #f8fafc;
-  font-size: 1.25rem;
-  font-weight: 800;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  text-shadow: 0 2px 10px rgba(255,255,255,0.1);
-}
-
-.sat-badge {
-  font-size: 0.65rem;
-  font-weight: 900;
-  padding: 6px 14px;
-  border-radius: 6px;
-  letter-spacing: 1.5px;
-  backdrop-filter: blur(4px);
-  white-space: nowrap;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.sat-badge.neo-active {
-  color: #34d399;
-  background: rgba(16, 185, 129, 0.05);
-  border: 1px solid rgba(16, 185, 129, 0.3);
-  box-shadow: 0 0 20px rgba(16, 185, 129, 0.1);
-}
-
-.sat-badge.neo-docs {
-  color: #fbbf24;
-  background: rgba(245, 158, 11, 0.05);
-  border: 1px solid rgba(245, 158, 11, 0.3);
-}
-
-.sat-path-box {
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  box-shadow: inset 0 2px 10px rgba(0,0,0,0.2);
-  padding: 12px 16px;
-  border-radius: 8px;
-  font-family: 'Fira Code', monospace;
-  font-size: 0.8rem;
-  color: #cbd5e1;
-  word-break: break-all;
-  display: flex;
-  align-items: center;
-}
+@import '../assets/css/Settings.css';
 </style>
