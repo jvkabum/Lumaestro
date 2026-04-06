@@ -125,15 +125,20 @@ func (a *App) bootSequence() {
 			a.StartAgentSession(a.config.AutoStartAgents[0])
 		}
 
-		// 2. Indexação Silenciosa (RAG) - Agora com 100% de Autonomia (SDK Nativo)
+		// 2. Indexação Silenciosa (RAG) - Agora PARALELA e em Background
 		if a.crawler != nil && a.config.ObsidianVaultPath != "" {
-			a.emitBoot("scan", "✈️", "Iniciando Sincronização Semântica do Obsidian...")
-			fmt.Println("[BOOT] ✈️ Motores Prontos. Iniciando Crawler Nativo...")
-			a.ScanVault()
+			a.emitBoot("scan", "✈️", "Sincronizando conhecimento em background...")
+			fmt.Println("[BOOT] ✈️ Iniciando Crawler Paralelo em segundo plano...")
+			
+			// Execução em background para não travar o fluxo de boot da UI
+			go func() {
+				a.ScanVault()
+				a.emitBoot("complete", "✅", "Sincronização concluída.")
+			}()
 		}
 
 		// 3. Inicia o Coração (Orquestração Swarm)
-		a.startOrchestration()
+		go a.startOrchestration()
 	}
 }
 

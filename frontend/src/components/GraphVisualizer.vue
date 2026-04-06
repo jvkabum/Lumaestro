@@ -8,6 +8,23 @@ import { useOrchestratorStore } from '../stores/orchestrator'
 
 const orchestrator = useOrchestratorStore()
 
+// Recipientes de Pooling (Atrasar inicialização para garantir que THREE esteja pronto)
+let sphereLowRes, sphereVirtual, sphereActive, materialCache
+const getCachedMaterial = (color, opacity, intensity) => {
+  if (!materialCache) materialCache = new Map()
+  const key = `${color}-${opacity}-${intensity}`
+  if (!materialCache.has(key)) {
+    materialCache.set(key, new THREE.MeshLambertMaterial({
+      color: color,
+      transparent: true,
+      opacity: opacity,
+      emissive: color,
+      emissiveIntensity: intensity
+    }))
+  }
+  return materialCache.get(key)
+}
+
 const props = defineProps({
   nodes: { type: Array, default: () => [] },
   edges: { type: Array, default: () => [] },
@@ -111,6 +128,11 @@ const getGraphData = () => {
 const initGraph = () => {
   if (!containerRef.value) return
 
+  // Inicialização sob demanda das geometrias
+  if (!sphereLowRes) sphereLowRes = new THREE.SphereGeometry(12, 8, 8)
+  if (!sphereVirtual) sphereVirtual = new THREE.SphereGeometry(8, 6, 6)
+  if (!sphereActive) sphereActive = new THREE.SphereGeometry(20, 12, 12)
+
   Graph = ForceGraph3D()(containerRef.value)
     .graphData(getGraphData())
     .backgroundColor('#09090b') 
@@ -133,28 +155,6 @@ const initGraph = () => {
     })
     .nodeRelSize(6) // Tamanho de colisão aumentado
     .nodeOpacity(1)
-    .nodeThreeObject(node => {
-      const type = node['document-type'] || 'chunk'
-      let color = '#3b82f6'
-      if (type === 'system') color = '#ffffff'
-      if (type === 'source' || type === 'obsidian') color = '#00f2ff'
-      if (type === 'memory') color = '#fcd34d'
-
-      // Geometria de Neurônio (Brilho Central Intenso)
-      const obj = new THREE.Mesh(
-        new THREE.SphereGeometry(16),
-        new THREE.MeshStandardMaterial({
-          color: color,
-          transparent: true,
-          opacity: 0.95,
-          emissive: node.community !== undefined ? communityPalette[node.community % communityPalette.length] : color,
-          emissiveIntensity: 1.4, // Brilho de Sinapse Ativa
-          roughness: 0,
-          metalness: 1
-        })
-      )
-      return obj
-    })
     .nodeThreeObjectExtend(true)
     .linkCurvature(0.25)
     .linkColor(link => {
@@ -166,44 +166,22 @@ const initGraph = () => {
     })
     .linkOpacity(0.5)
     .linkWidth(link => {
-      // Reforço Sináptico: Largura baseada no peso neural aprendido se disponível, caso contrário peso base
       const weight = link.weight || 1
-      return Math.min(1.8 + (weight * 0.8), 8.0) // Limite de 8px para garantir elegância
+      return Math.min(1.2 + (weight * 0.4), 4.0) 
     })
     .linkDirectionalParticles(link => {
-       // Mais partículas para conexões mais fortes
-       const weight = link.weight || 1
-       return Math.min(2 + Math.floor(weight * 2), 15)
-    })
-    .linkDirectionalParticleSpeed(link => {
-       const weight = link.weight || 1
-       return 0.008 + (weight * 0.002)
-    })
-    .linkDirectionalParticleWidth(link => {
-       const weight = link.weight || 1
-       return 3.5 + Math.min(weight, 4)
-    })
-
-    .linkDirectionalParticles(link => {
-      const s = link.source.id || link.source
-      const t = link.target.id || link.target
-      // Partículas SOMENTE nos links RAG destacados ou do nó clicado
-      if (clickedNodeLinks.value.has(`${s}-${t}`) || clickedNodeLinks.value.has(`${t}-${s}`)) return 6
-      if (highlightedLinks.value.has(`${s}-${t}`) || highlightedLinks.value.has(`${t}-${s}`)) return 4
-      return 0 // Sem partículas por padrão → visual limpo
-    })
-    .linkDirectionalParticleSpeed(link => {
-      const s = link.source.id || link.source
-      const t = link.target.id || link.target
-      if (clickedNodeLinks.value.has(`${s}-${t}`) || clickedNodeLinks.value.has(`${t}-${s}`)) return 0.008
-      return 0.005
-    })
-    .linkDirectionalParticleWidth(link => {
       const s = link.source.id || link.source
       const t = link.target.id || link.target
       if (clickedNodeLinks.value.has(`${s}-${t}`) || clickedNodeLinks.value.has(`${t}-${s}`)) return 4
-      if (highlightedLinks.value.has(`${s}-${t}`) || highlightedLinks.value.has(`${t}-${s}`)) return 3
-      return 0
+      if (highlightedLinks.value.has(`${s}-${t}`) || highlightedLinks.value.has(`${t}-${s}`)) return 2
+      return 0 
+    })
+    .linkDirectionalParticleSpeed(0.006)
+    .linkDirectionalParticleWidth(link => {
+      const s = link.source.id || link.source
+      const t = link.target.id || link.target
+      if (clickedNodeLinks.value.has(`${s}-${t}`) || clickedNodeLinks.value.has(`${t}-${s}`)) return 2.5
+      return 1.5
     })
     .onNodeClick(async node => {
       // ── Zoom no nó ──
@@ -287,52 +265,41 @@ const initGraph = () => {
       
       // Distância Interestelar: Notas conectadas entre si (150px)
       return 150
-  }).strength(1)
+  }).strength(0.8)
+
+  // Otimização de CPU: Acelera o repouso da simulação
+  Graph.d3AlphaDecay(0.04)
+  Graph.d3VelocityDecay(0.3)
 
   Graph.nodeThreeObject(node => {
     const isVirtual = node.virtual
     const isActive = node.id === props.activeNode
-    
-    // Lógica consolidada de tipos e status
     const type = node['status'] === 'legacy' ? 'legacy' : (node['status'] === 'conflict' ? 'conflict' : (node['document-type'] || node['document_type'] || 'chunk'))
     
     const colors = {
-      source: '#a855f7', // Roxo (Original)
-      page: '#22d3ee',   // Ciano (Página)
-      chunk: '#3b82f6',  // Azul Neon
-      system: '#f1f5f9', // Platina (Sistema)
-      memory: '#f472b6', // Rosa (Sinapse de Chat)
-      legacy: '#475569', // Cinza (Inativo/Legado)
-      conflict: '#ef4444', // Vermelho (Contradição/Alerta)
-      virtual: '#1e3a8a',// Azul Escuro (Fantasma)
-      active: '#fcd34d'  // Ouro (Foco)
+      source: '#a855f7',
+      page: '#22d3ee',
+      chunk: '#3b82f6',
+      system: '#f1f5f9',
+      memory: '#f472b6',
+      legacy: '#475569',
+      conflict: '#ef4444',
+      virtual: '#1e3a8a',
+      active: '#fcd34d'
     }
 
-    // Se o nó estiver em conflito ou for legado, sobrepõe a cor
     const displayColor = node.status === 'conflict' ? colors.conflict : (node.status === 'legacy' ? colors.legacy : (colors[type] || colors.chunk))
     const nodeColor = isActive ? colors.active : (isVirtual ? colors.virtual : displayColor)
     
-    // Esferas com tamanhos diferentes por importância (NÚCLEOS vs IDEIAS)
-    let radius = 16 // Tamanho base para Ideias
+    // Otimização: Reuso de Geometria
+    const geometry = isActive ? sphereActive : (isVirtual ? sphereVirtual : sphereLowRes)
     
-    const geometry = new THREE.SphereGeometry(radius)
-    const material = new THREE.MeshStandardMaterial({
-      color: nodeColor,
-      transparent: true,
-      opacity: type === 'legacy' ? 0.3 : (isVirtual ? 0.3 : 0.9),
-      metalness: 0.8,
-      roughness: 0.1
-    })
+    // Otimização: Reuso de Material (Pool por cor/opacidade/emissão)
+    const opacity = type === 'legacy' ? 0.3 : (isVirtual ? 0.2 : 0.9)
+    const intensity = isActive ? 1.2 : (isVirtual ? 0 : 0.5)
+    const material = getCachedMaterial(nodeColor, opacity, intensity)
     
-    const mesh = new THREE.Mesh(geometry, material)
-    
-    // Brilho Neon (Emissivo)
-    if (!isVirtual) {
-       mesh.material.emissive = new THREE.Color(nodeColor)
-       mesh.material.emissiveIntensity = isActive ? 1.5 : 0.6
-    }
-
-    return mesh
+    return new THREE.Mesh(geometry, material)
   })
 
   // Loop de animação e pulso (opcional se o force-graph já lidar bem)
@@ -751,7 +718,7 @@ watch(skeletalMode, () => {
         
         <div class="modal-body">
           <p v-if="modalMode === 'full'" class="modal-text">
-            Deseja forçar uma varredura completa de todos os <strong>{{ stats.total_notes || nodes.length }} arquivos</strong>?<br/>
+            Deseja forçar uma varredura completa de todos os <strong>{{ graphHealth.active_nodes || nodes.length }} arquivos</strong>?<br/>
             <span class="warning-sub">Isso reconstrói o cache de auditoria e garante 100% de integridade. Use apenas se notar dados faltando.</span>
           </p>
           <p v-else class="modal-text">

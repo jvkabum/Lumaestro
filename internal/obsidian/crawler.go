@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"Lumaestro/internal/config"
@@ -29,6 +30,14 @@ type Crawler struct {
 	cachePath string
 	cache     IndexCache
 	mu        sync.Mutex
+	workerCount int // 👷 Número de workers paralelos
+}
+
+type crawlTask struct {
+	path          string
+	info          os.FileInfo
+	docType       string
+	implicitLinks []string
 }
 
 // SetContext injeta o contexto oficial do Wails para emissão de eventos assíncronos.
@@ -39,12 +48,13 @@ func (c *Crawler) SetContext(ctx context.Context) {
 // NewCrawler inicializa o crawler com suporte a cache de indexação.
 func NewCrawler(vaultPath string, embedder *provider.EmbeddingService, qdrant *provider.QdrantClient, ontology *provider.OntologyService) *Crawler {
 	c := &Crawler{
-		VaultPath: vaultPath,
-		Embedder:  embedder,
-		Qdrant:    qdrant,
-		Ontology:  ontology,
-		cachePath: ".context/index_cache.json",
-		cache:     make(IndexCache),
+		VaultPath:   vaultPath,
+		Embedder:    embedder,
+		Qdrant:      qdrant,
+		Ontology:    ontology,
+		cachePath:   ".context/index_cache.json",
+		cache:       make(IndexCache),
+		workerCount: 8, // ⚙️ Valor balanceado para cota Gemini vs Velocidade
 	}
 	c.loadCache()
 	return c
@@ -78,62 +88,90 @@ func (c *Crawler) PurgeCache() error {
 	return nil
 }
 
-// IndexVault percorre e indexa notas do Obsidian (Cofre do Usuário).
+// IndexVault percorre e indexa notas do Obsidian (Cofre do Usuário) em paralelo.
 func (c *Crawler) IndexVault(ctx context.Context) error {
-	// 🏗️ Garante que as 'gavetas' (coleções) existam no Qdrant antes de começar
 	if err := c.EnsureCollections(ctx); err != nil {
 		return err
 	}
 
-	var totalSkipped int = 0
-	var totalIndexed int = 0
+	tasks := make(chan crawlTask, 100)
+	var wg sync.WaitGroup
+	var totalSkipped int32 = 0
+	var totalIndexed int32 = 0
+
+	// 👷 Iniciar Workers
+	for i := 0; i < c.workerCount; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for task := range tasks {
+				indexed, err := c.processFile(ctx, task.path, task.info, task.docType, task.implicitLinks)
+				if err == nil {
+					if indexed {
+						atomic.AddInt32(&totalIndexed, 1)
+					} else {
+						atomic.AddInt32(&totalSkipped, 1)
+					}
+				}
+			}
+		}()
+	}
 
 	err := filepath.Walk(c.VaultPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() {
 			return nil
 		}
 
-		// Detecta tipo base (Chunk para MD, Source para Mídia)
 		ext := strings.ToLower(filepath.Ext(path))
 		docType := "chunk"
 		if ext == ".pdf" || ext == ".png" || ext == ".jpg" || ext == ".jpeg" {
 			docType = "source"
 		}
 
-		indexed, err := c.processFile(ctx, path, info, docType, nil)
-		if err == nil {
-			if indexed {
-				totalIndexed++
-			} else {
-				totalSkipped++
-			}
-		}
+		// Enviar tarefa para o pool
+		tasks <- crawlTask{path: path, info: info, docType: docType}
 		return nil
 	})
+
+	close(tasks)
+	wg.Wait()
 
 	c.saveCache()
 	runtime.EventsEmit(ctx, "agent:log", map[string]string{
 		"source":  "CRAWLER",
-		"content": fmt.Sprintf("✅ Indexação do Vault completa. Novos: %d. Cache: %d.", totalIndexed, totalSkipped),
+		"content": fmt.Sprintf("✅ Indexação completa. Novos: %d. Cache: %d.", totalIndexed, totalSkipped),
 	})
 	return err
 }
 
-// IndexSystemDocs varre a raiz do projeto em busca de documentação técnica interna.
+// IndexSystemDocs varre a raiz do projeto em busca de documentação técnica interna (Paralelo).
 func (c *Crawler) IndexSystemDocs(ctx context.Context, rootPath string) error {
-	// 🏗️ Garante que as 'gavetas' (coleções) existam no Qdrant antes de começar
 	if err := c.EnsureCollections(ctx); err != nil {
 		return err
 	}
 
-	var totalIndexed int = 0
+	tasks := make(chan crawlTask, 100)
+	var wg sync.WaitGroup
+	var totalIndexed int32 = 0
+
+	for i := 0; i < c.workerCount; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for task := range tasks {
+				indexed, err := c.processFile(ctx, task.path, task.info, task.docType, nil)
+				if err == nil && indexed {
+					atomic.AddInt32(&totalIndexed, 1)
+				}
+			}
+		}()
+	}
 
 	err := filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() {
 			return nil
 		}
 
-		// Filtros de Segurança: Ignora dependências e arquivos de build
 		pathLower := strings.ToLower(path)
 		if strings.Contains(pathLower, "node_modules") || 
 		   strings.Contains(pathLower, ".git") || 
@@ -145,19 +183,16 @@ func (c *Crawler) IndexSystemDocs(ctx context.Context, rootPath string) error {
 			return nil
 		}
 
-		// Apenas documentos Markdown do próprio projeto
-		ext := strings.ToLower(filepath.Ext(path))
-		if ext != ".md" {
+		if strings.ToLower(filepath.Ext(path)) != ".md" {
 			return nil
 		}
 
-		// Indexa como tipo 'system' para diferenciação no 3D
-		indexed, err := c.processFile(ctx, path, info, "system", nil)
-		if err == nil && indexed {
-			totalIndexed++
-		}
+		tasks <- crawlTask{path: path, info: info, docType: "system"}
 		return nil
 	})
+
+	close(tasks)
+	wg.Wait()
 
 	if totalIndexed > 0 {
 		runtime.EventsEmit(c.ctx, "agent:log", map[string]string{
@@ -168,8 +203,7 @@ func (c *Crawler) IndexSystemDocs(ctx context.Context, rootPath string) error {
 	return err
 }
 
-// IndexRepositories engloba a lógica radial: Lê repositórios importados, faz o RAG dos códigos (opcional) 
-// e gera os links implícitos apontando para a "Estrela Mãe" (CoreNode).
+// IndexRepositories engloba a lógica radial paralela.
 func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.ProjectScan) error {
 	if err := c.EnsureCollections(ctx); err != nil {
 		return err
@@ -178,8 +212,24 @@ func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.P
 	for _, repo := range repositories {
 		if repo.Path == "" { continue }
 
-		var totalIndexed int = 0
-		fmt.Printf("[Crawler] 🪐 Acionando RAG Radial no repousitório: %s (Núcleo: %s)\n", repo.Path, repo.CoreNode)
+		tasks := make(chan crawlTask, 100)
+		var wg sync.WaitGroup
+		var totalIndexed int32 = 0
+
+		fmt.Printf("[Crawler] 🪐 Acionando RAG Radial no repousitório PARALELO: %s\n", repo.Path)
+
+		for i := 0; i < c.workerCount; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for task := range tasks {
+					indexed, err := c.processFile(ctx, task.path, task.info, task.docType, task.implicitLinks)
+					if err == nil && indexed {
+						atomic.AddInt32(&totalIndexed, 1)
+					}
+				}
+			}()
+		}
 		
 		filepath.Walk(repo.Path, func(path string, info os.FileInfo, err error) error {
 			if err != nil || info.IsDir() { return nil }
@@ -200,18 +250,20 @@ func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.P
 				return nil
 			}
 
-			// Injeta a gravidade: O CoreNode vira o link implícito dessa nota!
-			implicitEdge := []string{repo.CoreNode}
-			
 			docType := "project-file"
 			if isCode { docType = "code-file" }
 
-			indexed, err := c.processFile(ctx, path, info, docType, implicitEdge)
-			if err == nil && indexed {
-				totalIndexed++
+			tasks <- crawlTask{
+				path: path, 
+				info: info, 
+				docType: docType, 
+				implicitLinks: []string{repo.CoreNode},
 			}
 			return nil
 		})
+
+		close(tasks)
+		wg.Wait()
 
 		if totalIndexed > 0 {
 			runtime.EventsEmit(c.ctx, "agent:log", map[string]string{
