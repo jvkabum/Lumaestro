@@ -1,4 +1,4 @@
-﻿package core
+package core
 
 import (
 	"Lumaestro/internal/agents"
@@ -256,6 +256,14 @@ func (a *App) CheckConnection() bool {
 	return a.qdrant != nil && a.config != nil && a.crawler != nil
 }
 
+// DeleteSession remove o arquivo físico de uma Sinfonia (Sessão).
+func (a *App) DeleteSession(filePath string) error {
+	if a.executor == nil {
+		return fmt.Errorf("executor de agentes não inicializado")
+	}
+	return a.executor.DeleteSession(filePath)
+}
+
 // 🛡️ checkRogueMainFiles escaneia subpastas procurando arquivos Go conflitantes. (DNA 1:1 ASCII)
 func checkRogueMainFiles() {
 	rogueFiles := []string{}
@@ -263,8 +271,14 @@ func checkRogueMainFiles() {
 		if err == nil && !info.IsDir() && filepath.Ext(path) == ".go" {
 			dir := filepath.Dir(path)
 			if dir != "." && !strings.HasPrefix(path, "build") && !strings.HasPrefix(path, "frontend") {
-				if d, _ := os.ReadFile(path); strings.Contains(string(d), "package main") {
-					rogueFiles = append(rogueFiles, path)
+				if d, err := os.ReadFile(path); err == nil {
+					content := string(d)
+					if strings.HasPrefix(content, "package main") || strings.Contains(content, "\npackage main") {
+						// Ignora a si mesmo ou arquivos que só têm o texto escapado
+						if !strings.HasSuffix(path, "app.go") && !strings.Contains(path, "skills") {
+							rogueFiles = append(rogueFiles, path)
+						}
+					}
 				}
 			}
 		}

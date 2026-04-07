@@ -62,6 +62,10 @@ export function CreateTask(arg1, arg2, arg3) {
   return window['go']['core']['App']['CreateTask'](arg1, arg2, arg3);
 }
 
+export function DeleteSession(arg1) {
+  return window['go']['core']['App']['DeleteSession'](arg1);
+}
+
 export function ExportRLHFDataset() {
   return window['go']['core']['App']['ExportRLHFDataset']();
 }

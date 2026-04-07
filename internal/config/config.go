@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
+	"time"
 )
 
 // SecurityConfig define as permissões granulares para a IA
@@ -123,20 +123,38 @@ func Save(cfg Config) error {
 	return os.WriteFile(getConfigPath(), data, 0644)
 }
 
-// Load recupera as configurações do arquivo JSON.
+// Load recupera as configurações do arquivo JSON com resiliência a Race Conditions.
 func Load() (*Config, error) {
 	path := getConfigPath()
-	absPath, _ := filepath.Abs(path)
-	fmt.Printf("[Config] 📂 Carregando configuração de: %s\n", absPath)
 	
-	data, err := os.ReadFile(path)
+	var data []byte
+	var err error
+	
+	// 🔄 Retry Loop: Tenta ler até 3 vezes com pequeno delay se o arquivo estiver vazio/corrompido
+	// Isso evita o erro 'unexpected end of JSON input' durante o Save() simultâneo.
+	for i := 0; i < 3; i++ {
+		data, err = os.ReadFile(path)
+		if err == nil && len(data) > 2 { // Verifica se tem conteúdo mínimo
+			break
+		}
+		if i < 2 {
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+
 	if err != nil {
 		fmt.Printf("[Config] Aviso: %s não encontrado no diretorio (%v)\n", path, err)
-		return &Config{}, nil // Retorna config vazia se o arquivo não existir
+		return &Config{}, nil
 	}
 
 	var cfg Config
 	if err := json.Unmarshal(data, &cfg); err != nil {
+		// Se falhar o parse, tentamos uma última vez após um sono maior
+		time.Sleep(200 * time.Millisecond)
+		data, _ = os.ReadFile(path)
+		if errRetry := json.Unmarshal(data, &cfg); errRetry == nil {
+			return &cfg, nil
+		}
 		fmt.Printf("[Config] ERRO CRITICO Parse JSON: %v\n", err)
 		return nil, err
 	}

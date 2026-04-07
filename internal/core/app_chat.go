@@ -1,4 +1,4 @@
-﻿package core
+package core
 
 import (
 	"fmt"
@@ -40,7 +40,7 @@ func (a *App) AskAgent(agentName string, prompt string) string {
 
 		// Injeta a pergunta (prompt completo com RAG e histórico) na sessão ACP ativa
 		// O executor cuidará de enviar via StdIn seguindo o protocolo ndJSON
-		err = a.executor.SendInput("default", response, nil)
+		err = a.executor.SendInput(agentName, response, nil)
 		if err != nil {
 			fmt.Printf("[BACKEND] ERRO ao enviar para o agente: %v\n", err)
 			runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
@@ -71,7 +71,10 @@ func (a *App) SendAgentInput(agent string, input string, images []map[string]str
 	// 🧠 Injetor de Memória Semântica com Ligações Nervosas (RAG + Grafo)
 	contextInfo := ""
 	if a.embedder != nil && a.navigator != nil && a.config.ObsidianVaultPath != "" {
+		// 🏁 FAST-TRACK: Se o pool estiver em hibernação forçada, pulamos o RAG imediatamente
+		// para não travar o envio da mensagem por 30s.
 		fmt.Println("[RAG] Explorando ligações nervosas no Grafo de Conhecimento...")
+		
 		vector, err := a.embedder.GenerateEmbedding(a.ctx, input)
 		if err == nil {
 			// 1. Busca as notas âncoras (Top 3)
@@ -79,7 +82,6 @@ func (a *App) SendAgentInput(agent string, input string, images []map[string]str
 			if err == nil && len(nodes) > 0 {
 				// 2. Navegação de Sinapses: Expandir o contexto seguindo os links neurais
 				fullContext := a.navigator.ExpandContext(a.ctx, nodes)
-
 				contextInfo = "\n\n[CONHECIMENTO ORQUESTRADO (OBSIDIAN + SINAPSES)]\n"
 				for _, ctxPart := range fullContext {
 					contextInfo += ctxPart + "\n\n"
@@ -87,18 +89,20 @@ func (a *App) SendAgentInput(agent string, input string, images []map[string]str
 				fmt.Printf("[RAG] Contexto expandido via Grafo com %d fontes.\n", len(fullContext))
 			}
 		} else {
-			fmt.Printf("[RAG] Erro ao gerar embedding para contexto: %v\n", err)
+			// 🚀 Se falhou por cota (429) ou hibernação, não bloqueamos o chat.
+			fmt.Printf("[RAG] Fast-track ativado: Pulando busca de contexto (%v)\n", err)
 		}
 	}
 
 	// Diretiva Técnica Dinâmica: Força o idioma em todos os canais (Resposta e Raciocínio).
-	directive := fmt.Sprintf("\n\n[SYSTEM DIRECTIVE: You MUST think, reason, and respond exclusively in %s. This applies to your 'Thought Channel' and your final response. DO NOT use English for internal reasoning. ORGANIZATION RULES: 1. Use clear Markdown headers (##). 2. Use horizontal rules (---) to separate major sections. 3. Keep paragraphs short (max 3 lines). 4. Use bold text for key terms.]", lang)
+	directive := fmt.Sprintf("\n\n[SYSTEM DIRECTIVE: You MUST think, reason, and respond exclusively in %s. This applies to your 'Thought Channel' and your final response. DO NOT use English for internal reasoning.]", lang)
 
 	// A Sinfonia Final: Contexto + Input + Diretiva
 	enhancedInput := contextInfo + "\n\nMENSAGEM DO USUÁRIO:\n" + input + directive
 
-	sessionID := "acp-session-" + agent
-	err := a.executor.SendInput(sessionID, enhancedInput, images)
+	// 🚨 CORREÇÃO DE ID: Usar o nome do agente diretamente, sem o prefixo 'acp-session-'
+	// O ACPExecutor registra as sessões usando o nome do agente (ex: 'gemini')
+	err := a.executor.SendInput(agent, enhancedInput, images)
 	if err != nil {
 		fmt.Printf("[App] ERRO no SendAgentInput: %v\n", err)
 		return fmt.Errorf("erro ao enviar input para ACP: %v", err)

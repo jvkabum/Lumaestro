@@ -30,6 +30,19 @@ const handleLoadSession = async (sessionId) => {
   }
 };
 
+const handleDelete = async (session) => {
+  if (window.confirm(`Deseja apagar permanentemente a Sinfonia "${session.title || 'sem título'}"?`)) {
+    try {
+      // 🚀 Chama o backend via Wails bridge
+      await window.go.core.App.DeleteSession(session.file);
+      // O backend já emite o evento de turn_complete que recarrega a lista
+    } catch (err) {
+      console.error("Erro ao apagar sessão:", err);
+      alert("⚠️ Erro ao apagar: " + err);
+    }
+  }
+};
+
 onMounted(async () => {
   if (store.activeAgent) {
     await store.fetchSessions(store.activeAgent);
@@ -79,6 +92,18 @@ watch(() => store.activeAgent, async (newAgent) => {
             <span class="time">{{ formatRelativeTime(session.updatedAt) }}</span>
           </div>
         </div>
+        
+        <!-- Botão de Apagar (Lixeira Premium) -->
+        <button 
+          class="delete-btn" 
+          @click.stop="handleDelete(session)"
+          title="Apagar Sinfonia Permanente"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          </svg>
+        </button>
       </div>
     </div>
 
@@ -166,6 +191,7 @@ watch(() => store.activeAgent, async (newAgent) => {
 }
 
 .session-item {
+  position: relative; /* 📌 Ancora o botão de delete para cada chat individualmente */
   padding: 10px 12px;
   margin-bottom: 4px;
   border-radius: 6px;
@@ -216,6 +242,38 @@ watch(() => store.activeAgent, async (newAgent) => {
 .time {
   font-size: 10px;
   color: rgba(139, 148, 158, 0.5);
+}
+
+/* --- Botão Delete Premium --- */
+.delete-btn {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: rgba(244, 63, 94, 0.1);
+  border: 1px solid rgba(244, 63, 94, 0.2);
+  color: #f43f5e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(4px);
+}
+
+.session-item:hover .delete-btn {
+  opacity: 1;
+}
+
+.delete-btn:hover {
+  background: #f43f5e;
+  color: #fff;
+  transform: translateY(-50%) scale(1.1);
+  box-shadow: 0 0 15px rgba(244, 63, 94, 0.4);
 }
 
 .sidebar-footer {

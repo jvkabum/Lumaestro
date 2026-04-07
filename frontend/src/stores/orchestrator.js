@@ -5,10 +5,14 @@ import { EventsOn } from '../../wailsjs/runtime/runtime';
 // Helper para chamar funções do Wails com segurança
 const safeCall = async (pkg, func, ...args) => {
   try {
-    if (window.go && window.go.main && window.go.main.App && window.go.main.App[func]) {
-      return await window.go.main.App[func](...args);
+    // 🚀 SUPORTE MODULAR: Tenta encontrar a função no pacote core (novo) ou main (legado)
+    const bridge = (window.go && window.go.core && window.go.core.App) || 
+                   (window.go && window.go.main && window.go.main.App);
+                   
+    if (bridge && bridge[func]) {
+      return await bridge[func](...args);
     }
-    console.warn(`[Wails SafeCall] Função ${func} não encontrada`);
+    console.warn(`[Wails SafeCall] Função ${func} não encontrada em core ou main`);
     return null;
   } catch (err) {
     console.error(`[Wails SafeCall] Erro ao chamar ${func}:`, err);

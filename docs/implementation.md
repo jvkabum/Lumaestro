@@ -18,7 +18,7 @@ O objetivo é transformar o README atual em uma vitrine técnica e funcional que
     - **Graph-RAG**: Integração profunda com Obsidian e busca vetorial.
     - **3D Hub**: Visualização de grafos com PageRank e Community Detection.
 - **Installation & Setup**: 
-    - Guia simplificado usando os novos scripts: `.\dev` e `.\build`.
+    - Guia simplificado usando os novos scripts: `./dev` e `./build`.
     - Dependências externas (duckdb.dll).
 - **Architecture**: Breve explicação de como o Go (Backend) orquestra os Agentes via ACP.
 

@@ -199,18 +199,30 @@ export function useGraphEvents() {
     const c = store.currentConflict
     console.log("Resolvendo conflito com decisão:", decision)
     
+    // 🚀 Feedback visual imediato: fecha o modal antes da chamada de rede
+    store.currentConflict = null
+
     try {
-      await window.go.main.App.ResolveConflict(
-        decision, 
-        c.subject, 
-        c.predicate, 
-        c.old_id, 
-        c.new, 
-        c.session_id
-      )
-      store.currentConflict = null
+      // Tenta chamar no pacote modular 'core' (novo) com fallback para 'main' (legado)
+      const bridge = (window.go && window.go.core && window.go.core.App) || 
+                     (window.go && window.go.main && window.go.main.App);
+      
+      if (bridge && bridge.ResolveConflict) {
+        await bridge.ResolveConflict(
+          decision, 
+          c.subject, 
+          c.predicate, 
+          c.old_id, 
+          c.new, 
+          c.session_id
+        )
+      } else {
+        console.error("Função ResolveConflict não encontrada na bridge Wails");
+      }
     } catch (err) {
-      console.error("Falha ao resolver conflito:", err)
+      console.error("Falha ao resolver conflito no backend:", err)
+      // Se falhar drasticamente, poderíamos restaurar o conflito para o usuário tentar denovo
+      // store.currentConflict = c
     }
   }
 

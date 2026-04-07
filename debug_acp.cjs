@@ -2,7 +2,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
-const geminiScript = path.join(__dirname, 'node_modules', '@google', 'gemini-cli', 'dist', 'index.js');
+const geminiScript = path.join(__dirname, 'node_modules', '@google', 'gemini-cli', 'bundle', 'gemini.js');
 
 console.log('=== DIAGNÓSTICO ACP v4 (ndJSON + Protocol Fix) ===');
 console.log('Gemini CLI:', geminiScript);
@@ -56,7 +56,7 @@ child.stdout.on('data', (chunk) => {
                         jsonrpc: '2.0',
                         id: ++msgId,
                         method: 'authenticate',
-                        params: { methodId: 'login_with_google' }
+                        params: { methodId: 'oauth-personal' }
                     });
                 }, 500);
             }

@@ -1,4 +1,4 @@
-﻿package core
+package core
 
 import (
 	"Lumaestro/internal/agents"
@@ -34,7 +34,7 @@ func (a *App) StartLoginSession(agent string) string {
 
 // StartAgentSession inicia a CLI do Gemini em modo seguro ACP (JSON RPC 2.0).
 func (a *App) StartAgentSession(agent string) error {
-	sessionID := "acp-session-" + agent
+	sessionID := agent // 🚨 Unificação de ID: Usar o nome do agente diretamente casas sesão ACP
 
 	// 🕵️⚡ Trava de Segurança: Não inicia se já houver uma sessão ativa ou iniciando para este agente.
 	a.executor.Mu.Lock()
@@ -53,7 +53,7 @@ func (a *App) StartAgentSession(agent string) error {
 
 // StartBackgroundAgentSession cria uma instância paralela silenciosa exclusiva para o processamento de RAG
 func (a *App) StartBackgroundAgentSession(agent string) error {
-	sessionID := "acp-session-background-" + agent
+	sessionID := "background-" + agent // Mantém prefixo apenas para background para evitar colisão
 
 	a.executor.Mu.Lock()
 	_, exists := a.executor.ActiveSessions[sessionID]
@@ -71,7 +71,7 @@ func (a *App) StartBackgroundAgentSession(agent string) error {
 
 // ListAgentSessions retorna a lista de conversas salvas para o agente
 func (a *App) ListAgentSessions(agent string) ([]agents.SessionInfo, error) {
-	sessionID := "acp-session-" + agent
+	sessionID := agent
 	a.executor.Mu.Lock()
 	session, ok := a.executor.ActiveSessions[sessionID]
 	a.executor.Mu.Unlock()
@@ -86,14 +86,14 @@ func (a *App) ListAgentSessions(agent string) ([]agents.SessionInfo, error) {
 // LoadAgentSession encerra a atual e carrega uma antiga (Checkpoint)
 func (a *App) LoadAgentSession(agent string, acpSessionID string) error {
 	fmt.Printf("[App] Trocando para sessão: %s\n", acpSessionID)
-	sessionID := "acp-session-" + agent
+	sessionID := agent
 	return a.executor.StartSession(a.ctx, agent, sessionID, acpSessionID, uuid.Nil, nil)
 }
 
 // NewAgentSession força a criação de um novo chat (limpa o contexto)
 func (a *App) NewAgentSession(agent string) error {
 	fmt.Println("[App] Iniciando NOVO chat (limpando contexto)...")
-	sessionID := "acp-session-" + agent
+	sessionID := agent
 	return a.executor.StartSession(a.ctx, agent, sessionID, "", uuid.Nil, nil)
 }
 
@@ -103,7 +103,7 @@ func (a *App) ResizeTerminal(agent string, cols int, rows int) {
 
 // StopAgentSession encerra a sessão ativa.
 func (a *App) StopAgentSession(agent string) error {
-	sessionID := "acp-session-" + agent
+	sessionID := agent
 	err := a.executor.StopSession(sessionID)
 	if err != nil {
 		return fmt.Errorf("nenhuma sessão ativa ACP encontrada para %s", agent)

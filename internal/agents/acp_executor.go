@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -196,8 +197,8 @@ func (e *ACPExecutor) SendRPC(s *ACPSession, msg JSONRPCMessage) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
 
-	// ACP oficial usa Newline-Delimited JSON (ndJSON).
-	_, err = s.Stdin.Write(append(data, '\n'))
+	fmt.Printf(">> [ACP SEND] %s\n", string(data))
+	_, err = fmt.Fprintln(s.Stdin, string(data))
 	return err
 }
 
@@ -233,21 +234,28 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 	// [TRUQUE DE SINFONIA] Se estivermos no Windows e for o Gemini, o .cmd (tanto local quanto global)
 	// costuma engolir o Stdin em Pipes IPC, quebrando o JSON-RPC. Precisamos bypassar rodando via 'node'.
 	if agent == "gemini" && strings.HasSuffix(binaryPath, ".cmd") {
-		// A pasta .cmd do NPM fica em {NPM_ROOT}/gemini.cmd
-		// E o JS real fica em {NPM_ROOT}/node_modules/@google/gemini-cli/dist/index.js
+		// A pasta .cmd do NPM fica em {NPM_ROOT}/node_modules/.bin
+		// E o JS real fica em {NPM_ROOT}/node_modules/@google/gemini-cli/bundle/gemini.js
 		baseDir := filepath.Dir(binaryPath)
 
 		// Verifica se é local (../node_modules) ou global (node_modules direto)
 		// Em local, baseDir = "cwd/node_modules/.bin". Logo o pacote está em "../@google/..."
 		// Em global, baseDir = "AppData/.../npm". Logo pacote está em "node_modules/@google/..."
-		jsPathGlobal := filepath.Join(baseDir, "node_modules", "@google", "gemini-cli", "bundle", "gemini.js")
-		jsPathLocal := filepath.Join(baseDir, "..", "@google", "gemini-cli", "bundle", "gemini.js")
+		jsPathGlobalDist := filepath.Join(baseDir, "node_modules", "@google", "gemini-cli", "dist", "index.js")
+		jsPathLocalDist := filepath.Join(baseDir, "..", "@google", "gemini-cli", "dist", "index.js")
+		jsPathGlobalBundle := filepath.Join(baseDir, "node_modules", "@google", "gemini-cli", "bundle", "gemini.js")
+		jsPathLocalBundle := filepath.Join(baseDir, "..", "@google", "gemini-cli", "bundle", "gemini.js")
 
 		jsTarget := ""
-		if _, err := os.Stat(jsPathGlobal); err == nil {
-			jsTarget = jsPathGlobal
-		} else if _, err := os.Stat(jsPathLocal); err == nil {
-			jsTarget = jsPathLocal
+		// v0.36+: O pacote NPM shipa apenas bundle/gemini.js (dist/ foi removido)
+		if _, err := os.Stat(jsPathLocalBundle); err == nil {
+			jsTarget = jsPathLocalBundle
+		} else if _, err := os.Stat(jsPathGlobalBundle); err == nil {
+			jsTarget = jsPathGlobalBundle
+		} else if _, err := os.Stat(jsPathLocalDist); err == nil {
+			jsTarget = jsPathLocalDist
+		} else if _, err := os.Stat(jsPathGlobalDist); err == nil {
+			jsTarget = jsPathGlobalDist
 		}
 
 		if jsTarget != "" {
@@ -269,10 +277,16 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 	cmd.Dir, _ = os.Getwd()
 	cmd.Env = os.Environ()
 
-	// 🚨 CRUCIAL: Injetar a pasta de sessão específica desta conta
+	// 🚨 CRUCIAL: Injetar a pasta de sessão específica desta conta (Prioridade Local)
 	cwd, _ := os.Getwd()
-	sessionHome := cwd // Default
-	if cfg, errCfg := config.Load(); errCfg == nil {
+	sessionHome := cwd // Default: Diretório do Projeto
+
+	// Se houver uma pasta .gemini local, assumimos ela como Home sempre.
+	if _, err := os.Stat(filepath.Join(cwd, ".gemini")); err == nil {
+		fmt.Println("[ACP] 📂 Pasta .gemini local detectada! Forçando modo Project-Specific.")
+		sessionHome = cwd
+	} else if cfg, errCfg := config.Load(); errCfg == nil {
+		// Fallback para config global apenas se não houver .gemini local
 		for _, acc := range cfg.GeminiAccounts {
 			if acc.Active && acc.HomeDir != "" {
 				sessionHome = acc.HomeDir
@@ -310,11 +324,8 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 	attemptID := "att-1"
 	cmd.Env = append(cmd.Env, "LIGHTNING_ROLLOUT_ID="+rolloutID)
 	cmd.Env = append(cmd.Env, "LIGHTNING_ATTEMPT_ID="+attemptID)
-	
-	// 📡 Redirecionamento Total do Tráfego para o Interceptor
-	cmd.Env = append(cmd.Env, "HTTP_PROXY=http://localhost:8001")
-	cmd.Env = append(cmd.Env, "HTTPS_PROXY=http://localhost:8001")
-	cmd.Env = append(cmd.Env, "OPENAI_BASE_URL=http://localhost:8001/v1")
+	// ACP Agent se comunica narivamente pelo CLI usando OAuth.
+	// O tráfego do agente não deve passar pelo ResilienceFleet (que usa API Keys).
 
 	// No Windows com espaços no caminho, o CommandContext às vezes precisa de ajuda.
 	// Garantimos que o caminho seja tratado como uma string única.
@@ -374,12 +385,12 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		Params:  json.RawMessage(`{"protocolVersion":1,"clientInfo":{"name":"Lumaestro","version":"2.0.0"},"clientCapabilities":{"fs":{"readTextFile":true,"writeTextFile":true}}}`),
 	})
 
-	// Aguarda initialize responder
+	// Aguarda initialize responder (Aumentado para 60s devido a 503/429)
 	select {
 	case <-session.initDone:
 		fmt.Println("[ACP] Estágio 1 (initialize) concluído.")
-	case <-time.After(30 * time.Second):
-		return fmt.Errorf("timeout no 'initialize' do Gemini")
+	case <-time.After(60 * time.Second):
+		return fmt.Errorf("timeout no 'initialize' do Gemini (API instável)")
 	}
 
 	// 2. Autenticação: "authenticate" (Estágio 2/3)
@@ -396,29 +407,25 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		Params:  json.RawMessage(`{"methodId":"` + methodId + `"}`),
 	})
 
-	// Aguarda autenticação responder
+	// Aguarda autenticação responder (Aumentado para 60s devido a 503/429)
 	select {
 	case <-session.initDone:
 		fmt.Println("[ACP] Estágio 2 (authenticate) concluído.")
-	case <-time.After(30 * time.Second):
-		return fmt.Errorf("timeout no 'authenticate' do Gemini")
+	case <-time.After(60 * time.Second):
+		return fmt.Errorf("timeout no 'authenticate' do Gemini (Autenticação lenta)")
 	}
 
-	// 3. Criar ou Carregar Sessão: "session/new" ou "session/load" (Estágio 3/3)
+	// 3. Criar ou Carregar Sessão: "newSession" ou "loadSession" (Estágio 3/3)
 	if loadSessionID != "" {
 		targetID := loadSessionID
 		
-		// 🚀 Lógica de Auto-Load da Última Sinfonia (Cursor Style)
+		// A partir de v0.36, a CLI do Gemini removeu o método listSessions/session/list. 
+		// O Lumaestro agora sempre iniciará uma nova sessão de forma silenciosa por padrão até implementarmos 
+		// a restauração de ID puro pelo banco do projeto.
 		if loadSessionID == "LATEST" {
 			fmt.Println("[ACP] Buscando a última sinfonia para restauração automática...")
-			history, err := e.ListSessions(session)
-			if err == nil && len(history) > 0 {
-				targetID = history[0].SessionID 
-				fmt.Printf("[ACP] Última sinfonia encontrada: %s\n", targetID)
-			} else {
-				fmt.Println("[ACP] Nenhuma sinfonia encontrada. Preparando palco novo.")
-				targetID = "" 
-			}
+			fmt.Println("[ACP] Restore nativo no ACP deprecado na v0.36. Assumindo modo clean start.")
+			targetID = ""
 		}
 
 		if targetID != "" {
@@ -443,26 +450,27 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 				Params:  json.RawMessage(`{"cwd":"` + strings.ReplaceAll(cwd, "\\", "\\\\") + `","mcpServers":[]}`),
 			})
 		}
-	} else {
-		e.SendRPC(session, JSONRPCMessage{
-			JSONRPC: JSONRPCVersion,
-			ID:      e.getNextID(),
-			Method:  "session/new",
-			Params:  json.RawMessage(`{"cwd":"` + strings.ReplaceAll(cwd, "\\", "\\\\") + `","mcpServers":[]}`),
-		})
+		if targetID != "" {
+			e.SendRPC(session, JSONRPCMessage{
+				JSONRPC: JSONRPCVersion,
+				ID:      e.getNextID(),
+				Method:  "session/load",
+				Params:  json.RawMessage(`{"sessionId":"` + targetID + `","cwd":"` + strings.ReplaceAll(cwd, "\\", "\\\\") + `"}`),
+			})
+		}
 	}
 
-	// Aguarda session/new ou session/load responder
+	// Aguarda session/new ou session/load responder (Aumentado para 60s devido a 503/429)
 	select {
 	case <-session.initDone:
 		fmt.Println("[ACP] Estágio 3 concluído. Sessão pronta!")
-	case <-time.After(30 * time.Second):
-		return fmt.Errorf("timeout no estágio 3 do Gemini")
+	case <-time.After(60 * time.Second):
+		return fmt.Errorf("timeout no estágio 3 do Gemini (Criação de sessão lenta)")
 	}
 
 	// 🔑 Estágio 4: Auto-Approve - Libera as mãos do Maestro
 	// Envia setSessionMode para que o Gemini CLI execute ferramentas sem pedir permissão
-	fmt.Println("[ACP] Enviando session/set_mode (auto-approve)...")
+	fmt.Println("[ACP] Enviando setSessionMode (auto-approve)...")
 	modeParams, _ := json.Marshal(map[string]interface{}{
 		"sessionId": session.ACPSessID,
 		"modeId":    "yolo",
@@ -571,8 +579,9 @@ type ACPRpcHandler struct {
 }
 
 func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage) {
+	fmt.Printf("<< [ACP RECV Notify] %s: %s\n", method, string(params))
 	// 1. Notificações de Progresso (Trabalho em background)
-	if method == "agent/progress" {
+	if method == "agent/progress" || method == "agentProgress" {
 		var p struct {
 			Message string `json:"message"`
 		}
@@ -587,49 +596,62 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 	}
 
 	// 2. Notificações de Streaming de Sessão (O texto real da resposta)
-	if method == "session/update" {
+	if method == "session/update" || method == "sessionUpdate" {
 		h.Executor.NetLog.LogRequest() // 📡 Registra atividade de rede silenciosamente
 
+		fmt.Println("[ACP TRACE] RAW Update:", string(params))
+
 		var p struct {
-			Update struct {
+			SessionId string `json:"sessionId"`
+			Update    struct {
 				SessionUpdate string `json:"sessionUpdate"`
 				Content       struct {
 					Type string `json:"type"`
 					Text string `json:"text"`
 				} `json:"content"`
+				Text string `json:"text"` // Suporte para formato plano v0.36
 			} `json:"update"`
 		}
 		if json.Unmarshal(params, &p) == nil {
 			update := p.Update
 			isBg := strings.Contains(h.Session.ID, "-background-")
 			
-			// Captura blocos de mensagem ou pensamentos
-			if update.SessionUpdate == "agent_thought_chunk" {
-				if update.Content.Text != "" && !isBg {
-					if !h.Session.isLoggingThought {
-						utils.LogInfo(fmt.Sprintf("Processando raciocínio: %s...", strings.ToUpper(h.Session.AgentName)), "🧠")
-						h.Session.isLoggingThought = true
-						h.Session.isLoggingMessage = false // Reset o outro estado
-					}
-					
-					h.Executor.LogChan <- ExecutionLog{
-						Source:  h.Session.AgentName,
-						Content: update.Content.Text,
-						Type:    "thought",
-					}
+			if update.SessionUpdate == "agent_message_chunk" || update.SessionUpdate == "message_chunk" || update.SessionUpdate == "content_chunk" {
+				txt := update.Content.Text
+				if txt == "" {
+					txt = update.Text // Fallback v0.36
 				}
-			} else if update.SessionUpdate == "agent_message_chunk" {
-				if update.Content.Text != "" && !isBg {
+				
+				if txt != "" && !isBg {
 					if !h.Session.isLoggingMessage {
-						utils.LogInfo("A IA está gerando a orquestração final...", "💬")
+						utils.LogInfo("O Maestro está orquestrando a resposta...", "💬")
 						h.Session.isLoggingMessage = true
-						h.Session.isLoggingThought = false // Reset o outro estado
+						h.Session.isLoggingThought = false 
 					}
 
 					h.Executor.LogChan <- ExecutionLog{
 						Source:  h.Session.AgentName,
-						Content: update.Content.Text,
+						Content: txt,
 						Type:    "message",
+					}
+				}
+			} else if update.SessionUpdate == "agent_thought_chunk" || update.SessionUpdate == "thought_chunk" {
+				txt := update.Content.Text
+				if txt == "" {
+					txt = update.Text 
+				}
+				
+				if txt != "" && !isBg {
+					if !h.Session.isLoggingThought {
+						utils.LogInfo(fmt.Sprintf("Processando raciocínio: %s...", strings.ToUpper(h.Session.AgentName)), "🧠")
+						h.Session.isLoggingThought = true
+						h.Session.isLoggingMessage = false 
+					}
+					
+					h.Executor.LogChan <- ExecutionLog{
+						Source:  h.Session.AgentName,
+						Content: txt,
+						Type:    "thought",
 					}
 				}
 			} else if update.SessionUpdate == "agent_turn_complete" {
@@ -661,6 +683,11 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 					}
 				}
 
+				h.Executor.turnMu.Lock()
+				if ch, ok := h.Executor.turnChannels[h.Session.ID]; ok {
+					close(ch)
+					delete(h.Executor.turnChannels, h.Session.ID)
+				}
 				h.Executor.turnMu.Unlock()
 			}
 
@@ -985,6 +1012,7 @@ func (h *ACPRpcHandler) wrapResult(res interface{}) json.RawMessage {
 }
 
 func (h *ACPRpcHandler) HandleResponse(id interface{}, result json.RawMessage, rpcErr *RPCError) {
+	fmt.Printf("<< [ACP RECV Resp] ID %v: %s\n", id, string(result))
 	// JSON numbers são float64 em Go quando vindos de decodificação genérica
 	idFloat, ok := id.(float64)
 	if !ok {
@@ -1022,6 +1050,15 @@ func (h *ACPRpcHandler) HandleResponse(id interface{}, result json.RawMessage, r
 				Content: fmt.Sprintf("❌ Erro na Sinfonia ACP: %s", rpcErr.Message),
 			}
 		}
+
+		// 🚨 EVITAR TIMEOUT (HANG) DO ALGORÍTMO: Se ocorreu um erro no turno, fechar canal
+		h.Executor.turnMu.Lock()
+		if ch, ok := h.Executor.turnChannels[h.Session.ID]; ok {
+			close(ch)
+			delete(h.Executor.turnChannels, h.Session.ID)
+		}
+		h.Executor.turnMu.Unlock()
+
 		return
 	}
 
@@ -1029,16 +1066,22 @@ func (h *ACPRpcHandler) HandleResponse(id interface{}, result json.RawMessage, r
 	errJson := json.Unmarshal(result, &response)
 	
 	if errJson == nil && response != nil {
-		// 1. Captura de SessionID (Handshake Estágio 2)
+		// 1. Captura de SessionID (Somente Handshake Estágio 3 ou Load)
 		if sessID, ok := response["sessionId"].(string); ok {
 			h.Session.ACPSessID = sessID
 			fmt.Printf("<< SessionID Capturado: %s\n", sessID)
-			select {
-			case h.Session.initDone <- struct{}{}:
-			default:
-			}
-			return
 		}
+	}
+	
+	// 🚀 SINCRONIZAÇÃO DE HANDSHAKE: IDs 1 (init), 2 (auth) e 3 (new/load) 
+	// Não podemos travar o boot se não houver sessionId neles.
+	if idInt <= 3 {
+		fmt.Printf("[ACP] Handshake Stage %d concluído com sucesso.\n", idInt)
+		select {
+		case h.Session.initDone <- struct{}{}:
+		default:
+		}
+		return
 	}
 	
 	// PRINT DE EMERGÊNCIA E ARQUIVO
@@ -1061,18 +1104,22 @@ func (h *ACPRpcHandler) HandleResponse(id interface{}, result json.RawMessage, r
 
 // SendInput envia texto para uma sessão ativa da IA via RPC 'prompt'.
 func (e *ACPExecutor) SendInput(sessionID string, input string, images []map[string]string) error {
+	fmt.Printf("[ACP] >> SendInput recebido! Session: %s, Msg: %s...\n", sessionID, input)
+	
 	e.Mu.Lock()
 	session, ok := e.ActiveSessions[sessionID]
 	e.Mu.Unlock()
 
-	if !ok {
-		return fmt.Errorf("sessão '%s' não encontrada", sessionID)
+	if !ok || session == nil {
+		fmt.Printf("[ACP] ❌ Erro: Sessão %s não encontrada no mapa de sessões ativas!\n", sessionID)
+		return fmt.Errorf("sessão %s não encontrada", sessionID)
 	}
 
+	// ⏳ Aguarda o Handshake terminar se ele ainda estiver rolando em background
 	if session.ACPSessID == "" {
-		// 🕊️ Mecanismo de Tolerância/Paciência: Espera até 10s se o humano enviar mensagem rápido demais
+		fmt.Printf("[ACP] ⏳ Sessão %s ainda sem ID ACP. Aguardando estabilização...\n", sessionID)
 		for i := 0; i < 10; i++ {
-			time.Sleep(1 * time.Second)
+			time.Sleep(500 * time.Millisecond)
 			if session.ACPSessID != "" {
 				break
 			}
@@ -1175,46 +1222,127 @@ func (e *ACPExecutor) StopSession(sessionID string) error {
 	return fmt.Errorf("sessão '%s' não encontrada", sessionID)
 }
 
-// ListSessions pede ao Agente a lista de sessões disponíveis.
+// ListSessions recupera a lista de conversas salvas diretamente do sistema de arquivos.
+// O Gemini CLI v0.36.0 removeu o suporte a 'session/list' via RPC, então usamos este Fallback.
 func (e *ACPExecutor) ListSessions(s *ACPSession) ([]SessionInfo, error) {
-	id := e.getNextID()
-	err := e.SendRPC(s, JSONRPCMessage{
-		JSONRPC: JSONRPCVersion,
-		ID:      id,
-		Method:  "session/list",
-		Params:  json.RawMessage("{}"),
-	})
-	if err != nil {
-		return nil, err
+	// 1. Determinar o diretório de base (.gemini)
+	userHome, _ := os.UserHomeDir()
+	sessionHome := filepath.Join(userHome, ".gemini") // Padrão global da CLI
+	
+	cwd, _ := os.Getwd()
+	if cfg, errCfg := config.Load(); errCfg == nil {
+		for _, acc := range cfg.GeminiAccounts {
+			if acc.Active && acc.HomeDir != "" {
+				sessionHome = acc.HomeDir
+				break
+			}
+		}
+	} else {
+		// Fallback para .gemini local no projeto (como visto em @[c:\git\IA\Lumaestro\.gemini])
+		if _, err := os.Stat(filepath.Join(cwd, ".gemini")); err == nil {
+			sessionHome = filepath.Join(cwd, ".gemini")
+		}
+	}
+	
+	// ⚡ DESCOBERTA DE PROJETO (Gemini v0.36 style)
+	projectID := "lumaestro"
+	projectsPath := filepath.Join(sessionHome, "projects.json")
+	if data, err := os.ReadFile(projectsPath); err == nil {
+		var p struct {
+			Projects map[string]string `json:"projects"`
+		}
+		if json.Unmarshal(data, &p) == nil {
+			// Procura o ID para o diretório atual (cwd)
+			for path, id := range p.Projects {
+				if strings.EqualFold(path, cwd) {
+					projectID = id
+					break
+				}
+			}
+		}
 	}
 
-	resp, err := e.waitForResponse(id, 10*time.Second)
-	if err != nil {
-		return nil, err
-	}
-
-	var list struct {
-		Sessions []struct {
-			ID          string `json:"id"`
-			StartTime   string `json:"startTime"`
-			LastUpdated string `json:"lastUpdated"`
-			DisplayName string `json:"displayName"`
-		} `json:"sessions"`
-	}
-
-	if err := json.Unmarshal(resp.Result, &list); err != nil {
-		return nil, fmt.Errorf("falha ao decodificar lista de sessões: %v", err)
+	sessionsDirs := []string{
+		filepath.Join(sessionHome, "history", projectID),
+		filepath.Join(sessionHome, "history", "ia"),
+		filepath.Join(sessionHome, "history", "lumaestro"),
+		filepath.Join(sessionHome, "history", "lumaestro-1"),
+		filepath.Join(sessionHome, "tmp", "lumaestro", "chats"),
+		filepath.Join(sessionHome, "tmp", "lumaestro-1", "chats"),
+		filepath.Join(sessionHome, "sessions"),
 	}
 
 	var finalList []SessionInfo
-	for _, s := range list.Sessions {
-		finalList = append(finalList, SessionInfo{
-			SessionID: s.ID,
-			Title:     s.DisplayName,
-			CreatedAt: s.StartTime,
-			UpdatedAt: s.LastUpdated,
-		})
+	visited := make(map[string]bool)
+
+	for _, dirPath := range sessionsDirs {
+		if _, err := os.Stat(dirPath); err != nil {
+			continue
+		}
+
+		files, err := os.ReadDir(dirPath)
+		if err != nil {
+			continue
+		}
+
+		for _, f := range files {
+			if !f.IsDir() && strings.HasSuffix(f.Name(), ".json") && f.Name() != "index.json" {
+				path := filepath.Join(dirPath, f.Name())
+				if visited[path] {
+					continue
+				}
+				visited[path] = true
+
+				data, err := os.ReadFile(path)
+				if err != nil {
+					continue
+				}
+
+				var meta struct {
+					ID        string `json:"id"`
+					SessID    string `json:"sessionId"` // Novo campo na v0.36.0
+					Title     string `json:"title"`
+					DispName  string `json:"displayName"` // Algumas versões usam displayName
+					UpdatedAt string `json:"updatedAt"`
+					CreatedAt string `json:"createdAt"`
+				}
+				if err := json.Unmarshal(data, &meta); err == nil {
+					// Fallback de ID: Prioriza sessionId se disponível
+					finalID := meta.ID
+					if meta.SessID != "" {
+						finalID = meta.SessID
+					}
+
+					// Fallback de Título
+					title := meta.Title
+					if title == "" {
+						title = meta.DispName
+					}
+					if title == "" {
+						title = strings.TrimSuffix(f.Name(), ".json")
+					}
+
+					info, _ := f.Info()
+					updatedAt := meta.UpdatedAt
+					if updatedAt == "" {
+						updatedAt = info.ModTime().Format(time.RFC3339)
+					}
+
+					finalList = append(finalList, SessionInfo{
+						SessionID: finalID,
+						Title:     title,
+						UpdatedAt: updatedAt,
+						File:      path, // 🚩 Caminho físico para deleção
+					})
+				}
+			}
+		}
 	}
+
+	// Ordenar por data (mais recente primeiro)
+	sort.Slice(finalList, func(i, j int) bool {
+		return finalList[i].UpdatedAt > finalList[j].UpdatedAt
+	})
 
 	return finalList, nil
 }
@@ -1244,4 +1372,29 @@ func (e *ACPExecutor) LoadSession(s *ACPSession, acpSessionID string) error {
 
 	_, err = e.waitForResponse(id, 15*time.Second)
 	return err
+}
+
+// DeleteSession remove o arquivo físico de uma Sinfonia.
+func (e *ACPExecutor) DeleteSession(filePath string) error {
+	e.Mu.Lock()
+	defer e.Mu.Unlock()
+
+	// 🛡️ Segurança: Garantir que o arquivo está dentro da pasta .gemini do projeto atual
+	cwd, _ := os.Getwd()
+	geminiPath := filepath.Join(cwd, ".gemini")
+	if !strings.HasPrefix(filepath.Clean(filePath), filepath.Clean(geminiPath)) {
+		return fmt.Errorf("🛡️ BLOQUEIO DE SEGURANÇA: Não é permitido deletar arquivos fora da pasta .gemini do projeto")
+	}
+
+	fmt.Printf("[ACP] Deletando Sinfonia: %s\n", filePath)
+	
+	err := os.Remove(filePath)
+	if err != nil {
+		return fmt.Errorf("falha ao deletar arquivo: %v", err)
+	}
+
+	// Notifica a UI para atualizar a lista
+	runtime.EventsEmit(e.Ctx, "agent:turn_complete", "system")
+	
+	return nil
 }
