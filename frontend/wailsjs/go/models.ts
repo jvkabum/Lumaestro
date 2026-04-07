@@ -1,4 +1,4 @@
-export namespace agents {
+export namespace acp {
 	
 	export class SessionInfo {
 	    sessionId: string;

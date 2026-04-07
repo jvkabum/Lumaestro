@@ -2,6 +2,7 @@ package core
 
 import (
 	"Lumaestro/internal/agents"
+	"Lumaestro/internal/agents/acp"
 	"Lumaestro/internal/config"
 	"Lumaestro/internal/db"
 	"Lumaestro/internal/lightning"
@@ -29,9 +30,9 @@ import (
 // App struct representa a instância soberana do Maestro
 type App struct {
 	ctx          context.Context
-	executor     *agents.ACPExecutor
-	orchestrator *agents.Orchestrator
-	legacyExec   *agents.Executor // Apenas para ExecuteCLI fallback se necessário
+	executor     *acp.ACPExecutor
+	orchestrator *acp.Orchestrator
+	legacyExec   *agents.Executor // Executor CLI veterano
 	ontology     *provider.OntologyService
 	crawler      *obsidian.Crawler
 	qdrant       *provider.QdrantClient
@@ -59,8 +60,8 @@ type App struct {
 // NewApp cria uma nova instância soberana do Lumaestro.
 func NewApp() *App {
 	a := &App{}
-	a.executor = agents.NewACPExecutor()
-	a.orchestrator = agents.NewOrchestrator(a.executor)
+	a.executor = acp.NewACPExecutor()
+	a.orchestrator = acp.NewOrchestrator(a.executor)
 	a.legacyExec = agents.NewExecutor()
 	a.installer = tools.NewInstaller()
 	return a

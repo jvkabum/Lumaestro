@@ -1,7 +1,8 @@
 package core
 
 import (
-	"Lumaestro/internal/agents"
+
+	"Lumaestro/internal/agents/acp"
 	"fmt"
 	"os/exec"
 
@@ -70,7 +71,7 @@ func (a *App) StartBackgroundAgentSession(agent string) error {
 }
 
 // ListAgentSessions retorna a lista de conversas salvas para o agente
-func (a *App) ListAgentSessions(agent string) ([]agents.SessionInfo, error) {
+func (a *App) ListAgentSessions(agent string) ([]acp.SessionInfo, error) {
 	sessionID := agent
 	a.executor.Mu.Lock()
 	session, ok := a.executor.ActiveSessions[sessionID]

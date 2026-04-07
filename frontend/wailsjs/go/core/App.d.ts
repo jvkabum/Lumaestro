@@ -4,7 +4,7 @@ import {lightning} from '../models';
 import {db} from '../models';
 import {config} from '../models';
 import {orchestration} from '../models';
-import {agents} from '../models';
+import {acp} from '../models';
 
 export function AddComment(arg1:string,arg2:string):Promise<string>;
 
@@ -92,7 +92,7 @@ export function InstallTool(arg1:string):Promise<string>;
 
 export function IsExplorationMode():Promise<boolean>;
 
-export function ListAgentSessions(arg1:string):Promise<Array<agents.SessionInfo>>;
+export function ListAgentSessions(arg1:string):Promise<Array<acp.SessionInfo>>;
 
 export function ListMCPServers():Promise<string>;
 

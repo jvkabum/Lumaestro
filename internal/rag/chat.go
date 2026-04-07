@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"Lumaestro/internal/agents"
+	"Lumaestro/internal/agents/acp"
 	"Lumaestro/internal/provider"
 	"Lumaestro/internal/tools"
 	"strings"
@@ -16,7 +17,7 @@ import (
 type ChatService struct {
 	ctx          context.Context // Contexto persistente do Wails
 	Executor     *agents.Executor
-	Orchestrator *agents.Orchestrator
+	Orchestrator *acp.Orchestrator
 	Search       *SearchService
 	Nav          *GraphNavigator
 	Embedder     *provider.EmbeddingService
@@ -29,7 +30,7 @@ func (s *ChatService) SetContext(ctx context.Context) {
 }
 
 // NewChatService inicializa o orquestrador de chat baseado em CLI.
-func NewChatService(executor *agents.Executor, orchestrator *agents.Orchestrator, search *SearchService, nav *GraphNavigator, embedder *provider.EmbeddingService, installer *tools.Installer) *ChatService {
+func NewChatService(executor *agents.Executor, orchestrator *acp.Orchestrator, search *SearchService, nav *GraphNavigator, embedder *provider.EmbeddingService, installer *tools.Installer) *ChatService {
 	return &ChatService{
 		Executor:     executor,
 		Orchestrator: orchestrator,
