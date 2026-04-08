@@ -145,9 +145,12 @@ const handleSessionEnded = (agent) => {
 
         <!-- 📡 Pulso de Atividade: Mostra o que a IA está fazendo AGORA (Anti-Travamento) -->
         <Transition name="status-fade">
-          <div v-if="orchestrator.currentStatus" class="activity-status-bar glass">
+          <div v-if="orchestrator.currentStatus && orchestrator.currentStatus.action" class="activity-status-bar glass">
             <div class="activity-pulse"></div>
-            <span class="activity-text">{{ orchestrator.currentStatus }}</span>
+            <div class="activity-info">
+              <span v-if="orchestrator.currentStatus.tool" class="activity-tool">{{ orchestrator.currentStatus.tool.replace('_', ' ').toUpperCase() }}</span>
+              <span class="activity-text">{{ orchestrator.currentStatus.action }}</span>
+            </div>
           </div>
         </Transition>
 
@@ -415,10 +418,22 @@ const handleSessionEnded = (agent) => {
 
 .activity-text {
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 500;
   color: #94a3b8;
   letter-spacing: 0.5px;
-  text-transform: uppercase;
+}
+
+.activity-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.activity-tool {
+  font-size: 9px;
+  font-weight: 900;
+  color: #3b82f6;
+  letter-spacing: 1px;
 }
 
 /* Perfis de Identidade Visual */

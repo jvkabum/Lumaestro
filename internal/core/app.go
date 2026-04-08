@@ -124,8 +124,26 @@ func (a *App) bootSequence() {
 		fmt.Println("[BOOT] Maestro Online. Sincronizando conhecimento e restaurando agentes...")
 		
 		if len(a.config.AutoStartAgents) > 0 {
-			a.emitBoot("agent", "🤖", "Iniciando agente " + a.config.AutoStartAgents[0] + "...")
-			a.StartAgentSession(a.config.AutoStartAgents[0])
+			agent := a.config.AutoStartAgents[0]
+			a.emitBoot("agent", "🤖", "Iniciando agente "+agent+"...")
+
+			// 🚀 BOOT ECONÔMICO: Sinalização de prontidão no ChatLog sem gasto de tokens
+			go func() {
+				if err := a.StartAgentSession(agent); err == nil {
+					time.Sleep(1 * time.Second)
+					runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+						"source":  "SYSTEM",
+						"content": "🟢 **MOTOR ACP ONLINE**: Sessão '" + agent + "' ativa e pronta para o trabalho. (Economia de tokens ativa)",
+						"type":    "system",
+					})
+				} else {
+					runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+						"source":  "ERROR",
+						"content": "🔴 **FALHA NO MOTOR**: Não foi possível inicializar o agente '" + agent + "'. Verifique os logs do terminal.",
+						"type":    "system",
+					})
+				}
+			}()
 		}
 
 		if a.crawler != nil && a.config.ObsidianVaultPath != "" {

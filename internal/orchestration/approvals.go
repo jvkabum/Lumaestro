@@ -58,7 +58,7 @@ func ProcessApproval(approvalID uuid.UUID, approved bool, note string) error {
 		status = "rejected"
 	}
 
-	now := db.Timestamp(time.Now())
+	now := db.Timestamp{Time: time.Now()}
 	approval.Status = status
 	approval.DecisionNote = note
 	approval.DecidedAt = &now

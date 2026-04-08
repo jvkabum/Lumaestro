@@ -1,7 +1,7 @@
 <template>
   <div class="chat-log-container" ref="logContainer" @click="handleLogClick">
     <div v-for="(msg, index) in messages" :key="index" :class="['message-row', msg.role, msg.mode]">
-      <div class="message-bubble" :class="{ 'system-message': msg.mode === 'system' }">
+      <div class="message-bubble" :class="getMessageClasses(msg)">
         
         <!-- Ícone Dinâmico por Agente -->
         <div 
@@ -69,7 +69,10 @@
     <!-- Indicador de Digitação (Thinking) -->
     <div v-if="isThinking" class="message-row assistant thinking">
       <div class="message-bubble">
-        <div class="sender-icon assistant-icon pulsing">
+        <div 
+          class="sender-icon assistant-icon pulsing"
+          :class="orchestrator.currentStatus?.agent ? getIconClass({ agent: orchestrator.currentStatus.agent }) : 'gemini-icon'"
+        >
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
           </svg>
@@ -78,7 +81,32 @@
            <div class="thinking-waves">
              <span></span><span></span><span></span><span></span>
            </div>
-           <div class="thinking-text">Harmonizando...</div>
+           <div class="thinking-content">
+             <div v-if="orchestrator.currentStatus?.tool" class="thinking-tool">
+               {{ orchestrator.currentStatus.tool.replace('_', ' ').toUpperCase() }}
+             </div>
+             <div class="thinking-text">
+               {{ orchestrator.currentStatus?.action || 'Harmonizando...' }}
+             </div>
+           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 🧶 Indicador de Tecelagem (WEAVER) -->
+    <div v-if="orchestrator.isWeaving" class="message-row assistant weaving">
+      <div class="message-bubble">
+        <div class="weaver-icon pulsing-cyan">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path>
+          </svg>
+        </div>
+        <div class="weaving-content">
+          <div class="weaving-title">KNOWLEDGE WEAVER</div>
+          <div class="weaving-status">Tecendo ligações nervosas no Grafo...</div>
+          <div class="neural-nodes">
+            <span class="node"></span><span class="node"></span><span class="node"></span>
+          </div>
         </div>
       </div>
     </div>
@@ -90,6 +118,9 @@ import { ref, watch, onMounted, nextTick } from 'vue';
 import { useClipboard } from '@vueuse/core';
 import MarkdownIt from 'markdown-it';
 import ThoughtBlock from './ThoughtBlock.vue';
+import { useOrchestratorStore } from '../stores/orchestrator';
+
+const orchestrator = useOrchestratorStore();
 
 const props = defineProps({
   messages: { type: Array, required: true },
@@ -153,6 +184,20 @@ const getIconClass = (msg) => {
   if (msg.agent === 'Terminal') return 'terminal-icon';
   if (msg.agent === 'Claude') return 'claude-icon';
   return 'gemini-icon';
+};
+
+const getMessageClasses = (msg) => {
+  const classes = [];
+  if (msg.mode === 'system') classes.push('system-message');
+  
+  // Detecção de Status via Emojis no conteúdo
+  if (msg.mode === 'system' && msg.text) {
+      if (msg.text.includes('🟢')) classes.push('success');
+      if (msg.text.includes('🟡')) classes.push('warning');
+      if (msg.text.includes('🔴')) classes.push('error');
+  }
+  
+  return classes;
 };
 
 const scrollToBottom = async () => {
@@ -356,7 +401,89 @@ onMounted(scrollToBottom);
   50% { height: 12px; opacity: 1; }
 }
 
+.thinking-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.thinking-tool {
+  font-size: 9px;
+  font-weight: 800;
+  color: #3b82f6;
+  letter-spacing: 1px;
+}
+
 .thinking-text { font-size: 13px; color: #94a3b8; font-weight: 500; }
+
+/* 🧶 WEAVER Animação Premium */
+.weaving .message-bubble {
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.1) 0%, rgba(3, 7, 18, 0.4) 100%);
+  border: 1px solid rgba(6, 182, 212, 0.2);
+  padding: 12px 18px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  border-radius: 16px 16px 16px 4px;
+}
+
+.weaver-icon {
+  width: 36px;
+  height: 36px;
+  background: rgba(6, 182, 212, 0.2);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #06b6d4;
+  box-shadow: 0 0 15px rgba(6, 182, 212, 0.3);
+}
+
+.pulsing-cyan {
+  animation: cyan-glow 1.5s infinite ease-in-out;
+}
+
+@keyframes cyan-glow {
+  0%, 100% { box-shadow: 0 0 5px rgba(6, 182, 212, 0.3); transform: scale(1); }
+  50% { box-shadow: 0 0 20px rgba(6, 182, 212, 0.6); transform: scale(1.05); }
+}
+
+.weaving-content { display: flex; flex-direction: column; gap: 4px; }
+
+.weaving-title {
+  font-size: 10px;
+  font-weight: 800;
+  color: #06b6d4;
+  letter-spacing: 2px;
+}
+
+.weaving-status {
+  font-size: 13px;
+  color: #e2e8f0;
+  font-weight: 500;
+}
+
+.neural-nodes {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.node {
+  width: 4px;
+  height: 4px;
+  background: #06b6d4;
+  border-radius: 50%;
+  animation: node-pulse 1s infinite alternate;
+}
+
+.node:nth-child(2) { animation-delay: 0.3s; }
+.node:nth-child(3) { animation-delay: 0.6s; }
+
+@keyframes node-pulse {
+  from { transform: scale(1); opacity: 0.3; }
+  to { transform: scale(1.5); opacity: 1; box-shadow: 0 0 8px #06b6d4; }
+}
 
 /* 🖼️ Estilo Premium para Imagens no Chat */
 .message-images {

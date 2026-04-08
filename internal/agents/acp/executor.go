@@ -66,7 +66,9 @@ func (e *ACPExecutor) SendRPC(s *ACPSession, msg JSONRPCMessage) error {
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
 
-	// fmt.Printf(">> [ACP SEND] %s\n", string(data))
+	// 📡 TRANSPARÊNCIA: Mostra no terminal o JSON exato sendo enviado para a IA
+	fmt.Printf(">> [ACP SEND] %s\n", string(data))
+	
 	_, err = fmt.Fprintln(s.Stdin, string(data))
 	return err
 }

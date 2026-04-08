@@ -10,13 +10,15 @@ import (
 )
 
 // Timestamp é um wrapper para time.Time que resolve o erro de binding do Wails v2 (Not found: time.Time)
-type Timestamp time.Time
+type Timestamp struct {
+	time.Time
+}
 
 func (t Timestamp) MarshalJSON() ([]byte, error) {
-	if time.Time(t).IsZero() {
+	if t.IsZero() {
 		return []byte("null"), nil
 	}
-	return []byte(fmt.Sprintf("\"%s\"", time.Time(t).Format(time.RFC3339))), nil
+	return []byte(fmt.Sprintf("\"%s\"", t.Format(time.RFC3339))), nil
 }
 
 func (t *Timestamp) UnmarshalJSON(data []byte) error {
@@ -27,12 +29,12 @@ func (t *Timestamp) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return err
 	}
-	*t = Timestamp(parsed)
+	t.Time = parsed
 	return nil
 }
 
 func (t Timestamp) Value() (driver.Value, error) {
-	return time.Time(t), nil
+	return t.Time, nil
 }
 
 func (t *Timestamp) Scan(value interface{}) error {
@@ -40,7 +42,7 @@ func (t *Timestamp) Scan(value interface{}) error {
 		return nil
 	}
 	if v, ok := value.(time.Time); ok {
-		*t = Timestamp(v)
+		t.Time = v
 		return nil
 	}
 	return fmt.Errorf("tipo incompatível para Timestamp: %v", value)

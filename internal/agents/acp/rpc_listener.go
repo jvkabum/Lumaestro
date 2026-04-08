@@ -37,7 +37,23 @@ func (e *ACPExecutor) runStderrMonitor(s *ACPSession, stderr io.Reader) {
 			strings.Contains(lv, "denied") ||
 			strings.Contains(lv, "not found")
 
-		if isRelevant {
+		// 🔴 DETECÇÃO DE FALHA HTTP SILENCIOSA: O Gemini CLI v0.37 engole erros 400/429/500
+		// e fica mudo no stdout. Capturamos pelo stderr para destravar o frontend.
+		isHTTPError := strings.Contains(lv, "400 bad request") ||
+			strings.Contains(lv, "bad request") ||
+			strings.Contains(lv, "429") ||
+			strings.Contains(lv, "rate limit") ||
+			strings.Contains(lv, "500 internal") ||
+			strings.Contains(lv, "503 service")
+
+		if isHTTPError {
+			e.LogChan <- ExecutionLog{
+				Source:  "ERROR",
+				Content: fmt.Sprintf("🔴 Falha na comunicação com o servidor do Google: %s", cleanLine),
+			}
+			// Destravar o frontend emitindo turn_complete
+			runtime.EventsEmit(e.Ctx, "agent:turn_complete", s.AgentName)
+		} else if isRelevant {
 			e.LogChan <- ExecutionLog{
 				Source:  "CLI/AVISO",
 				Content: cleanLine,

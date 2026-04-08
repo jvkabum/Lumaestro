@@ -176,10 +176,8 @@ export namespace db {
 	}
 	export class Agent {
 	    id: number[];
-	    // Go type: Timestamp
-	    created_at: any;
-	    // Go type: Timestamp
-	    updated_at: any;
+	    created_at: Timestamp;
+	    updated_at: Timestamp;
 	    name: string;
 	    role: string;
 	    status: string;
@@ -187,8 +185,7 @@ export namespace db {
 	    capabilities: string;
 	    budget_monthly_cents: number;
 	    spent_monthly_cents: number;
-	    // Go type: Timestamp
-	    last_heartbeat_at: any;
+	    last_heartbeat_at: Timestamp;
 	
 	    static createFrom(source: any = {}) {
 	        return new Agent(source);
@@ -197,8 +194,8 @@ export namespace db {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
-	        this.created_at = this.convertValues(source["created_at"], null);
-	        this.updated_at = this.convertValues(source["updated_at"], null);
+	        this.created_at = this.convertValues(source["created_at"], Timestamp);
+	        this.updated_at = this.convertValues(source["updated_at"], Timestamp);
 	        this.name = source["name"];
 	        this.role = source["role"];
 	        this.status = source["status"];
@@ -206,7 +203,7 @@ export namespace db {
 	        this.capabilities = source["capabilities"];
 	        this.budget_monthly_cents = source["budget_monthly_cents"];
 	        this.spent_monthly_cents = source["spent_monthly_cents"];
-	        this.last_heartbeat_at = this.convertValues(source["last_heartbeat_at"], null);
+	        this.last_heartbeat_at = this.convertValues(source["last_heartbeat_at"], Timestamp);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -229,10 +226,8 @@ export namespace db {
 	}
 	export class AgentSecret {
 	    id: number[];
-	    // Go type: Timestamp
-	    created_at: any;
-	    // Go type: Timestamp
-	    updated_at: any;
+	    created_at: Timestamp;
+	    updated_at: Timestamp;
 	    agent_id: number[];
 	    key: string;
 	    value: string;
@@ -244,8 +239,8 @@ export namespace db {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
-	        this.created_at = this.convertValues(source["created_at"], null);
-	        this.updated_at = this.convertValues(source["updated_at"], null);
+	        this.created_at = this.convertValues(source["created_at"], Timestamp);
+	        this.updated_at = this.convertValues(source["updated_at"], Timestamp);
 	        this.agent_id = source["agent_id"];
 	        this.key = source["key"];
 	        this.value = source["value"];
@@ -271,17 +266,14 @@ export namespace db {
 	}
 	export class Approval {
 	    id: number[];
-	    // Go type: Timestamp
-	    created_at: any;
-	    // Go type: Timestamp
-	    updated_at: any;
+	    created_at: Timestamp;
+	    updated_at: Timestamp;
 	    type: string;
 	    requested_by_agent_id?: number[];
 	    status: string;
 	    payload: string;
 	    decision_note: string;
-	    // Go type: Timestamp
-	    decided_at?: any;
+	    decided_at?: Timestamp;
 	
 	    static createFrom(source: any = {}) {
 	        return new Approval(source);
@@ -290,14 +282,14 @@ export namespace db {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
-	        this.created_at = this.convertValues(source["created_at"], null);
-	        this.updated_at = this.convertValues(source["updated_at"], null);
+	        this.created_at = this.convertValues(source["created_at"], Timestamp);
+	        this.updated_at = this.convertValues(source["updated_at"], Timestamp);
 	        this.type = source["type"];
 	        this.requested_by_agent_id = source["requested_by_agent_id"];
 	        this.status = source["status"];
 	        this.payload = source["payload"];
 	        this.decision_note = source["decision_note"];
-	        this.decided_at = this.convertValues(source["decided_at"], null);
+	        this.decided_at = this.convertValues(source["decided_at"], Timestamp);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -320,10 +312,8 @@ export namespace db {
 	}
 	export class Document {
 	    id: number[];
-	    // Go type: Timestamp
-	    created_at: any;
-	    // Go type: Timestamp
-	    updated_at: any;
+	    created_at: Timestamp;
+	    updated_at: Timestamp;
 	    title: string;
 	    format: string;
 	    latest_body: string;
@@ -338,8 +328,8 @@ export namespace db {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
-	        this.created_at = this.convertValues(source["created_at"], null);
-	        this.updated_at = this.convertValues(source["updated_at"], null);
+	        this.created_at = this.convertValues(source["created_at"], Timestamp);
+	        this.updated_at = this.convertValues(source["updated_at"], Timestamp);
 	        this.title = source["title"];
 	        this.format = source["format"];
 	        this.latest_body = source["latest_body"];
@@ -368,10 +358,8 @@ export namespace db {
 	}
 	export class Goal {
 	    id: number[];
-	    // Go type: Timestamp
-	    created_at: any;
-	    // Go type: Timestamp
-	    updated_at: any;
+	    created_at: Timestamp;
+	    updated_at: Timestamp;
 	    title: string;
 	    description: string;
 	    level: string;
@@ -386,8 +374,8 @@ export namespace db {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
-	        this.created_at = this.convertValues(source["created_at"], null);
-	        this.updated_at = this.convertValues(source["updated_at"], null);
+	        this.created_at = this.convertValues(source["created_at"], Timestamp);
+	        this.updated_at = this.convertValues(source["updated_at"], Timestamp);
 	        this.title = source["title"];
 	        this.description = source["description"];
 	        this.level = source["level"];
@@ -416,10 +404,8 @@ export namespace db {
 	}
 	export class Issue {
 	    id: number[];
-	    // Go type: Timestamp
-	    created_at: any;
-	    // Go type: Timestamp
-	    updated_at: any;
+	    created_at: Timestamp;
+	    updated_at: Timestamp;
 	    project_id?: number[];
 	    goal_id?: number[];
 	    parent_id?: number[];
@@ -430,10 +416,8 @@ export namespace db {
 	    assignee_agent_id?: number[];
 	    assignee_agent?: Agent;
 	    created_by_agent_id?: number[];
-	    // Go type: Timestamp
-	    started_at?: any;
-	    // Go type: Timestamp
-	    completed_at?: any;
+	    started_at?: Timestamp;
+	    completed_at?: Timestamp;
 	
 	    static createFrom(source: any = {}) {
 	        return new Issue(source);
@@ -442,8 +426,8 @@ export namespace db {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
-	        this.created_at = this.convertValues(source["created_at"], null);
-	        this.updated_at = this.convertValues(source["updated_at"], null);
+	        this.created_at = this.convertValues(source["created_at"], Timestamp);
+	        this.updated_at = this.convertValues(source["updated_at"], Timestamp);
 	        this.project_id = source["project_id"];
 	        this.goal_id = source["goal_id"];
 	        this.parent_id = source["parent_id"];
@@ -454,8 +438,8 @@ export namespace db {
 	        this.assignee_agent_id = source["assignee_agent_id"];
 	        this.assignee_agent = this.convertValues(source["assignee_agent"], Agent);
 	        this.created_by_agent_id = source["created_by_agent_id"];
-	        this.started_at = this.convertValues(source["started_at"], null);
-	        this.completed_at = this.convertValues(source["completed_at"], null);
+	        this.started_at = this.convertValues(source["started_at"], Timestamp);
+	        this.completed_at = this.convertValues(source["completed_at"], Timestamp);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -478,10 +462,8 @@ export namespace db {
 	}
 	export class IssueComment {
 	    id: number[];
-	    // Go type: Timestamp
-	    created_at: any;
-	    // Go type: Timestamp
-	    updated_at: any;
+	    created_at: Timestamp;
+	    updated_at: Timestamp;
 	    issue_id: number[];
 	    author_agent_id?: number[];
 	    author_agent?: Agent;
@@ -494,8 +476,8 @@ export namespace db {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
-	        this.created_at = this.convertValues(source["created_at"], null);
-	        this.updated_at = this.convertValues(source["updated_at"], null);
+	        this.created_at = this.convertValues(source["created_at"], Timestamp);
+	        this.updated_at = this.convertValues(source["updated_at"], Timestamp);
 	        this.issue_id = source["issue_id"];
 	        this.author_agent_id = source["author_agent_id"];
 	        this.author_agent = this.convertValues(source["author_agent"], Agent);

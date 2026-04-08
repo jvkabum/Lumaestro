@@ -112,7 +112,8 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 				if !isBg {
 					runtime.EventsEmit(h.Executor.Ctx, "agent:status", map[string]string{
 						"agent":  h.Session.AgentName,
-						"action": "Executando ferramenta de análise...",
+						"tool":   "thinking",
+						"action": "Preparando execução de ferramenta...",
 					})
 				}
 			}
@@ -147,6 +148,11 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 	case "readfile", "read_file", "read_text_file":
 		var p struct { Path string `json:"path"` }
 		if json.Unmarshal(params, &p) == nil {
+			runtime.EventsEmit(h.Executor.Ctx, "agent:status", map[string]string{
+				"agent":  h.Session.AgentName,
+				"tool":   "read_file",
+				"action": fmt.Sprintf("Lendo arquivo: %s", p.Path),
+			})
 			cfg, _ := config.Load()
 			if cfg.Security.AllowRead {
 				content, err := h.Executor.Proxy.ReadFile(p.Path)
@@ -161,6 +167,11 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			Content string `json:"content"`
 		}
 		if json.Unmarshal(params, &p) == nil {
+			runtime.EventsEmit(h.Executor.Ctx, "agent:status", map[string]string{
+				"agent":  h.Session.AgentName,
+				"tool":   "write_file",
+				"action": fmt.Sprintf("Escrevendo em: %s", p.Path),
+			})
 			cfg, _ := config.Load()
 			fileExists := false
 			if _, err := os.Stat(p.Path); err == nil { fileExists = true }
@@ -186,6 +197,11 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 	case "deletefile", "delete_file", "remove":
 		var p struct { Path string `json:"path"` }
 		if json.Unmarshal(params, &p) == nil {
+			runtime.EventsEmit(h.Executor.Ctx, "agent:status", map[string]string{
+				"agent":  h.Session.AgentName,
+				"tool":   "delete_file",
+				"action": fmt.Sprintf("Deletando: %s", p.Path),
+			})
 			cfg, _ := config.Load()
 			if cfg.Security.AllowDelete {
 				if h.Executor.RequestReview(reviewID, "DELETAR ARQUIVO", p.Path) {
@@ -198,6 +214,11 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 	case "movefile", "move_file":
 		var p struct { OldPath string `json:"oldPath"`; NewPath string `json:"newPath"` }
 		if json.Unmarshal(params, &p) == nil {
+			runtime.EventsEmit(h.Executor.Ctx, "agent:status", map[string]string{
+				"agent":  h.Session.AgentName,
+				"tool":   "move_file",
+				"action": fmt.Sprintf("Movendo: %s", p.OldPath),
+			})
 			cfg, _ := config.Load()
 			if cfg.Security.AllowMove {
 				details := fmt.Sprintf("%s -> %s", p.OldPath, p.NewPath)
@@ -211,6 +232,11 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 	case "runcommand", "run_command", "run_shell_command", "execute_command":
 		var p struct { Command string `json:"command"`; Args []string `json:"args"` }
 		if json.Unmarshal(params, &p) == nil {
+			runtime.EventsEmit(h.Executor.Ctx, "agent:status", map[string]string{
+				"agent":  h.Session.AgentName,
+				"tool":   "run_command",
+				"action": fmt.Sprintf("Executando: %s", p.Command),
+			})
 			cfg, _ := config.Load()
 			if cfg.Security.AllowRunCommands {
 				details := fmt.Sprintf("%s %s", p.Command, strings.Join(p.Args, " "))

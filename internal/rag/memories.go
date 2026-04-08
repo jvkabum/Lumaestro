@@ -34,6 +34,10 @@ func NewKnowledgeWeaver(ontology *provider.OntologyService, qdrant *provider.Qdr
 
 // WeaveChatKnowledge analisa o texto do chat, extrai fatos e os integra ao grafo com consciência de sessão.
 func (w *KnowledgeWeaver) WeaveChatKnowledge(ctx context.Context, sessionID string, chatText string) error {
+	// 📡 Sinalização de Início: Avisa o Frontend que a WEAVER começou a tecer
+	runtime.EventsEmit(w.ctx, "weaver:started", nil)
+	defer runtime.EventsEmit(w.ctx, "weaver:finished", nil)
+
 	// 1. Extração de Triplas (Sinapses)
 	contextHint := fmt.Sprintf("Memória de Chat - Sessão: %s", sessionID)
 	triples, err := w.Ontology.ExtractTriples(ctx, chatText, contextHint)

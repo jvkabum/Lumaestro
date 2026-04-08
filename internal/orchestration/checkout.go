@@ -22,7 +22,7 @@ func CheckoutIssue(agentID, issueID uuid.UUID) (*db.Issue, error) {
 			return fmt.Errorf("conflito 409 ou ticket indisponível: %w", err)
 		}
 
-		now := db.Timestamp(time.Now())
+		now := db.Timestamp{Time: time.Now()}
 		issue.Status = "in_progress"
 		issue.AssigneeAgentID = &agentID
 		if issue.StartedAt == nil {
@@ -67,7 +67,7 @@ func ReleaseIssue(agentID, issueID uuid.UUID, newStatus string) error {
 
 		issue.Status = newStatus
 		if newStatus == "done" {
-			now := db.Timestamp(time.Now())
+			now := db.Timestamp{Time: time.Now()}
 			issue.CompletedAt = &now
 		}
 

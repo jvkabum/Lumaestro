@@ -19,7 +19,7 @@ func RegistrarCusto(agentID uuid.UUID, issueID *uuid.UUID, provider, model strin
 		InputTokens:  inTokens,
 		OutputTokens: outTokens,
 		CostCents:    costCents,
-		OccurredAt:   db.Timestamp(time.Now()),
+		OccurredAt:   db.Timestamp{Time: time.Now()},
 	}
 
 	if err := db.InstanceDB.Create(&event).Error; err != nil {
