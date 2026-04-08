@@ -91,6 +91,10 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 				h.Session.isLoggingMessage = false
 				h.reportTurnCost()
 
+				if !isBg {
+					runtime.EventsEmit(h.Executor.Ctx, "agent:turn_complete", h.Session.AgentName)
+				}
+
 				h.Executor.turnMu.Lock()
 				if ch, ok := h.Executor.turnChannels[h.Session.ID]; ok {
 					close(ch)
@@ -350,6 +354,10 @@ func (h *ACPRpcHandler) HandleResponse(id interface{}, result json.RawMessage, r
 
 	if found {
 		ch <- JSONRPCMessage{ID: id, Result: result, Error: rpcErr}
+		if idInt > 3 && strings.EqualFold(h.Session.AgentName, "lmstudio") && !strings.Contains(h.Session.ID, "-background-") {
+			// Fallback para LM Studio: alguns fluxos podem não publicar session/update final.
+			runtime.EventsEmit(h.Executor.Ctx, "agent:turn_complete", h.Session.AgentName)
+		}
 		return
 	}
 

@@ -32,6 +32,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   const statusTimeline = ref([]); // 🪟 Janela de atividade (histórico curto)
   const statusFilter = ref('all');
   const runningSessions = ref([]);
+  const lastTurnCompleteByAgent = ref({});
 
   const pushStatus = (text, kind = 'status') => {
     const line = String(text || '').trim();
@@ -201,11 +202,22 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
         if (lowered.includes('memória') || lowered.includes('memoria') || lowered.includes('grafo') || lowered.includes('contexto')) kind = 'memory';
       }
       pushStatus(action, kind);
-      isThinking.value = true;
+      // Status de memória é pós-processamento e não deve religar o spinner principal da resposta.
+      if (kind !== 'memory') {
+        isThinking.value = true;
+      }
     });
 
     // 🚀 Sincronização de Sinfonias (Checkpoints): Quando o turno termina, atualizamos a lista lateral e consolidamos a memória
     window.runtime.EventsOn("agent:turn_complete", async (agent) => {
+      const key = String(agent || 'unknown').toLowerCase();
+      const now = Date.now();
+      const last = lastTurnCompleteByAgent.value[key] || 0;
+      if (now-last < 800) {
+        return;
+      }
+      lastTurnCompleteByAgent.value[key] = now;
+
       console.log(`[Store] Turno concluído para ${agent}. Atualizando Sinfonias e Consolidando Memória...`);
       stopSafetyTimeout(); // 🛑 Turno finalizado, para o cronômetro
       isThinking.value = false;
@@ -222,7 +234,14 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
       
       if (lastMessages) {
         console.log("[Store] Disparando ConsolidateChatKnowledge para sessão:", sessionID);
-        await safeCall('main', 'ConsolidateChatKnowledge', sessionID, lastMessages);
+        try {
+          await safeCall('main', 'ConsolidateChatKnowledge', sessionID, lastMessages);
+        } finally {
+          // Garante encerramento visual do ciclo após pós-processamento de memória.
+          isThinking.value = false;
+          currentStatus.value = "";
+          currentStatusKind.value = 'status';
+        }
       }
     });
 
