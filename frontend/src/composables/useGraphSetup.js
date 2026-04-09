@@ -146,15 +146,25 @@ export function useGraphSetup() {
           Graph.linkDirectionalParticles(Graph.linkDirectionalParticles())
         }, 5000)
 
+        // Compatibilidade com nova arquitetura (core) vs antiga (main)
+        const bridge = (window.go && window.go.core && window.go.core.App) || 
+                       (window.go && window.go.main && window.go.main.App);
+
         // ── Reforço Neural (Aprendizado Ativo) ──
-        window.go.main.App.HandleNodeClick(node.id)
+        if (bridge && bridge.HandleNodeClick) {
+          bridge.HandleNodeClick(node.id)
+        }
 
         store.selectedNode = node
         store.nodeDetails = null
         store.nodeDetails = { loading: true }
         
         try {
-          const details = await window.go.main.App.GetNodeDetails(node.id)
+          let details = null;
+          if (bridge && bridge.GetNodeDetails) {
+             details = await bridge.GetNodeDetails(node.id)
+          }
+
           if (details) {
             store.nodeDetails = details
           } else {
