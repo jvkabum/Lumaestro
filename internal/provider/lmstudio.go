@@ -65,6 +65,23 @@ type lmModelsResponse struct {
 	Data []lmModel `json:"data"`
 }
 
+type lmEmbeddingRequest struct {
+	Model string `json:"model"`
+	Input string `json:"input"`
+}
+
+type lmEmbeddingData struct {
+	Embedding []float32 `json:"embedding"`
+	Index     int       `json:"index"`
+}
+
+type lmEmbeddingResponse struct {
+	Data  []lmEmbeddingData `json:"data"`
+	Error *struct {
+		Message string `json:"message"`
+	} `json:"error,omitempty"`
+}
+
 // ─── Métodos públicos ────────────────────────────────────────────────────────
 
 // ListModels retorna os IDs dos modelos carregados no LM Studio.
@@ -145,6 +162,49 @@ func (c *LMStudioClient) Chat(ctx context.Context, model, systemPrompt, userMess
 		return "", fmt.Errorf("LM Studio retornou resposta vazia")
 	}
 	return chatResp.Choices[0].Message.Content, nil
+}
+
+// DetectEmbeddingDimension consulta /v1/embeddings com o modelo indicado e retorna a dimensão real do vetor.
+func (c *LMStudioClient) DetectEmbeddingDimension(ctx context.Context, model string) (int, error) {
+	payload := lmEmbeddingRequest{
+		Model: model,
+		Input: "dimension_probe",
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return 0, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/v1/embeddings", bytes.NewReader(body))
+	if err != nil {
+		return 0, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("LM Studio embeddings inacessivel: %v", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("LM Studio embeddings retornou %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var embResp lmEmbeddingResponse
+	if err := json.Unmarshal(respBody, &embResp); err != nil {
+		return 0, fmt.Errorf("erro ao parsear embedding: %v", err)
+	}
+	if embResp.Error != nil {
+		return 0, fmt.Errorf("LM Studio embeddings error: %s", embResp.Error.Message)
+	}
+	if len(embResp.Data) == 0 || len(embResp.Data[0].Embedding) == 0 {
+		return 0, fmt.Errorf("LM Studio retornou embedding vazio")
+	}
+
+	return len(embResp.Data[0].Embedding), nil
 }
 
 // LMTestResult é o resultado do teste de capacidade do modelo.

@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted } from 'vue'
+import { onMounted, watch } from 'vue'
 import { useSettingsStore } from '../stores/settings'
 import { useSettingsConfig } from '../composables/useSettingsConfig'
 import { useSettingsTools } from '../composables/useSettingsTools'
@@ -23,6 +23,29 @@ const { handleAddAccount, handleLoginAccount, handleSwitchAccount } = useSetting
 const { handleAddProject, handleSelectDirectory } = useSettingsProjects()
 
 // ── LM Studio ──
+const pickDefaultEmbeddingModel = (models) => {
+  if (!Array.isArray(models) || models.length === 0) return ''
+  const preferred = models.find((m) => /(embed|embedding|nomic|bge|e5|gte)/i.test(m))
+  return preferred || ''
+}
+
+const detectEmbeddingDimension = async () => {
+  if (store.config.embeddings_provider !== 'lmstudio') return
+  const model = (store.config.embeddings_model || store.config.lmstudio_model || '').trim()
+  if (!model) return
+
+  try {
+    const dim = await window.go.core.App.DetectLMStudioEmbeddingDimension(model)
+    if (Number(dim) > 0) {
+      store.config.embedding_dimension = Number(dim)
+    } else {
+      alert(`O modelo "${model}" nao respondeu no endpoint de embeddings do LM Studio. Use um modelo de embedding (ex: nomic-embed-text).`)
+    }
+  } catch (e) {
+    alert('Falha ao detectar dimensao do embedding: ' + e)
+  }
+}
+
 const loadLMModels = async () => {
   store.lmLoadingModels = true
   store.lmModels = []
@@ -32,6 +55,19 @@ const loadLMModels = async () => {
     if (store.lmModels.length > 0 && !store.config.lmstudio_model) {
       store.config.lmstudio_model = store.lmModels[0]
     }
+
+    if (store.config.embeddings_provider === 'lmstudio' && !store.config.embeddings_model) {
+      const embModel = pickDefaultEmbeddingModel(store.lmModels)
+      if (embModel) {
+        store.config.embeddings_model = embModel
+      }
+    }
+
+    if (store.config.rag_provider === 'lmstudio' && !store.config.rag_model) {
+      store.config.rag_model = store.config.lmstudio_model || store.lmModels[0] || ''
+    }
+
+    await detectEmbeddingDimension()
   } catch (e) {
     alert('Erro ao conectar ao LM Studio: ' + e)
   } finally {
@@ -97,7 +133,26 @@ const onEmbeddingsProviderChange = () => {
     store.config.embedding_dimension = 3072
     store.config.embeddings_model = ''
   } else if (store.config.embeddings_provider === 'lmstudio') {
-    store.config.embedding_dimension = 768
+    if (store.lmModels.length === 0) {
+      loadLMModels()
+    } else {
+      if (!store.config.embeddings_model) {
+        const embModel = pickDefaultEmbeddingModel(store.lmModels)
+        if (embModel) store.config.embeddings_model = embModel
+      }
+      detectEmbeddingDimension()
+    }
+  }
+}
+
+// Carrega modelos ao trocar para LM Studio no motor de RAG
+const onRAGProviderChange = () => {
+  if (store.config.rag_provider === 'lmstudio') {
+    if (store.lmModels.length === 0) {
+      loadLMModels()
+    } else if (!store.config.rag_model) {
+      store.config.rag_model = store.config.lmstudio_model || store.lmModels[0] || ''
+    }
   }
 }
 
@@ -106,6 +161,17 @@ onMounted(() => {
   loadConfig()
   refreshStatus()
   initInstallerLogs()
+})
+
+// Quando abrir a aba MODELOS, carrega automaticamente os modelos do LM Studio
+// se qualquer um dos provedores já estiver configurado como lmstudio
+watch(() => store.activeTab, (tab) => {
+  if (tab === 'modelos' && store.lmModels.length === 0) {
+    const cfg = store.config
+    if (cfg.embeddings_provider === 'lmstudio' || cfg.rag_provider === 'lmstudio') {
+      loadLMModels()
+    }
+  }
 })
 </script>
 
@@ -483,9 +549,10 @@ onMounted(() => {
               v-model="store.config.embeddings_model"
               placeholder="Ex: nomic-embed-text, text-embedding-nomic-embed-text-v1.5"
               class="maestro-input"
+              @change="detectEmbeddingDimension"
               style="flex: 1;"
             />
-            <select v-if="store.lmModels.length > 0" v-model="store.config.embeddings_model" class="maestro-input" style="max-width: 220px;">
+            <select v-if="store.lmModels.length > 0" v-model="store.config.embeddings_model" class="maestro-input" style="max-width: 220px;" @change="detectEmbeddingDimension">
               <option value="">-- selecionar do LM Studio --</option>
               <option v-for="m in store.lmModels" :key="m" :value="m">{{ m }}</option>
             </select>
@@ -527,7 +594,7 @@ onMounted(() => {
 
         <div class="premium-form-group" style="margin-bottom: 1.2rem;">
           <label>Provedor de RAG/Ontologia</label>
-          <select v-model="store.config.rag_provider" class="maestro-input">
+          <select v-model="store.config.rag_provider" class="maestro-input" @change="onRAGProviderChange">
             <option value="gemini">Gemini (cascata resiliente de modelos)</option>
             <option value="lmstudio">LM Studio (modelo local)</option>
             <option value="claude">Claude (melhor para análise de código)</option>

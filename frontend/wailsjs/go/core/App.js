@@ -66,6 +66,10 @@ export function DeleteSession(arg1) {
   return window['go']['core']['App']['DeleteSession'](arg1);
 }
 
+export function DetectLMStudioEmbeddingDimension(arg1) {
+  return window['go']['core']['App']['DetectLMStudioEmbeddingDimension'](arg1);
+}
+
 export function ExportRLHFDataset() {
   return window['go']['core']['App']['ExportRLHFDataset']();
 }

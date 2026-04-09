@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -28,31 +29,17 @@ func NewLMStudioEmbedder(baseURL, embedModel, chatModel string) *LMStudioEmbedde
 	}
 }
 
-// ─── Tipos internos (OpenAI Embeddings API) ─────────────────────────────────
-
-type lmEmbeddingRequest struct {
-	Model string `json:"model"`
-	Input string `json:"input"`
-}
-
-type lmEmbeddingData struct {
-	Embedding []float32 `json:"embedding"`
-	Index     int       `json:"index"`
-}
-
-type lmEmbeddingResponse struct {
-	Data []lmEmbeddingData `json:"data"`
-	Error *struct {
-		Message string `json:"message"`
-	} `json:"error,omitempty"`
-}
-
 // ─── Embedder interface ──────────────────────────────────────────────────────
 
 // GenerateEmbedding gera um vetor denso via LM Studio /v1/embeddings.
 func (e *LMStudioEmbedder) GenerateEmbedding(ctx context.Context, text string, fastTrack bool) ([]float32, error) {
+	model := strings.TrimSpace(e.EmbedModel)
+	if model == "" {
+		return nil, fmt.Errorf("modelo de embeddings do LM Studio nao configurado")
+	}
+
 	payload := lmEmbeddingRequest{
-		Model: e.EmbedModel,
+		Model: model,
 		Input: text,
 	}
 

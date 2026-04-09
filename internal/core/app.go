@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -190,13 +191,52 @@ func (a *App) initServices() error {
 
 	// ─── Motor de Embeddings ──────────────────────────────────────────────────
 	if embProvider == "lmstudio" && cfg.LMStudioEnabled && cfg.LMStudioURL != "" {
-		embedModel := cfg.EmbeddingsModel
-		if embedModel == "" {
-			embedModel = cfg.LMStudioModel
+		embedModel := strings.TrimSpace(cfg.EmbeddingsModel)
+		baseCtx := a.ctx
+		if baseCtx == nil {
+			baseCtx = context.Background()
 		}
-		lmEmb := provider.NewLMStudioEmbedder(cfg.LMStudioURL, embedModel, cfg.LMStudioModel)
-		a.embedder = lmEmb
-		a.emitBoot("embeddings", "✅", "Motor de Embeddings: LM Studio ("+embedModel+")")
+
+		// Se não houver modelo explícito, escolhe automaticamente um modelo com perfil de embeddings.
+		if embedModel == "" {
+			client := provider.NewLMStudioClient(cfg.LMStudioURL)
+			ctxModels, cancelModels := context.WithTimeout(baseCtx, 8*time.Second)
+			models, err := client.ListModels(ctxModels)
+			cancelModels()
+			if err == nil {
+				re := regexp.MustCompile(`(?i)(embed|embedding|nomic|bge|e5|gte)`)
+				for _, m := range models {
+					if re.MatchString(m) {
+						embedModel = m
+						break
+					}
+				}
+			}
+		}
+
+		if embedModel == "" {
+			a.emitBoot("embeddings", "⚠️", "Embeddings LM Studio sem modelo válido. Configure um modelo de embedding dedicado.")
+			a.embedder = nil
+		} else {
+			// Valida se o modelo realmente responde no endpoint /v1/embeddings e sincroniza dimensão real.
+			client := provider.NewLMStudioClient(cfg.LMStudioURL)
+			ctxDim, cancelDim := context.WithTimeout(baseCtx, 12*time.Second)
+			dim, err := client.DetectEmbeddingDimension(ctxDim, embedModel)
+			cancelDim()
+			if err != nil || dim <= 0 {
+				a.emitBoot("embeddings", "⚠️", "Modelo de embeddings LM Studio inválido: "+embedModel+". Use um modelo de embedding (ex: text-embedding-nomic-embed-text-v1.5).")
+				a.embedder = nil
+			} else {
+				cfg.EmbeddingsModel = embedModel
+				cfg.EmbeddingDimension = dim
+				a.config = cfg
+				_ = config.Save(*cfg)
+
+				lmEmb := provider.NewLMStudioEmbedder(cfg.LMStudioURL, embedModel, cfg.LMStudioModel)
+				a.embedder = lmEmb
+				a.emitBoot("embeddings", "✅", fmt.Sprintf("Motor de Embeddings: LM Studio (%s · %d dim)", embedModel, dim))
+			}
+		}
 	} else {
 		emb, err := provider.NewEmbeddingService(a.ctx, cfg.GetActiveGeminiKey())
 		if err != nil {

@@ -67,6 +67,32 @@ func (a *App) ListLMStudioModels() []string {
 	return models
 }
 
+// DetectLMStudioEmbeddingDimension testa o modelo no endpoint de embeddings e retorna a dimensão detectada.
+// Retorna 0 quando falha (modelo inválido para embeddings, endpoint indisponível, etc).
+func (a *App) DetectLMStudioEmbeddingDimension(model string) int {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return 0
+	}
+
+	client, _, err := a.ensureLMStudioClient()
+	if err != nil {
+		fmt.Printf("[LMStudio] Detect dimension indisponível: %v\n", err)
+		return 0
+	}
+
+	ctx, cancel := context.WithTimeout(a.ctx, 15*time.Second)
+	defer cancel()
+
+	dim, err := client.DetectEmbeddingDimension(ctx, model)
+	if err != nil {
+		fmt.Printf("[LMStudio] Falha ao detectar dimensão para %s: %v\n", model, err)
+		return 0
+	}
+
+	return dim
+}
+
 // TestLMStudioModel executa o conjunto de testes de capacidade no modelo indicado.
 // Retorna um mapa com: success, model_id, latency_ms, capabilities, warnings, error.
 func (a *App) TestLMStudioModel(url string, model string) map[string]interface{} {

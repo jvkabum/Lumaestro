@@ -38,6 +38,8 @@ export function CreateTask(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function DeleteSession(arg1:string):Promise<void>;
 
+export function DetectLMStudioEmbeddingDimension(arg1:string):Promise<number>;
+
 export function ExportRLHFDataset():Promise<string>;
 
 export function ExportTelemetry():Promise<string>;
