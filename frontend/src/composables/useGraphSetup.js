@@ -17,6 +17,17 @@ export function useGraphSetup() {
   const store = useGraphStore()
   const { getGraphData } = useGraphData()
 
+  const escapeHtml = (value) => String(value || '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+
+  const clamp = (value, limit = 220) => {
+    const text = String(value || '').trim()
+    if (text.length <= limit) return text
+    return text.slice(0, limit - 3).trim() + '...'
+  }
+
   // Recipientes de Pooling (Atrasar inicialização para garantir que THREE esteja pronto)
   let sphereLowRes, sphereVirtual, sphereActive, materialCache
 
@@ -54,9 +65,14 @@ export function useGraphSetup() {
         const type = node['document-type'] || 'chunk'
         const label = node.name || node.id
         const icon = type === 'system' ? '⚙️' : (type === 'source' ? '📄' : (type === 'memory' ? '🧠' : '📝'))
+        const summary = clamp(node.summary || node.content || 'Sem resumo disponível.')
+        const purpose = clamp(node['what-it-does'] || node.purpose || 'Usado pelo RAG para recuperação de contexto semântico.', 180)
+
         return `<div class="node-tooltip">
                   <span class="type-tag ${type}">${icon} ${type.toUpperCase()}</span>
                   <br/><b>${label}</b>
+                  <br/><div style="margin-top:6px; max-width: 340px; line-height:1.35; color:#e2e8f0;"><b>Resumo:</b> ${escapeHtml(summary)}</div>
+                  <div style="margin-top:4px; max-width: 340px; line-height:1.35; color:#cbd5e1;"><b>O que faz:</b> ${escapeHtml(purpose)}</div>
                 </div>`
       })
       .nodeColor(node => {

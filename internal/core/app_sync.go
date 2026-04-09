@@ -275,11 +275,22 @@ func (a *App) SyncAllNodes() {
 		}
 
 		nodeID := strings.ToLower(name)
+		summary := summarizeNodeContent(p)
+		whatItDoes := inferNodePurpose(p, summary)
 
 		nodeData := map[string]interface{}{
 			"id":            nodeID,
 			"name":          name,
 			"document-type": "markdown",
+			"summary":       summary,
+			"what-it-does":  whatItDoes,
+		}
+
+		if docType, ok := p["document-type"].(string); ok && strings.TrimSpace(docType) != "" {
+			nodeData["document-type"] = docType
+		}
+		if fileType, ok := p["type"].(string); ok && strings.TrimSpace(fileType) != "" {
+			nodeData["file-type"] = fileType
 		}
 
 		// ⚖️ Injeta métricas do Cérebro Relacional (se disponível)
@@ -300,6 +311,7 @@ func (a *App) SyncAllNodes() {
 		subject, _ := p["subject"].(string)
 		object, _ := p["object"].(string)
 		sessionID, _ := p["session_id"].(string)
+		predicate, _ := p["predicate"].(string)
 
 		if subject != "" {
 			addNode(map[string]interface{}{
@@ -307,6 +319,8 @@ func (a *App) SyncAllNodes() {
 				"name":          subject,
 				"document-type": "memory",
 				"session-id":    sessionID,
+				"summary":       fmt.Sprintf("Fato semântico em memória: %s %s %s", subject, predicate, object),
+				"what-it-does":  "Conecta fatos aprendidos no chat para dar contexto em respostas futuras.",
 			})
 		}
 		if object != "" {
@@ -315,6 +329,8 @@ func (a *App) SyncAllNodes() {
 				"name":          object,
 				"document-type": "memory",
 				"session-id":    sessionID,
+				"summary":       fmt.Sprintf("Entidade relacionada ao fato: %s %s %s", subject, predicate, object),
+				"what-it-does":  "Serve como nó de ligação da memória semântica no grafo.",
 			})
 		}
 		if subject != "" && object != "" {
@@ -339,6 +355,74 @@ func (a *App) SyncAllNodes() {
 		stats, _ := a.AnalyzeGraphHealth()
 		runtime.EventsEmit(a.ctx, "graph:health:update", stats)
 	}()
+}
+
+func summarizeNodeContent(payload map[string]interface{}) string {
+	if s, ok := payload["summary"].(string); ok && strings.TrimSpace(s) != "" {
+		return clampSummary(s, 220)
+	}
+
+	content, _ := payload["content"].(string)
+	if strings.TrimSpace(content) == "" {
+		return "Sem resumo disponível ainda. Faça uma sincronização completa para enriquecer o contexto."
+	}
+
+	clean := strings.ReplaceAll(content, "\n", " ")
+	clean = strings.ReplaceAll(clean, "\r", " ")
+	clean = strings.Join(strings.Fields(clean), " ")
+	if clean == "" {
+		return "Sem resumo disponível ainda."
+	}
+
+	if idx := strings.Index(clean, ". "); idx > 40 {
+		return clampSummary(clean[:idx+1], 220)
+	}
+
+	return clampSummary(clean, 220)
+}
+
+func inferNodePurpose(payload map[string]interface{}, summary string) string {
+	docType, _ := payload["document-type"].(string)
+	fileType, _ := payload["type"].(string)
+
+	switch strings.ToLower(strings.TrimSpace(docType)) {
+	case "memory":
+		return "Representa conhecimento consolidado do chat para melhorar respostas futuras."
+	case "code-file":
+		return "Arquivo de código indexado para responder perguntas técnicas com contexto real do projeto."
+	case "project-file":
+		return "Documento de repositório satélite usado pelo RAG radial para navegação contextual."
+	case "source":
+		return "Fonte multimodal (imagem/PDF) convertida em contexto pesquisável no RAG."
+	case "markdown":
+		return "Nota base de conhecimento usada para recuperação semântica e expansão por grafo."
+	}
+
+	switch strings.ToLower(strings.TrimSpace(fileType)) {
+	case ".go", ".js", ".ts", ".tsx", ".py", ".html", ".css":
+		return "Trecho de código indexado para explicar implementação e dependências."
+	case ".md":
+		return "Nota documental que alimenta o contexto semântico das respostas."
+	case ".pdf", ".png", ".jpg", ".jpeg":
+		return "Fonte multimodal analisada para extrair descrição e fatos estruturados."
+	}
+
+	if strings.TrimSpace(summary) != "" {
+		return "Nó de conhecimento disponível para busca semântica e conexão contextual."
+	}
+
+	return "Nó semântico do grafo utilizado pelo RAG para responder com contexto."
+}
+
+func clampSummary(text string, limit int) string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return ""
+	}
+	if len(text) <= limit {
+		return text
+	}
+	return strings.TrimSpace(text[:limit-3]) + "..."
 }
 
 // RunVectorDiagnostic executa um Stress Test pontual para validar Gemini + Qdrant Cloud.

@@ -33,6 +33,8 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   const statusFilter = ref('all');
   const runningSessions = ref([]);
   const lastTurnCompleteByAgent = ref({});
+  const listenersInitialized = ref(false);
+  const awaitingTurnByAgent = ref({});
 
   const pushStatus = (text, kind = 'status') => {
     const line = String(text || '').trim();
@@ -85,6 +87,12 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   };
 
   const initListeners = () => {
+    if (listenersInitialized.value) {
+      console.log('[Store] Listeners já inicializados. Ignorando nova inscrição para evitar duplicidade.');
+      return;
+    }
+    listenersInitialized.value = true;
+
     // 0. Sinal de Início do Motor (Recuperação de Sessão)
     EventsOn('agent:starting', (agent) => {
       console.log("[Store] Motor ligando para:", agent);
@@ -209,14 +217,21 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     });
 
     // 🚀 Sincronização de Sinfonias (Checkpoints): Quando o turno termina, atualizamos a lista lateral e consolidamos a memória
-    window.runtime.EventsOn("agent:turn_complete", async (agent) => {
+    EventsOn('agent:turn_complete', async (agent) => {
       const key = String(agent || 'unknown').toLowerCase();
+
+      // Só processa 1 encerramento por mensagem enviada para evitar loops de pós-processamento.
+      if (!awaitingTurnByAgent.value[key]) {
+        return;
+      }
+
       const now = Date.now();
       const last = lastTurnCompleteByAgent.value[key] || 0;
       if (now-last < 800) {
         return;
       }
       lastTurnCompleteByAgent.value[key] = now;
+      awaitingTurnByAgent.value[key] = false;
 
       console.log(`[Store] Turno concluído para ${agent}. Atualizando Sinfonias e Consolidando Memória...`);
       stopSafetyTimeout(); // 🛑 Turno finalizado, para o cronômetro
@@ -264,12 +279,15 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     messages.value.push({ role: 'user', text: prompt });
     isThinking.value = true;
     activeAgent.value = agent;
+    const key = String(agent || 'unknown').toLowerCase();
+    awaitingTurnByAgent.value[key] = true;
 
     try {
       await safeCall('main', 'AskAgent', agent, prompt);
     } catch (err) {
       messages.value.push({ role: 'assistant', text: `❌ Erro: ${err}`, mode: 'system' });
       isThinking.value = false;
+      awaitingTurnByAgent.value[key] = false;
     }
   };
 
@@ -359,6 +377,8 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     
     isThinking.value = true; // Feedback visual imediato
     resetSafetyTimeout(); // Inicia o contador de silêncio
+    const key = String(agent || 'unknown').toLowerCase();
+    awaitingTurnByAgent.value[key] = true;
 
     try {
       // 🛠️ SINCRONIZAÇÃO CRÍTICA: Agora enviamos 3 argumentos conforme o novo contrato Go
@@ -368,6 +388,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
       console.error('[Store] Erro ao enviar input:', err);
       isThinking.value = false;
       stopSafetyTimeout();
+      awaitingTurnByAgent.value[key] = false;
     }
   };
 

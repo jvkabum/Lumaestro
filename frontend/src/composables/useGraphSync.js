@@ -1,4 +1,4 @@
-import { ScanVault } from '../../wailsjs/go/core/App'
+import { ScanVault, FullSync, SyncAllNodes } from '../../wailsjs/go/core/App'
 import { useGraphStore } from '../stores/graph'
 
 /**
@@ -36,7 +36,7 @@ export function useGraphSync() {
     store.showConfirmModal = false
     store.scanning = true
     try {
-      await window.go.main.App.FullSync()
+      await FullSync()
     } catch (e) {
       console.error("Erro na sincronização:", e)
     } finally {
@@ -60,9 +60,12 @@ export function useGraphSync() {
   /**
    * Sincroniza todos os nós conhecidos do banco na partida
    */
-  const syncAllOnStartup = () => {
-    if (window.go && window.go.main && window.go.main.App) {
-      window.go.main.App.SyncAllNodes()
+  const syncAllOnStartup = async () => {
+    try {
+      // Carrega nós já persistidos (Qdrant/cache) sem gastar tokens de IA.
+      await SyncAllNodes()
+    } catch (e) {
+      console.error("Erro ao carregar nós persistidos na inicialização:", e)
     }
   }
 

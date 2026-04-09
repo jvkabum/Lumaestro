@@ -185,7 +185,15 @@ func (s *EmbeddingService) GenerateContentWithRetry(ctx context.Context, content
 		"gemma-4-26b-a4b-it",            // 🐘 Reserva Tática
 	}
 
+	if len(s.keys) == 0 {
+		return nil, fmt.Errorf("nenhuma chave Gemini configurada para geração de conteúdo")
+	}
+
+	maxFleetCycles := 3
+	cycles := 0
+
 	for {
+		cycles++
 		for _, model := range models {
 			// Tenta todas as chaves disponíveis para o modelo atual
 			for i, key := range s.keys {
@@ -217,6 +225,9 @@ func (s *EmbeddingService) GenerateContentWithRetry(ctx context.Context, content
 		}
 
 		// Hibernação Defensiva: Se todos os modelos em todas as chaves falharem
+		if cycles >= maxFleetCycles {
+			return nil, fmt.Errorf("falha persistente: todos os modelos/chaves Gemini falharam após %d ciclos", maxFleetCycles)
+		}
 		fmt.Println("⏳ [ResilienceFleet] 🚨 Todos os modelos e chaves falharam! Hibernação de 30s... 😴")
 		time.Sleep(30 * time.Second)
 		fmt.Println("⚡ [ResilienceFleet] Acordando. Reiniciando ciclo de cascata...")

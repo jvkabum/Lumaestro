@@ -124,6 +124,8 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 		"document-type": "galaxy-core",
 		"celestial-type": "sun",
 		"mass":          100.0,
+		"summary":       "Nó central do vault; organiza pastas e documentos orbitais.",
+		"what-it-does":  "Funciona como raiz estrutural da base de conhecimento no grafo 3D.",
 	})
 
 	err := filepath.Walk(c.VaultPath, func(path string, info os.FileInfo, err error) error {
@@ -153,6 +155,8 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 					"document-type": "folder",
 					"celestial-type": "planet",
 					"mass":          20.0,
+					"summary":       fmt.Sprintf("Pasta '%s' no vault, contendo notas relacionadas.", folderName),
+					"what-it-does":  "Agrupa notas por tema e cria contexto estrutural para navegação semântica.",
 				})
 				// Aresta de Órbita Física (Parentesco)
 				runtime.EventsEmit(c.ctx, "graph:edge", map[string]interface{}{
@@ -188,6 +192,8 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 			"document-type": docType,
 			"celestial-type": "moon",
 			"mass":          5.0,
+			"summary":       fmt.Sprintf("Arquivo '%s' detectado e preparado para indexação semântica.", nodeName),
+			"what-it-does":  "Será processado pelo RAG para responder perguntas com contexto real do conteúdo.",
 		})
 
 		// Aresta de Órbita da Lua ao seu Planeta (Pasta)
@@ -363,6 +369,8 @@ func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.P
 			"document-type": "galaxy-core",
 			"celestial-type": "sun",
 			"mass":          80.0,
+			"summary":       fmt.Sprintf("Núcleo do repositório satélite '%s'.", repo.CoreNode),
+			"what-it-does":  "Conecta código/projetos externos ao RAG radial sem misturar domínios.",
 		})
 
 		fmt.Printf("[Crawler] 🪐 Expandindo Galáxia Radial: %s\n", repo.CoreNode)
@@ -414,6 +422,8 @@ func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.P
 						"document-type": "folder",
 						"celestial-type": "planet",
 						"mass":          15.0,
+						"summary":       fmt.Sprintf("Pasta '%s' dentro do repositório satélite.", folderName),
+						"what-it-does":  "Agrupa módulos relacionados para facilitar contexto técnico no grafo.",
 					})
 					runtime.EventsEmit(c.ctx, "graph:edge", map[string]interface{}{
 						"source": parentID,
@@ -446,6 +456,8 @@ func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.P
 				"document-type": docType,
 				"celestial-type": "moon",
 				"mass":          4.0,
+				"summary":       fmt.Sprintf("Arquivo '%s' importado para análise semântica.", nodeName),
+				"what-it-does":  "Alimenta o RAG com contexto de documentação/código do repositório satélite.",
 			})
 
 			// Aresta de órbita para a pasta
