@@ -89,19 +89,32 @@ type ExecSummary struct {
 func GetExecutiveSummary() (ExecSummary, error) {
 	var summary ExecSummary
 	
+	if db.InstanceDB == nil {
+		return summary, fmt.Errorf("banco de dados não inicializado")
+	}
+
 	// Custo Total
-	db.InstanceDB.Model(&db.Agent{}).Select("SUM(spent_monthly_cents)").Scan(&summary.TotalSpentCents)
+	db.InstanceDB.Model(&db.Agent{}).Select("COALESCE(SUM(spent_monthly_cents), 0)").Scan(&summary.TotalSpentCents)
 	
+	var count int64
+
 	// Agentes
-	db.InstanceDB.Model(&db.Agent{}).Where("status = ?", "running").Count(nil).Scan(&summary.ActiveAgents)
-	db.InstanceDB.Model(&db.Agent{}).Where("status = ?", "paused").Count(nil).Scan(&summary.PausedAgents)
+	db.InstanceDB.Model(&db.Agent{}).Where("status = ?", "running").Count(&count)
+	summary.ActiveAgents = int(count)
+	
+	db.InstanceDB.Model(&db.Agent{}).Where("status = ?", "paused").Count(&count)
+	summary.PausedAgents = int(count)
 	
 	// Tarefas
-	db.InstanceDB.Model(&db.Issue{}).Where("status != ?", "done").Count(nil).Scan(&summary.OpenIssues)
-	db.InstanceDB.Model(&db.Issue{}).Where("status = ?", "done").Count(nil).Scan(&summary.DoneIssues)
+	db.InstanceDB.Model(&db.Issue{}).Where("status != ?", "done").Count(&count)
+	summary.OpenIssues = int(count)
+	
+	db.InstanceDB.Model(&db.Issue{}).Where("status = ?", "done").Count(&count)
+	summary.DoneIssues = int(count)
 	
 	// Aprovações
-	db.InstanceDB.Model(&db.Approval{}).Where("status = ?", "pending").Count(nil).Scan(&summary.PendingApprovals)
+	db.InstanceDB.Model(&db.Approval{}).Where("status = ?", "pending").Count(&count)
+	summary.PendingApprovals = int(count)
 	
 	return summary, nil
 }

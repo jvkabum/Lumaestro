@@ -100,18 +100,42 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 
 	cwd, _ := os.Getwd()
 	sessionHome := cwd
+	isUsingOAuth := true
+	if cfgLoaded != nil && cfgLoaded.UseGeminiAPIKey {
+		isUsingOAuth = false
+	}
 
-	if _, err := os.Stat(filepath.Join(cwd, ".gemini")); err == nil {
-		fmt.Println("[ACP] 📂 Pasta .gemini local detectada! Forçando modo Project-Specific.")
-		sessionHome = cwd
-	} else if cfgLoaded != nil {
-		for _, acc := range cfgLoaded.GeminiAccounts {
-			if acc.Active && acc.HomeDir != "" {
-				sessionHome = acc.HomeDir
-				break
+	// 🌐 Lógica de Autenticação Híbrida (Lumaestro 2.0)
+	userHome, _ := os.UserHomeDir()
+	globalGeminiHome := filepath.Join(userHome, ".gemini")
+
+	if isUsingOAuth {
+		if agent == "gemini" {
+			// Motores principais: Sempre preferir o Login Global do sistema
+			sessionHome = globalGeminiHome
+			fmt.Printf("[ACP] 🌐 Motor Central: Usando Login Global em %s\n", sessionHome)
+		} else {
+			// Contas Gemini do Projeto/Sub-agentes: Tentar local primeiro
+			if _, err := os.Stat(filepath.Join(cwd, ".gemini")); err == nil {
+				sessionHome = cwd
+				fmt.Printf("[ACP] 📂 Conta de Projeto: Usando Login Local em %s\n", sessionHome)
+			} else {
+				sessionHome = globalGeminiHome // Fallback se não houver isolamento local
+			}
+		}
+
+		// Se houver uma conta específica ATIVA no pool (GeminiAccounts), ela tem prioridade total
+		if cfgLoaded != nil {
+			for _, acc := range cfgLoaded.GeminiAccounts {
+				if acc.Active && acc.HomeDir != "" {
+					sessionHome = acc.HomeDir
+					fmt.Printf("[ACP] 👤 Conta Pool Ativa: Direcionando para %s\n", sessionHome)
+					break
+				}
 			}
 		}
 	}
+
 	cmd.Env = append(cmd.Env, "GEMINI_CLI_HOME="+sessionHome)
 	if agent == "lmstudio" && cfgLoaded != nil {
 		cmd.Env = append(cmd.Env, "LUMAESTRO_LMSTUDIO_URL="+cfgLoaded.LMStudioURL)
@@ -124,6 +148,12 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 	cmd.Env = append(cmd.Env, "GEMINI_TELEMETRY_OUTFILE="+diagLog)
 
 	if cfgLoaded != nil {
+		if agent == "gemini" && cfgLoaded.GeminiAPIKey != "" {
+			apiKey := cfgLoaded.GetActiveGeminiKey()
+			cmd.Env = append(cmd.Env, "GOOGLE_API_KEY="+apiKey)
+			cmd.Env = append(cmd.Env, "GEMINI_API_KEY="+apiKey)
+			fmt.Printf("[ACP] 🔑 Chave de API ativada via Env (Pool Index: %d)\n", cfgLoaded.GeminiKeyIndex)
+		}
 		if agent == "claude" && cfgLoaded.ClaudeAPIKey != "" {
 			cmd.Env = append(cmd.Env, "ANTHROPIC_API_KEY="+cfgLoaded.ClaudeAPIKey)
 		}

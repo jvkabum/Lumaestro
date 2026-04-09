@@ -103,7 +103,7 @@ setTimeout(() => {
             send({
                 jsonrpc: "2.0",
                 id: 3,
-                method: "session/new",
+                method: "newSession",
                 params: { cwd: __dirname, mcpServers: [] }
             });
 
@@ -112,7 +112,7 @@ setTimeout(() => {
                 send({
                     jsonrpc: "2.0",
                     id: 4,
-                    method: "session/prompt",
+                    method: "prompt",
                     params: {
                         sessionId: lastSessionId, 
                         prompt: [{ type: "text", text: "ola gemini" }]

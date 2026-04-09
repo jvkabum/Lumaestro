@@ -56,7 +56,7 @@ child.stdout.on('data', (chunk) => {
                         jsonrpc: '2.0',
                         id: ++msgId,
                         method: 'authenticate',
-                        params: { methodId: 'oauth-personal' }
+                        params: { methodId: 'gemini-api-key' }
                     });
                 }, 500);
             }
@@ -70,7 +70,7 @@ child.stdout.on('data', (chunk) => {
                     sendRPC({
                         jsonrpc: '2.0',
                         id: ++msgId,
-                        method: 'newSession',
+                        method: 'session/new',
                         params: { cwd: process.cwd(), mcpServers: [] }
                     });
                 }, 500);
@@ -86,7 +86,7 @@ child.stdout.on('data', (chunk) => {
                     sendRPC({
                         jsonrpc: '2.0',
                         id: ++msgId,
-                        method: 'prompt',
+                        method: 'session/prompt',
                         params: {
                             sessionId: sessionId,
                             prompt: [{ type: 'text', text: 'Olá!' }]
@@ -106,7 +106,7 @@ child.stdout.on('data', (chunk) => {
 });
 
 child.stderr.on('data', (data) => {
-    console.error(`[stderr] ${data.toString().trim()}`);
+    console.error(`[stderr] ${data.toString()}`);
 });
 
 console.log('Aguardando Gemini CLI (2s)...\n');
@@ -118,7 +118,7 @@ setTimeout(() => {
         id: msgId,
         method: 'initialize',
         params: {
-            protocolVersion: 1,
+            protocolVersion: 2,
             clientCapabilities: {
                 fs: { readTextFile: true, writeTextFile: true }
             }
