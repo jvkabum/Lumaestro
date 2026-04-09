@@ -34,7 +34,7 @@ const handleDelete = async (session) => {
   if (window.confirm(`Deseja apagar permanentemente a Sinfonia "${session.title || 'sem título'}"?`)) {
     try {
       // 🚀 Chama o backend via Wails bridge
-      await window.go.core.App.DeleteSession(session.file);
+      await DeleteSession(session.file);
       // O backend já emite o evento de turn_complete que recarrega a lista
     } catch (err) {
       console.error("Erro ao apagar sessão:", err);

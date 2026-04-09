@@ -16,6 +16,8 @@ export const useSettingsStore = defineStore('settings', () => {
     claude_api_key: '',
     use_claude_api_key: false,
     active_agent: 'gemini',
+    gemini_model: 'auto-gemini-2.5',
+    claude_model: 'claude-3-5-sonnet-latest',
     auto_start_agents: [],
     agent_language: 'Português do Brasil',
     graph_depth: 1,

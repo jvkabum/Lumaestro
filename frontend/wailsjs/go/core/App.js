@@ -206,6 +206,10 @@ export function PurgeCache() {
   return window['go']['core']['App']['PurgeCache']();
 }
 
+export function RefreshAgentStats(arg1) {
+  return window['go']['core']['App']['RefreshAgentStats'](arg1);
+}
+
 export function RejectAction(arg1, arg2) {
   return window['go']['core']['App']['RejectAction'](arg1, arg2);
 }
@@ -256,6 +260,10 @@ export function SendMessageToSwarm(arg1, arg2) {
 
 export function SendTerminalData(arg1, arg2) {
   return window['go']['core']['App']['SendTerminalData'](arg1, arg2);
+}
+
+export function SetAgentModel(arg1, arg2) {
+  return window['go']['core']['App']['SetAgentModel'](arg1, arg2);
 }
 
 export function SetAutonomousMode(arg1) {

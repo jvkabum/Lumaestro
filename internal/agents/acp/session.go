@@ -77,6 +77,13 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		binaryPath = absPath
 	}
 
+	// ⚡ Injeta modelo via flag se configurado para evitar re-seleção no handshake
+	if agent == "gemini" {
+		if cfg, _ := config.Load(); cfg != nil && cfg.GeminiModel != "" {
+			args = append(args, "--model", cfg.GeminiModel)
+		}
+	}
+
 	fmt.Printf("[ACP] Executando: %s %v\n", binaryPath, args)
 
 	cmd := exec.CommandContext(cmdCtx, binaryPath, args...)
@@ -123,6 +130,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 	attemptID := "att-1"
 	cmd.Env = append(cmd.Env, "LIGHTNING_ROLLOUT_ID="+rolloutID)
 	cmd.Env = append(cmd.Env, "LIGHTNING_ATTEMPT_ID="+attemptID)
+	cmd.Env = append(cmd.Env, "NO_COLOR=1") // 🚫 Garante saída limpa para o modo JSON/ACP
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -158,17 +166,17 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		AttemptID:      attemptID,
 	}
 
-	e.ActiveSessions[sessionID] = session
 	runtime.EventsEmit(e.Ctx, "agent:starting", agent)
 
 	go e.runRPCListener(session, stdout)
 	go e.runStderrMonitor(session, stderr)
 
-	time.Sleep(3500 * time.Millisecond)
+	// ⚡ FAST-BOOT: Reduzido de 3500ms para 1200ms para acelerar o Handshake
+	time.Sleep(1200 * time.Millisecond)
 
 	e.SendRPC(session, JSONRPCMessage{
 		JSONRPC: JSONRPCVersion,
-		ID:      e.getNextID(),
+		ID:      e.GetNextID(),
 		Method:  "initialize",
 		Params:  json.RawMessage(`{"protocolVersion":1,"clientInfo":{"name":"Lumaestro","version":"2.0.0"},"clientCapabilities":{"fs":{"readTextFile":true,"writeTextFile":true}}}`),
 	})
@@ -187,7 +195,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 
 	e.SendRPC(session, JSONRPCMessage{
 		JSONRPC: JSONRPCVersion,
-		ID:      e.getNextID(),
+		ID:      e.GetNextID(),
 		Method:  "authenticate",
 		Params:  json.RawMessage(`{"methodId":"` + methodId + `"}`),
 	})
@@ -223,7 +231,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		if targetID == "" {
 			e.SendRPC(session, JSONRPCMessage{
 				JSONRPC: JSONRPCVersion,
-				ID:      e.getNextID(),
+				ID:      e.GetNextID(),
 				Method:  "session/new",
 				Params:  json.RawMessage(`{"cwd":"` + strings.ReplaceAll(cwd, "\\", "\\\\") + `","mcpServers":[]}`),
 			})
@@ -231,7 +239,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		if targetID != "" {
 			e.SendRPC(session, JSONRPCMessage{
 				JSONRPC: JSONRPCVersion,
-				ID:      e.getNextID(),
+				ID:      e.GetNextID(),
 				Method:  "session/load",
 				Params:  json.RawMessage(`{"sessionId":"` + targetID + `","cwd":"` + strings.ReplaceAll(cwd, "\\", "\\\\") + `"}`),
 			})
@@ -241,8 +249,13 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 	select {
 	case <-session.initDone:
 		fmt.Println("[ACP] Estágio 3 concluído. Sessão pronta!")
+		// ⚡ ATIVAÇÃO FINAL: Agora que o Handshake terminou e temos o ACPSessID,
+		// liberamos a sessão para o restante do sistema (Core/Wails).
+		e.Mu.Lock()
+		e.ActiveSessions[sessionID] = session
+		e.Mu.Unlock()
 	case <-time.After(60 * time.Second):
-		return fmt.Errorf("timeout no estágio 3 do Gemini (Criação de sessão lenta)")
+		return fmt.Errorf("timeout no estágio 3 do Gemini (Criação de sessão lenta). Verifique sua conexão ou se a cota da API (erro 429) foi atingida.")
 	}
 
 	fmt.Println("[ACP] Enviando setSessionMode (auto-approve)...")
@@ -252,9 +265,28 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 	})
 	e.SendRPC(session, JSONRPCMessage{
 		JSONRPC: JSONRPCVersion,
-		ID:      e.getNextID(),
-		Method:  "session/set_mode",
+		ID:      e.GetNextID(),
+		Method:  "setSessionMode",
 		Params:  modeParams,
+	})
+
+	// ⚡ SELEÇÃO DE MODELO: Prioriza a escolha do usuário na config.
+	cfg, _ := config.Load()
+	activeModel := "gemini-2.5-flash" // Fallback estável
+	if cfg != nil && cfg.GeminiModel != "" {
+		activeModel = cfg.GeminiModel
+	}
+
+	fmt.Printf("[ACP] Selecionando modelo: %s\n", activeModel)
+	modelParams, _ := json.Marshal(map[string]interface{}{
+		"sessionId": session.ACPSessID,
+		"modelId":   activeModel,
+	})
+	e.SendRPC(session, JSONRPCMessage{
+		JSONRPC: JSONRPCVersion,
+		ID:      e.GetNextID(),
+		Method:  "unstable_setSessionModel",
+		Params:  modelParams,
 	})
 
 	runtime.EventsEmit(e.Ctx, "terminal:started", map[string]interface{}{
@@ -437,7 +469,7 @@ func (e *ACPExecutor) ListSessions(s *ACPSession) ([]SessionInfo, error) {
 func (e *ACPExecutor) LoadSession(s *ACPSession, acpSessionID string) error {
 	s.ACPSessID = acpSessionID 
 
-	id := e.getNextID()
+	id := e.GetNextID()
 	cwd, _ := os.Getwd()
 	params := map[string]interface{}{
 		"sessionId":  acpSessionID,

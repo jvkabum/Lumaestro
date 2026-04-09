@@ -55,7 +55,9 @@ type Config struct {
 	GraphNeighborLimit int            `json:"graph_neighbor_limit"` // Máximo de vizinhos por nó (padrão: 5)
 	GraphContextLimit int            `json:"graph_context_limit"` // Limite de chars do contexto expandido (padrão: 4000)
 	Security          SecurityConfig `json:"security"`
-	
+	GeminiModel       string         `json:"gemini_model"` // 🌟 Modelo Gemini para Chat (ACP)
+	ClaudeModel       string         `json:"claude_model"` // 🌟 Modelo Claude para Chat
+
 	// ⚡ Configurações do Motor Lightning (Aprendizado por Reforço)
 	LightningEnabled   bool   `json:"lightning_enabled"`    // Ativa o rastreamento e aprendizado
 	LightningProxyPort string `json:"lightning_proxy_port"` // Porta do proxy local (padrão: 8001)
@@ -158,5 +160,13 @@ func Load() (*Config, error) {
 		fmt.Printf("[Config] ERRO CRITICO Parse JSON: %v\n", err)
 		return nil, err
 	}
+	// ⚡ Inicializa modelos padrão se estiverem vazios (Primeiro uso após atualização)
+	if cfg.GeminiModel == "" {
+		cfg.GeminiModel = "auto-gemini-2.5"
+	}
+	if cfg.ClaudeModel == "" {
+		cfg.ClaudeModel = "claude-3-5-sonnet-latest"
+	}
+
 	return &cfg, nil
 }

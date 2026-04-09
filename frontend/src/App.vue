@@ -82,6 +82,7 @@ const startResize = (e) => {
 }
 
 onMounted(async () => {
+  console.log("[App] Sinfonia Iniciada: Sincronizando com o Maestro...");
   // 🧠 Escuta o Diagnóstico de Boot (cada estágio do backend)
   EventsOn('boot:stage', (data) => {
     if (data.stage === 'error') {
@@ -103,20 +104,23 @@ onMounted(async () => {
     }
   })
 
-  // Verificar conexão inicial com diagnóstico visual
-  try {
-    isOnline.value = await CheckConnection()
+  // Verificar conexão inicial com diagnóstico visual (Delay para estabilizar o bus de eventos)
+  setTimeout(async () => {
+    try {
+      isOnline.value = await CheckConnection()
+    console.log("[App] Estado de Conexão:", isOnline.value)
     if (isOnline.value) {
       connectionError.value = "Maestro Online (Backend e Motor Vetorial Ativos)"
-      // Se já estava online (HMR/reload), pula o overlay
-      isBooting.value = false
+      // Pula o overlay se já estivermos online (Resiliência contra erro runtime:ready)
+      isBooting.value = false;
     } else {
-      connectionError.value = "Backend respondeu, mas Qdrant ou Configuração falharam. Verifique as configurações."
+      connectionError.value = "Conexão Instável. Verifique os motores ACP e o banco vetorial."
     }
-  } catch(e) {
-    isOnline.value = false
-    connectionError.value = "Erro Wails IPC: Falha Crítica de Comunicação com o Backend Go. (" + String(e) + ")"
-  }
+    } catch(e) {
+      isOnline.value = false;
+      connectionError.value = "Erro Wails IPC: Falha Crítica de Comunicação com o Backend Go. (" + String(e) + ")";
+    }
+  }, 1200);
   
   // Escuta troca de visualização remota (ex: vindo das Settings)
   EventsOn('view:change', (view) => {

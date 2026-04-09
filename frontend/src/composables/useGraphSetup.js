@@ -131,14 +131,14 @@ export function useGraphSetup() {
         }, 5000)
 
         // ── Reforço Neural (Aprendizado Ativo) ──
-        window.go.main.App.HandleNodeClick(node.id)
+        HandleNodeClick(node.id)
 
         store.selectedNode = node
         store.nodeDetails = null
         store.nodeDetails = { loading: true }
         
         try {
-          const details = await window.go.main.App.GetNodeDetails(node.id)
+          const details = await GetNodeDetails(node.id)
           if (details) {
             store.nodeDetails = details
           } else {

@@ -9,7 +9,7 @@ import ReviewBlock from './ReviewBlock.vue'
 
 // --- Uso da Store (Pinia) ---
 const orchestrator = useOrchestratorStore()
-const { messages, isThinking, isNavigating, isTerminalMode, activeAgent, runningSessions, pendingReview } = storeToRefs(orchestrator)
+const { messages, isThinking, isNavigating, isTerminalMode, activeAgent, runningSessions, pendingReview, modelStats } = storeToRefs(orchestrator)
 
 // --- Estados Locais de UI ---
 const logContainer = ref(null)
@@ -30,40 +30,49 @@ const sendChatMessage = async (payload) => {
   if (!text.trim()) return
 
   // Roteamento de Comandos
-  if (text.startsWith('/cmd ')) {
-    const agentName = text.replace('/cmd ', '').trim()
-    await orchestrator.startSession(agentName || 'gemini')
-    showRawTerminal.value = true // Força o visual do terminal ao abrir sessão
-    return
-  }
-
-  if (text === '/exit' || text === '/quit') {
-    await orchestrator.stopSession()
-    return
-  }
-
-  if (text === '/scan') {
-    await orchestrator.runScan()
-    return
-  }
-
-  // Envio Padrão (Multimodal)
-  const targetAgent = payload.agent || 'gemini'
-  const isActMode = payload.mode === 'act'
-  const images = payload.images || [] // Captura as imagens do Ctrl+V
-
-  if (isActMode) {
-    // Garante que a sessão está ativa antes de enviar
-    if (!runningSessions.value.includes(targetAgent)) {
-      await orchestrator.startSession(targetAgent)
-      // Pequeno delay para a sessão inicializar no backend
-      await new Promise(r => setTimeout(r, 500))
+  try {
+    if (text.startsWith('/cmd ')) {
+      const agentName = text.replace('/cmd ', '').trim()
+      await orchestrator.startSession(agentName || 'gemini')
+      showRawTerminal.value = true 
+      return
     }
-    // 🛠️ SINCRONIZAÇÃO: Enviando texto e imagens capturadas
-    await orchestrator.sendInput(targetAgent, text, images)
-  } else {
-    // Modo CHAT (Legacy/RAG) - Agora também aceita contexto visual
-    await orchestrator.ask(targetAgent, text, images)
+
+    if (text === '/exit' || text === '/quit') {
+      await orchestrator.stopSession()
+      return
+    }
+
+    if (text === '/scan') {
+      await orchestrator.runScan()
+      return
+    }
+
+    // Envio Padrão (Multimodal)
+    const targetAgent = payload.agent || 'gemini'
+    const isActMode = payload.mode === 'act'
+    const images = payload.images || []
+
+    if (isActMode) {
+      console.log("[ChatPanel] Modo ACT detectado para:", targetAgent);
+      // Garante que a sessão está ativa antes de enviar
+      if (!runningSessions.value.includes(targetAgent)) {
+        await orchestrator.startSession(targetAgent)
+        await new Promise(r => setTimeout(r, 500))
+      }
+      await orchestrator.sendInput(targetAgent, text, images)
+    } else {
+      console.log("[ChatPanel] Modo CHAT detectado para:", targetAgent);
+      await orchestrator.ask(targetAgent, text, images)
+    }
+  } catch (err) {
+    console.error("[ChatPanel] Falha crítica no envio:", err);
+    // Injeta erro visual para o usuário
+    orchestrator.messages.push({
+      role: 'assistant',
+      text: `❌ Falha na Sinfonia: Não foi possível enviar a mensagem. (${err.message || 'Erro de Conexão'})`,
+      mode: 'system'
+    });
   }
 }
 
@@ -92,7 +101,14 @@ const handleSessionEnded = (agent) => {
           >
             {{ orchestrator.activeProfile.name.toUpperCase() }}
           </span>
+          <span v-else-if="orchestrator.isTerminalMode" class="active-agent-badge gemini">ACP ACTIVE</span>
           <span v-else class="active-agent-badge standby">STANDBY</span>
+          
+          <!-- 📊 Badge de Cota Diária (Injetado via ACP Stats) -->
+          <div v-if="activeAgent && modelStats.agent === activeAgent" class="quota-badge glass" title="Cota Diária de Requisições">
+             <span class="quota-icon">⚡</span>
+             <span class="quota-value">{{ modelStats.info }}</span>
+          </div>
         </div>
       </div>
       <div class="header-actions">
@@ -145,10 +161,10 @@ const handleSessionEnded = (agent) => {
 
         <!-- 📡 Pulso de Atividade: Mostra o que a IA está fazendo AGORA (Anti-Travamento) -->
         <Transition name="status-fade">
-          <div v-if="orchestrator.currentStatus && orchestrator.currentStatus.action" class="activity-status-bar glass">
+          <div v-if="orchestrator.currentStatus?.action" class="activity-status-bar glass">
             <div class="activity-pulse"></div>
             <div class="activity-info">
-              <span v-if="orchestrator.currentStatus.tool" class="activity-tool">{{ orchestrator.currentStatus.tool.replace('_', ' ').toUpperCase() }}</span>
+              <span v-if="orchestrator.currentStatus?.tool" class="activity-tool">{{ String(orchestrator.currentStatus.tool).replace('_', ' ').toUpperCase() }}</span>
               <span class="activity-text">{{ orchestrator.currentStatus.action }}</span>
             </div>
           </div>
@@ -260,7 +276,28 @@ const handleSessionEnded = (agent) => {
 
 .active-agent-badge.gemini { background: rgba(59, 130, 246, 0.1); color: #60a5fa; }
 .active-agent-badge.claude { background: rgba(16, 185, 129, 0.1); color: #34d399; }
-.active-agent-badge.standby { background: rgba(245, 158, 11, 0.1); color: #fbbf24; }
+.active-agent-badge.standby { background: rgba(148, 163, 184, 0.1); color: #94a3b8; }
+
+/* 📊 Monitor de Cotas Badge */
+.quota-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 2px 10px;
+  border-radius: 100px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  margin-left: 8px;
+  transition: all 0.3s;
+}
+
+.quota-badge:hover {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.2);
+}
+
+.quota-icon { font-size: 10px; color: #fbbf24; }
+.quota-value { font-size: 10px; font-weight: 800; color: #94a3b8; letter-spacing: 0.5px; }
 
 .header-actions { display: flex; align-items: center; gap: 10px; }
 

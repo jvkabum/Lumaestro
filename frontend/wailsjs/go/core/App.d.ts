@@ -108,6 +108,8 @@ export function PruneGraph(arg1:number):Promise<string>;
 
 export function PurgeCache():Promise<string>;
 
+export function RefreshAgentStats(arg1:string):Promise<void>;
+
 export function RejectAction(arg1:string,arg2:string):Promise<string>;
 
 export function ResetQdrantDB():Promise<string>;
@@ -133,6 +135,8 @@ export function SendAgentInput(arg1:string,arg2:string,arg3:Array<Record<string,
 export function SendMessageToSwarm(arg1:string,arg2:string):Promise<string>;
 
 export function SendTerminalData(arg1:string,arg2:string):Promise<void>;
+
+export function SetAgentModel(arg1:string,arg2:string):Promise<void>;
 
 export function SetAutonomousMode(arg1:boolean):Promise<string>;
 

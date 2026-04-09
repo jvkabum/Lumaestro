@@ -20,16 +20,9 @@ func (e *ACPExecutor) SendInput(sessionID string, input string, images []map[str
 		return fmt.Errorf("sessão %s não encontrada", sessionID)
 	}
 
-	// ⏳ Aguarda o Handshake terminar se ele ainda estiver rolando em background
+	// 🧠 Verificação de integridade da sessão
 	if session.ACPSessID == "" {
-		fmt.Printf("[ACP] ⏳ Sessão %s ainda sem ID ACP. Aguardando estabilização...\n", sessionID)
-		for i := 0; i < 10; i++ {
-			time.Sleep(500 * time.Millisecond)
-			if session.ACPSessID != "" { break }
-		}
-		if session.ACPSessID == "" {
-			return fmt.Errorf("sessão não initializada completamente (sem ACP sessionId)")
-		}
+		return fmt.Errorf("a sessão do agente foi iniciada, mas o ID interno não foi gerado. Isso geralmente indica um erro crítico de handshake com o Google.")
 	}
 
 	// 🧠 Construção do Prompt Multimodal (Texto + Imagens)
@@ -55,7 +48,7 @@ func (e *ACPExecutor) SendInput(sessionID string, input string, images []map[str
 		"prompt":    promptData,
 	})
 
-	promptID := e.getNextID()
+	promptID := e.GetNextID()
 
 	err := e.SendRPC(session, JSONRPCMessage{
 		JSONRPC: JSONRPCVersion,

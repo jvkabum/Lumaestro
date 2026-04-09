@@ -18,7 +18,7 @@ export function useGraphXRay() {
     if (store.scanLoading) return
     store.scanLoading = true
     try {
-      const result = await window.go.main.App.RunReconScan()
+      const result = await RunReconScan()
       console.log("[RECON] Scan concluído:", result)
     } catch (e) {
       console.error("Erro no Recon Scan:", e)
@@ -34,7 +34,7 @@ export function useGraphXRay() {
     if (confirm(`Deseja remover permanentemente nós com PageRank abaixo de ${store.xRayThreshold}? (Notas de origem são protegidas)`)) {
       store.pruneLoading = true
       try {
-        const result = await window.go.main.App.PruneGraph(store.xRayThreshold)
+        const result = await PruneGraph(store.xRayThreshold)
         console.log("[PODA] Resultado:", result)
       } catch (e) {
         console.error("Erro na poda:", e)

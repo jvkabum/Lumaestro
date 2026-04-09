@@ -1,24 +1,19 @@
 import { defineStore } from 'pinia';
 import { ref, watch } from 'vue';
-import { EventsOn } from '../../wailsjs/runtime/runtime';
-
-// Helper para chamar funções do Wails com segurança
-const safeCall = async (pkg, func, ...args) => {
-  try {
-    // 🚀 SUPORTE MODULAR: Tenta encontrar a função no pacote core (novo) ou main (legado)
-    const bridge = (window.go && window.go.core && window.go.core.App) || 
-                   (window.go && window.go.main && window.go.main.App);
-                   
-    if (bridge && bridge[func]) {
-      return await bridge[func](...args);
-    }
-    console.warn(`[Wails SafeCall] Função ${func} não encontrada em core ou main`);
-    return null;
-  } catch (err) {
-    console.error(`[Wails SafeCall] Erro ao chamar ${func}:`, err);
-    throw err;
-  }
-};
+import { EventsOn } from '../../wailsjs/runtime';
+import { 
+  SetupTool, 
+  RefreshAgentStats, 
+  ConsolidateChatKnowledge, 
+  AskAgent, 
+  StartAgentSession, 
+  ListAgentSessions, 
+  LoadAgentSession, 
+  NewAgentSession, 
+  SendAgentInput, 
+  SubmitReview, 
+  StopAgentSession 
+} from '../../wailsjs/go/core/App';
 
 export const useOrchestratorStore = defineStore('orchestrator', () => {
   const messages = ref([]);
@@ -27,8 +22,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   const isTerminalMode = ref(false);
   const isWeaving = ref(false); // 🧶 Teccelagem de Conhecimento em Background
   const activeAgent = ref(null);
-  const activeProfile = ref(null); // 🎭 Perfil de Agente (Doc-Master, etc) - Começa limpo
-  const currentStatus = ref(""); // 📡 Status de Ação em Tempo Real
+  const currentStatus = ref({ agent: '', tool: '', action: '' }); // 📡 Status de Atividade
   const runningSessions = ref([]);
   
   // Estado para histórico e checkpoints (Sinfonias)
@@ -37,6 +31,14 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   
   // Estado para revisões de segurança pendentes
   const pendingReview = ref(null);
+
+  // 📊 Estado de Telemetria de Cotas (Gemini CLI)
+  const modelStats = ref({
+    used: 0,
+    limit: 1000,
+    info: "0 / 1000",
+    agent: ""
+  });
 
   // 🛡️ Monitor de Silêncio (Watchdog) para evitar timeouts prematuros
   let safetyTimer = null;
@@ -152,7 +154,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
         mode: 'system' 
       });
       // Dispara o SetupTool (terminal externo) para o agente
-      await safeCall('main', 'SetupTool', agent);
+      await SetupTool(agent);
     });
 
     // 3.5 Identidade e Status (Maestro UI Evolution)
@@ -183,8 +185,19 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
       isWeaving.value = false;
     });
 
+    // 📊 Listener de Estatísticas (Monitor de Cotas)
+    EventsOn('agent:stats_updated', (stats) => {
+      console.log("[Store] 📊 Estatísticas recebidas:", stats);
+      modelStats.value = {
+        used: stats.used || 0,
+        limit: stats.limit || 1000,
+        info: stats.info || "0 / 1000",
+        agent: stats.agent || ""
+      };
+    });
+
     // 🚀 Sincronização de Sinfonias (Checkpoints): Quando o turno termina, atualizamos a lista lateral e consolidamos a memória
-    window.runtime.EventsOn("agent:turn_complete", async (agent) => {
+    EventsOn("agent:turn_complete", async (agent) => {
       console.log(`[Store] Turno concluído para ${agent}. Atualizando Sinfonias e Consolidando Memória...`);
       stopSafetyTimeout(); // 🛑 Turno finalizado, para o cronômetro
       isThinking.value = false;
@@ -199,7 +212,10 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
          messages.value = [...messages.value];
       }
 
-      fetchSessions(agent);
+      await fetchSessions(agent);
+      
+      // 📊 ATUALIZAÇÃO DE COTAS: Solicita novas estatísticas após o turno
+      await RefreshAgentStats(agent);
 
       // Consolidação de Conhecimento RAG em tempo real
       const sessionID = currentACPID.value || 'default';
@@ -207,7 +223,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
       
       if (lastMessages) {
         console.log("[Store] Disparando ConsolidateChatKnowledge para sessão:", sessionID);
-        await safeCall('main', 'ConsolidateChatKnowledge', sessionID, lastMessages);
+        await ConsolidateChatKnowledge(sessionID, lastMessages);
       }
     });
 
@@ -232,7 +248,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     activeAgent.value = agent;
 
     try {
-      await safeCall('main', 'AskAgent', agent, prompt);
+      await AskAgent(agent, prompt);
     } catch (err) {
       messages.value.push({ role: 'assistant', text: `❌ Erro: ${err}`, mode: 'system' });
       isThinking.value = false;
@@ -252,8 +268,13 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     activeAgent.value = agent;
     
     try {
-      await safeCall('main', 'StartAgentSession', agent);
+      await StartAgentSession(agent);
       
+      // ✅ Sincronização Local: Garante que o agente está na lista de sessões ativas no frontend
+      if (!runningSessions.value.includes(agent)) {
+        runningSessions.value.push(agent);
+      }
+
       // 🚀 Após iniciar o processo, tentamos buscar o histórico
       await fetchSessions(agent);
       
@@ -273,7 +294,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   const fetchSessions = async (agent) => {
     if (!agent) return;
     try {
-      const list = await safeCall('main', 'ListAgentSessions', agent);
+      const list = await ListAgentSessions(agent);
       if (list) {
           // Ordenar por data (mais recente primeiro)
           sessions.value = list.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
@@ -290,7 +311,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     messages.value = []; // Limpa o chat para receber o novo contexto restaurado
     
     try {
-      await safeCall('main', 'LoadAgentSession', agent, acpID);
+      await LoadAgentSession(agent, acpID);
       await fetchSessions(agent); // Atualiza a lista lateral
     } catch (err) {
       messages.value.push({ role: 'assistant', text: `❌ Erro ao carregar: ${err}`, mode: 'system' });
@@ -305,7 +326,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     messages.value = [];
     
     try {
-      await safeCall('main', 'NewAgentSession', agent);
+      await NewAgentSession(agent);
       await fetchSessions(agent);
     } catch (err) {
       messages.value.push({ role: 'assistant', text: `❌ Erro ao criar: ${err}`, mode: 'system' });
@@ -328,7 +349,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
 
     try {
       // 🛠️ SINCRONIZAÇÃO CRÍTICA: Agora enviamos 3 argumentos conforme o novo contrato Go
-      const resp = await safeCall('main', 'SendAgentInput', agent, text, images);
+      const resp = await SendAgentInput(agent, text, images);
       return resp;
     } catch (err) {
       console.error('[Store] Erro ao enviar input:', err);
@@ -342,7 +363,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     const id = pendingReview.value.id;
     pendingReview.value = null;
     try {
-      await safeCall('main', 'SubmitReview', id, approved);
+      await SubmitReview(id, approved);
     } catch (err) {
       console.error("Falha ao enviar review:", err);
     }
@@ -355,7 +376,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   const stopSession = async () => {
     if (!activeAgent.value) return;
     try {
-      await safeCall('main', 'StopAgentSession', activeAgent.value);
+      await StopAgentSession(activeAgent.value);
     } catch (err) {
       console.error("Erro ao fechar sessão:", err);
     }

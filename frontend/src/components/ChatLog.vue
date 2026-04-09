@@ -83,7 +83,7 @@
            </div>
            <div class="thinking-content">
              <div v-if="orchestrator.currentStatus?.tool" class="thinking-tool">
-               {{ orchestrator.currentStatus.tool.replace('_', ' ').toUpperCase() }}
+               {{ String(orchestrator.currentStatus.tool).replace('_', ' ').toUpperCase() }}
              </div>
              <div class="thinking-text">
                {{ orchestrator.currentStatus?.action || 'Harmonizando...' }}

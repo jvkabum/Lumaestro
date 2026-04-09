@@ -5,13 +5,89 @@
       <div class="input-toolbar">
         <div class="toolbar-left">
           <div class="agent-switcher">
-            <button 
-              type="button" 
-              :class="{ active: selectedAgent === 'gemini' }" 
-              @click="selectedAgent = 'gemini'"
+            <!-- Custom Premium Model Selector -->
+            <div 
+              class="agent-btn-wrapper" 
+              :class="{ active: selectedAgent === 'gemini', 'menu-open': showModelMenu }"
+              @click.stop="toggleModelMenu"
             >
-              <span class="dot gemini"></span> Gemini
-            </button>
+              <span class="dot gemini"></span>
+              <span class="agent-label">Gemini</span>
+              <span class="chevron-icon" :class="{ rotate: showModelMenu }">▾</span>
+
+              <!-- Dropdown List (Custom UI) -->
+              <Transition name="menu-pop">
+                <div v-if="showModelMenu" class="model-dropdown-menu glass" @click.stop>
+                  <div class="menu-section">
+                    <label>⚡ AUTOMÁTICO</label>
+                    <div 
+                      class="menu-item" 
+                      :class="{ selected: activeGeminiModel === 'auto-gemini-2.5' }"
+                      @click="selectModel('auto-gemini-2.5')"
+                    >
+                      <span class="item-icon">⚡</span>
+                      <div class="item-info">
+                        <span class="item-name">Auto (Gemini 2.5)</span>
+                        <span class="item-desc">Equilíbrio sugerido</span>
+                      </div>
+                    </div>
+                    <div 
+                      class="menu-item" 
+                      :class="{ selected: activeGeminiModel === 'auto-gemini-3' }"
+                      @click="selectModel('auto-gemini-3')"
+                    >
+                      <span class="item-icon">🧪</span>
+                      <div class="item-info">
+                        <span class="item-name">Auto (Gemini 3)</span>
+                        <span class="item-desc">Experimental / Preview</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="menu-section">
+                    <label>🧠 RACIOCÍNIO (PRO)</label>
+                    <div 
+                      class="menu-item" 
+                      :class="{ selected: activeGeminiModel === 'gemini-2.5-pro' }"
+                      @click="selectModel('gemini-2.5-pro')"
+                    >
+                      <span class="item-icon">🧠</span>
+                      <div class="item-info">
+                        <span class="item-name">2.5 Pro</span>
+                        <span class="item-desc">Lógica complexa</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="menu-section">
+                    <label>🚀 VELOCIDADE (FLASH)</label>
+                    <div 
+                      class="menu-item" 
+                      :class="{ selected: activeGeminiModel === 'gemini-2.5-flash' }"
+                      @click="selectModel('gemini-2.5-flash')"
+                    >
+                      <span class="item-icon">🚀</span>
+                      <div class="item-info">
+                        <span class="item-name">2.5 Flash</span>
+                        <span class="item-desc">Respostas rápidas</span>
+                      </div>
+                    </div>
+                    <div 
+                      class="menu-item" 
+                      :class="{ selected: activeGeminiModel === 'gemini-2.5-flash-lite' }"
+                      @click="selectModel('gemini-2.5-flash-lite')"
+                    >
+                      <span class="item-icon">⚡</span>
+                      <div class="item-info">
+                        <span class="item-name">Flash Lite</span>
+                        <span class="item-desc">Ultra leve</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </Transition>
+            </div>
+
             <button 
               type="button" 
               :class="{ active: selectedAgent === 'claude' }" 
@@ -63,7 +139,7 @@
           ref="textarea"
           v-model="messageText"
           placeholder="Comande o Maestro para construir algo extraordinário..."
-          @keydown.enter.prevent="handleEnter"
+          @keydown="handleKeydown"
           @paste="handlePaste"
           :disabled="isThinking"
           :rows="1"
@@ -87,7 +163,55 @@
 </template>
 
 <script setup>
-import { ref, watch, nextTick } from 'vue';
+import { ref, watch, nextTick, onMounted } from 'vue';
+import { useSettingsStore } from '../stores/settings';
+
+const settings = useSettingsStore();
+const activeGeminiModel = ref('auto-gemini-2.5');
+
+onMounted(() => {
+  if (settings.config.gemini_model) {
+    activeGeminiModel.value = settings.config.gemini_model;
+  }
+});
+
+const showModelMenu = ref(false);
+
+const toggleModelMenu = () => {
+  if (selectedAgent.value !== 'gemini') {
+    selectedAgent.value = 'gemini';
+    showModelMenu.value = true; // Abre direto ao selecionar
+  } else {
+    showModelMenu.value = !showModelMenu.value;
+  }
+};
+
+const updateGeminiModel = async () => {
+  // 1. Atualiza a store local
+  settings.config.gemini_model = activeGeminiModel.value;
+  
+  // 2. Notifica o Backend para persistir e mudar o modelo em tempo real via ACP
+  try {
+    await SetAgentModel('gemini', activeGeminiModel.value);
+  } catch (e) {
+    console.error("[ChatInput] Erro ao trocar modelo no backend:", e);
+  }
+};
+
+const selectModel = async (modelId) => {
+  activeGeminiModel.value = modelId;
+  showModelMenu.value = false;
+  await updateGeminiModel();
+};
+
+// Fecha o menu ao clicar fora
+onMounted(() => {
+  window.addEventListener('click', (e) => {
+    if (!e.target.closest('.agent-btn-wrapper')) {
+      showModelMenu.value = false;
+    }
+  });
+});
 
 const messageText = ref('');
 const selectedAgent = ref('gemini');
@@ -140,21 +264,45 @@ watch(messageText, () => {
   nextTick(adjustHeight);
 });
 
+const handleKeydown = (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    console.log("[ChatInput] Enter detectado. Disparando envio...");
+    sendMessage();
+  }
+};
+
 const handleEnter = (e) => {
-  if (!e.shiftKey) sendMessage();
+  // Mantido para compatibilidade se houver chamadas via @enter
+  if (!e.shiftKey) {
+     e.preventDefault();
+     sendMessage();
+  }
 };
 
 const sendMessage = () => {
-  if (props.isThinking) return;
+  if (props.isThinking) {
+    console.warn("[ChatInput] Bloqueado: IA ainda está pensando.");
+    return;
+  }
   const text = messageText.value.trim();
   const images = attachedImages.value.map(img => ({ data: img.base64, type: img.type }));
   
   if (!text && images.length === 0) return;
   
+  console.log("[ChatInput] Enviando mensagem:", text.substring(0, 20) + "...");
   emit('send', { text, agent: selectedAgent.value, mode: mode.value, images });
+  
+  // Limpeza imediata para feedback visual de sucesso
   messageText.value = '';
   attachedImages.value = [];
-  nextTick(() => { if (textarea.value) textarea.value.style.height = 'auto'; });
+  
+  nextTick(() => { 
+    if (textarea.value) {
+      textarea.value.style.height = 'auto';
+      textarea.value.focus(); // Retorna o foco após o envio
+    }
+  });
 };
 </script>
 
@@ -210,32 +358,96 @@ const sendMessage = () => {
   padding: 3px;
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.05);
+  gap: 4px;
 }
 
-.agent-switcher button {
-  background: transparent;
-  border: none;
-  font-size: 11px;
-  font-weight: 700;
-  color: #94a3b8;
+.agent-btn-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 5px 12px;
   border-radius: 7px;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 700;
   transition: all 0.2s;
 }
 
-.agent-switcher button.active {
-  background: rgba(255, 255, 255, 0.05);
+.agent-btn-wrapper.active {
+  background: rgba(59, 130, 246, 0.15);
   color: #fff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  box-shadow: 0 4px 15px rgba(59, 130, 246, 0.2);
 }
 
-.dot { width: 5px; height: 5px; border-radius: 50%; }
-.dot.gemini { background: #60a5fa; box-shadow: 0 0 6px #3b82f6; }
-.dot.claude { background: #34d399; box-shadow: 0 0 6px #10b981; }
+.chevron-icon {
+  font-size: 10px;
+  opacity: 0.5;
+  transition: transform 0.3s ease;
+  margin-left: -2px;
+}
+
+.chevron-icon.rotate { transform: rotate(180deg); }
+
+/* --- Dropdown Menu Premium --- */
+.model-dropdown-menu {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 0;
+  width: 240px;
+  padding: 12px;
+  border-radius: 16px;
+  z-index: 1000;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+  animation: menu-pop 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: bottom left;
+}
+
+.menu-section { margin-bottom: 12px; }
+.menu-section:last-child { margin-bottom: 0; }
+
+.menu-section label {
+  display: block;
+  font-size: 9px;
+  font-weight: 900;
+  color: #64748b;
+  letter-spacing: 1.5px;
+  margin-bottom: 8px;
+  padding-left: 6px;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-bottom: 2px;
+}
+
+.menu-item:hover { background: rgba(59, 130, 246, 0.1); }
+.menu-item.selected { background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.2); }
+
+.item-icon { font-size: 1.2rem; }
+.item-info { display: flex; flex-direction: column; gap: 1px; }
+.item-name { font-size: 12px; font-weight: 700; color: #f1f5f9; }
+.item-desc { font-size: 10px; color: #94a3b8; }
+
+/* Transição de Menu */
+.menu-pop-enter-active, .menu-pop-leave-active {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.menu-pop-enter-from, .menu-pop-leave-to {
+  opacity: 0;
+  transform: translateY(10px) scale(0.95);
+}
+
+.agent-model-select { display: none; }
 
 /* Safety Toggle (Switch) */
 .safety-toggle {

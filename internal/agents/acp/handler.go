@@ -8,6 +8,9 @@ import (
 
 	"Lumaestro/internal/config"
 	"Lumaestro/internal/utils"
+	"regexp"
+	"strconv"
+
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -59,6 +62,11 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 						h.Session.isLoggingMessage = true
 						h.Session.isLoggingThought = false 
 					}
+
+					// 📊 INTERCEPTADOR DE ESTATÍSTICAS: Procura por padrões do comando /stats model
+					// Exemplo de saída: "Requests: 42 / 1000 (Today)" ou formatado em tabela.
+					h.parseStatsInContent(txt)
+
 					h.Executor.LogChan <- ExecutionLog{
 						Source:  h.Session.AgentName,
 						Content: txt,
@@ -315,7 +323,7 @@ func (h *ACPRpcHandler) HandleResponse(id interface{}, result json.RawMessage, r
 			h.Session.ACPSessID = sessID
 		}
 	}
-	
+
 	if idInt <= 3 {
 		select { case h.Session.initDone <- struct{}{}: default: }
 		return
@@ -327,8 +335,45 @@ func (h *ACPRpcHandler) HandleResponse(id interface{}, result json.RawMessage, r
 	}
 }
 
+// parseStatsInContent tenta extrair informações de cota de textos vindos do agente.
+func (h *ACPRpcHandler) parseStatsInContent(txt string) {
+	// 🧹 Limpa cores ANSI antes de processar (o gemini-cli v0.37+ costuma colorir a saída)
+	cleanTxt := h.StripANSI(txt)
+
+	// Padrão do Gemini CLI: "Requests: 123 / 1000" ou apenas "123 / 1000 (Today)"
+	// Suporta: "Requests: 123 / 1000", "123/1000", "Daily: 123/1000" e variações com ou sem espaços
+	re := regexp.MustCompile(`(?:Requests:|Daily:)?\s*(\d+)\s*/\s*(\d+)`)
+	matches := re.FindStringSubmatch(cleanTxt)
+	
+	if len(matches) >= 3 {
+		used, _ := strconv.Atoi(matches[1])
+		limit, _ := strconv.Atoi(matches[2])
+		
+		h.Session.ModelRequestsUsed = used
+		h.Session.ModelRequestsLimit = limit
+		h.Session.ModelRequestsInfo = fmt.Sprintf("%d / %d", used, limit)
+
+		// 📡 Notifica o Frontend imediatamente
+		runtime.EventsEmit(h.Executor.Ctx, "agent:stats_updated", map[string]interface{}{
+			"agent": h.Session.AgentName,
+			"used":  used,
+			"limit": limit,
+			"info":  h.Session.ModelRequestsInfo,
+		})
+		
+		fmt.Printf("[ACP] 📊 Estatísticas capturadas: %s (%s)\n", h.Session.ModelRequestsInfo, h.Session.AgentName)
+	}
+}
+
 func (h *ACPRpcHandler) wrapResult(res interface{}) json.RawMessage {
 	if res == nil { return nil }
 	b, _ := json.Marshal(res)
 	return b
+}
+
+// StripANSI remove sequências de escape ANSI (cores e formatação de terminal) de uma string.
+func (h *ACPRpcHandler) StripANSI(str string) string {
+	const ansi = "[\u001B\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*(?:;[-a-zA-Z\\d\\/#&.:=?%@~]*)*)?\u0007)|(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PR-TZcf-ntqry=><~]))"
+	re := regexp.MustCompile(ansi)
+	return re.ReplaceAllString(str, "")
 }

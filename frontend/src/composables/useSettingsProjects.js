@@ -14,7 +14,7 @@ export function useSettingsProjects() {
     }
     store.repoStatusMsg = "Aguarde... Engajando Crawlers no Repositório (Isso pode demorar dependendo da codebase)..."
     try {
-      const res = await window.go.main.App.AddExternalProject(store.repoPathInput, store.coreNodeInput, store.includeCodeToggle)
+      const res = await AddExternalProject(store.repoPathInput, store.coreNodeInput, store.includeCodeToggle)
       if (res.success) {
         alert("🪐 " + res.message)
         const cfg = await GetConfig()

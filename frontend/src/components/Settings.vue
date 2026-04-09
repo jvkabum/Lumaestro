@@ -6,9 +6,13 @@ import { useSettingsTools } from '../composables/useSettingsTools'
 import { useSettingsMCP } from '../composables/useSettingsMCP'
 import { useSettingsAccounts } from '../composables/useSettingsAccounts'
 import { useSettingsProjects } from '../composables/useSettingsProjects'
+import { useOrchestratorStore } from '../stores/orchestrator'
+import { storeToRefs } from 'pinia'
 
 // ── Store Pinia ──
 const store = useSettingsStore()
+const orchestrator = useOrchestratorStore()
+const { modelStats } = storeToRefs(orchestrator)
 
 // ── Composables ──
 const { 
@@ -21,6 +25,21 @@ const { install, setup } = useSettingsTools()
 const { addMCPServer, listMCPServers } = useSettingsMCP()
 const { handleAddAccount, handleLoginAccount, handleSwitchAccount } = useSettingsAccounts()
 const { handleAddProject, handleSelectDirectory } = useSettingsProjects()
+
+// ── Lógica de Cor Dinâmica (Monitor de Cotas) ──
+const getQuotaColor = () => {
+  try {
+    if (!modelStats || !modelStats.value || !modelStats.value.limit) return '#60a5fa'
+    const used = modelStats.value.used || 0
+    const limit = modelStats.value.limit || 1
+    const percent = (used / limit) * 100
+    if (percent > 90) return '#ef4444'
+    if (percent > 70) return '#f59e0b'
+    return '#60a5fa'
+  } catch (e) {
+    return '#60a5fa'
+  }
+}
 
 // ── Lifecycle ──
 onMounted(() => {
@@ -95,10 +114,6 @@ onMounted(() => {
              </div>
            </div>
         </div>
-
-
-
-
 
         <button @click="save" class="btn-glow-blue">SALVAR ALTERAÇÕES GERAIS</button>
 
@@ -198,10 +213,7 @@ onMounted(() => {
             rows="3"
             style="resize: vertical; font-family: monospace; font-size: 0.85rem; line-height: 1.6;"
           ></textarea>
-
         </div>
-
-
 
         <div class="sec-card" style="margin-top: 2rem; margin-bottom: 2.5rem; padding: 1.5rem 2.5rem;">
            <div class="sec-info">
@@ -241,49 +253,87 @@ onMounted(() => {
         </p>
 
         <div class="engine-cards-stack">
-           <div v-for="tool in ['gemini', 'claude']" :key="tool" class="profile-card engine-showcase-card" :class="tool">
+           <div v-for="tool in ['gemini', 'claude']" :key="tool" class="profile-card engine-showcase-card" :class="tool" style="text-align: center;">
               <div class="engine-glow-backdrop"></div>
               
-              <div style="position: relative; z-index: 2; height: 100%; display: flex; flex-direction: column;">
-                <div style="display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 1.5rem;">
-                   <div style="display: flex; align-items: center; gap: 1rem;">
-                      <div class="avatar-glow maestro-engine-icon" :style="tool === 'gemini' ? 'background: linear-gradient(135deg, #3b82f6, #8b5cf6)' : 'background: linear-gradient(135deg, #f97316, #ea580c)'">
-                         {{ tool === 'gemini' ? '⚡' : '🦾' }}
-                      </div>
-                      <div>
-                        <h4 style="margin: 0; font-weight: 900; color: #fff; font-size: 1.3rem; letter-spacing: 2px;">{{ tool.toUpperCase() }}</h4>
-                        <div class="engine-status-badge" :style="store.status.tools[tool] ? '' : 'border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.05);'">
-                          <span class="status-dot" :style="store.status.tools[tool] ? '' : 'background: #ef4444; box-shadow: none;'"></span> 
-                          {{ store.status.tools[tool] ? 'SISTEMA PRONTO' : 'NÃO INSTALADO' }}
-                        </div>
-                      </div>
-                   </div>
-                   
-                   <!-- Auto-Start Switch Claro e Imersivo -->
-                   <div class="auto-boot-container" @click="toggleAutoStart(tool)" title="Inicia o motor automaticamente assim que você abre o Lumaestro" style="flex-shrink: 0;">
-                     <div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;">
-                       <span style="font-size: 0.65rem; color: var(--p-text-dim); font-weight: 900; letter-spacing: 1px; white-space: nowrap;">AUTO-BOOT</span>
-                       <div class="maestro-switch" :class="{ 'on': isAutoStart(tool) }">
-                         <div class="maestro-switch-thumb"></div>
-                       </div>
-                     </div>
-                     <span style="font-size: 0.55rem; color: #3b82f6; font-weight: bold; opacity: 0.9; align-self: flex-end; white-space: nowrap; margin-top: 4px;" v-if="isAutoStart(tool)">LIGA SOZINHO ⚡</span>
-                     <span style="font-size: 0.55rem; color: #64748b; font-weight: bold; opacity: 0.8; align-self: flex-end; white-space: nowrap; margin-top: 4px;" v-else>PARTIDA MANUAL ✋</span>
-                   </div>
-                </div>
-                
-                <p style="color: #cbd5e1; font-size: 0.85rem; margin-bottom: 2.5rem; line-height: 1.6; font-weight: 300; flex-grow: 1;">
-                   {{ tool === 'gemini' ? 'Motor de Inteligência Central. Responsável pela execução de rotinas autônomas e retenção de contexto contínuo (ACP) em background.' : 'Motor Analítico Avançado. Infraestrutura secundária focada em modelagem pesada, testes lógicos e geração de códigos complexos.' }}
-                </p>
+              <div style="position: relative; z-index: 2; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                  
+                 <!-- Cabeçalho de Comando Centralizado -->
+                 <div style="display: flex; flex-direction: column; align-items: center; text-align: center; width: 100%; position: relative; margin-bottom: 1.5rem;">
+                    
+                    <!-- Avatar Maestro Central -->
+                    <div class="avatar-glow maestro-engine-icon" :style="tool === 'gemini' ? 'background: linear-gradient(135deg, #3b82f6, #8b5cf6); margin-bottom: 1rem;' : 'background: linear-gradient(135deg, #f97316, #ea580c); margin-bottom: 1rem;'">
+                       {{ tool === 'gemini' ? '⚡' : '🦾' }}
+                    </div>
 
-                <div style="display: flex; gap: 12px; margin-top: auto;">
-                   <button @click="install(tool)" class="unit-btn-solid" style="flex: 1.5;">
-                     SINCRONIZAR
-                   </button>
-                   <button v-if="store.status.tools[tool]" @click="setup(tool)" class="unit-btn-glow" :style="getAuthStyle(tool)" style="flex: 1;">
-                      {{ getAuthLabel(tool) }}
-                   </button>
-                </div>
+                    <!-- Identificação Maestro -->
+                    <h4 style="margin: 0; font-weight: 900; color: #fff; font-size: 2rem; letter-spacing: 5px; text-transform: uppercase;">{{ tool }}</h4>
+                    
+                    <div class="engine-status-badge" :style="store.status.tools[tool] ? '' : 'border-color: var(--security-danger); background: rgba(239, 68, 68, 0.05);' " style="margin-top: 10px;">
+                       <span class="status-dot" :style="store.status.tools[tool] ? '' : 'background: var(--security-danger); box-shadow: none;'"></span> 
+                       {{ store.status.tools[tool] ? 'NÚCLEO ATIVO ✓' : 'DESCONECTADO' }}
+                    </div>
+
+                    <!-- ⚡ Monitor de Cotas Maestro (ACP Stats Pill) -->
+                    <div v-if="tool === 'gemini'" class="quota-pill-premium animate-fade-in" :style="{ borderColor: getQuotaColor() + '44', background: getQuotaColor() + '11', color: getQuotaColor() }" style="margin-top: 15px;">
+                       <span class="pill-icon" :style="{ color: getQuotaColor() === '#ef4444' ? '#ef4444' : '#fbbf24' }">⚡</span>
+                       <span class="pill-val">{{ modelStats?.info || '0 / 1000' }} REQS</span>
+                    </div>
+                 </div>
+
+                 <!-- 🔋 Barra de Cota de Energia -->
+                 <div v-if="tool === 'gemini'" class="energy-meter-container animate-fade-in" style="width: 100%; margin-bottom: 1.5rem; text-align: center;">
+                    <div class="meter-header" style="margin-bottom: 10px; display: flex; flex-direction: column; align-items: center; gap: 5px;">
+                       <span class="meter-label">DISPONIBILIDADE DE ENERGIA (COTA)</span>
+                       <span class="meter-percent" :style="{ color: getQuotaColor() }" style="font-size: 1.5rem; font-weight: 900;">{{ (modelStats?.limit) ? Math.round((modelStats.used / modelStats.limit) * 100) : 0 }}%</span>
+                    </div>
+                    <div class="meter-track" style="margin-bottom: 12px;">
+                       <div class="meter-bar" :style="{ 
+                         width: ((modelStats?.limit) ? ((modelStats.used / modelStats.limit) * 100) : 0) + '%', 
+                         background: `linear-gradient(90deg, ${getQuotaColor()} 0%, #fff 100%)`, 
+                         boxShadow: '0 0 20px ' + getQuotaColor() + 'BB'
+                       }"></div>
+                    </div>
+                    <div class="meter-footer" style="display: flex; flex-direction: column; align-items: center; gap: 2px;">
+                       <span style="font-size: 0.6rem;">CONSUMO DIÁRIO</span>
+                       <b :style="{ color: getQuotaColor() }" style="font-size: 0.9rem;">{{ modelStats?.used || 0 }} / {{ modelStats?.limit || 1000 }} REQS</b>
+                    </div>
+                 </div>
+
+                 <!-- Auto-Start & Action Footer Row -->
+                 <div style="width: 100%; margin-top: auto;">
+                    <!-- Auto-Start Switch -->
+                    <div class="auto-boot-container" @click="toggleAutoStart(tool)" style="margin-bottom: 1.2rem; display: flex; align-items: center; justify-content: center; gap: 15px; padding: 10px; border-radius: 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04);">
+                       <div style="display: flex; align-items: center; gap: 10px;">
+                          <div class="maestro-switch" :class="{ 'on': isAutoStart(tool) }">
+                            <div class="maestro-switch-thumb"></div>
+                          </div>
+                          <span style="font-size: 0.7rem; font-weight: 900; letter-spacing: 1px;">AUTO-BOOT</span>
+                       </div>
+                       <span style="font-size: 0.6rem; color: #3b82f6; font-weight: 900;" v-if="isAutoStart(tool)">ATIVO ⚡</span>
+                       <span style="font-size: 0.6rem; color: #64748b; font-weight: 900;" v-else>MANUAL ✋</span>
+                    </div>
+
+                    <!-- Grid de Ação Maestro -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%;">
+                       <button @click="install(tool)" class="unit-btn-solid" :style="tool === 'gemini' ? 'background: rgba(59, 130, 246, 0.05); color: #fff;' : ''">
+                          {{ tool === 'gemini' ? 'SYNC' : 'INSTALL' }}
+                       </button>
+                       
+                       <button v-if="tool === 'gemini'" @click="store.activeTab = 'contas'" class="unit-btn-diamond animate-fade-in">
+                          CONTAS 💎
+                       </button>
+
+                       <button v-if="store.status.tools[tool] || tool === 'gemini'" 
+                               @click="setup(tool)" 
+                               class="unit-btn-solid premier-action-btn" 
+                               :style="tool === 'gemini' 
+                                 ? 'background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(139, 92, 246, 0.2)); border: 1px solid rgba(59, 130, 246, 0.4); color: #fff; grid-column: span 2;' 
+                                 : getAuthStyle(tool) + '; grid-column: span 1;'">
+                          {{ tool === 'gemini' ? 'AUTENTICAR VIA OAUTH' : getAuthLabel(tool) }}
+                       </button>
+                    </div>
+                 </div>
               </div>
            </div>
         </div>
@@ -318,6 +368,17 @@ onMounted(() => {
               </div>
             </div>
             
+            <!-- 🔋 Mini Energy Bar (Aparece na conta ativa) -->
+            <div v-if="acc.active && modelStats" class="mini-energy-meter animate-fade-in" style="margin-bottom: 2rem;">
+               <div class="meter-track" style="height: 4px; background: rgba(255,255,255,0.05);">
+                  <div class="meter-bar" :style="{ width: ((modelStats.used / modelStats.limit) * 100) + '%', background: getQuotaColor(), boxShadow: '0 0 8px ' + getQuotaColor() + '44' }"></div>
+               </div>
+               <div style="display: flex; justify-content: space-between; margin-top: 6px; font-size: 0.55rem; font-weight: 800; color: var(--p-text-dim);">
+                  <span :style="{ color: getQuotaColor() }">{{ Math.round((modelStats.used / modelStats.limit) * 100) }}% USADO</span>
+                  <span>{{ modelStats.used }} / {{ modelStats.limit }}</span>
+               </div>
+            </div>
+
             <div class="profile-actions" style="display: flex; gap: 12px; margin-top: auto;">
               <button @click="handleLoginAccount(acc.name)" class="btn-util" style="border-color: rgba(59, 130, 246, 0.4); color: #3b82f6; background: rgba(59, 130, 246, 0.05);">
                 LOGAR 🔑
@@ -325,7 +386,6 @@ onMounted(() => {
               <button v-if="!acc.active" @click="handleSwitchAccount(acc.name)" class="btn-util" style="background: rgba(255,255,255,0.05);">
                 ATIVAR ⚡
               </button>
-              <!-- Botão de Excluir Premium -->
               <button class="btn-util btn-danger" style="flex: 0 0 50px; padding: 0;" title="Remover Identidade">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
               </button>
@@ -345,19 +405,22 @@ onMounted(() => {
          </div>
 
          <div class="security-grid-comprehensive">
-             <div v-for="(label, key) in {
-                allow_read: 'Permitir Leitura',
-                allow_write: 'Permitir Escrita',
-                allow_create: 'Criar Arquivos',
-                allow_delete: 'Excluir Arquivos',
-                allow_move: 'Mover/Renomear',
-                allow_run_commands: 'Comandos Shell',
-                full_machine_access: 'Acesso Global'
+             <div v-for="(item, key) in {
+                allow_read: { label: 'Permitir Leitura', icon: '📖' },
+                allow_write: { label: 'Permitir Escrita', icon: '📝' },
+                allow_create: { label: 'Criar Arquivos', icon: '➕' },
+                allow_delete: { label: 'Excluir Arquivos', icon: '🗑️' },
+                allow_move: { label: 'Mover/Renomear', icon: '🚀' },
+                allow_run_commands: { label: 'Comandos Shell', icon: '📟' },
+                full_machine_access: { label: 'Acesso Global', icon: '☢️' }
              }" :key="key" class="sec-card" :class="{ 'critical-sec': key === 'full_machine_access' || key === 'allow_run_commands' }">
                 <div class="sec-info">
-                   <h5 style="margin: 0; font-weight: 800; font-size: 1.1rem; color: #fff;">{{ label }}</h5>
-                   <p style="margin: 8px 0 0; font-size: 0.8rem;" :style="{ color: key === 'full_machine_access' ? '#ef4444' : 'var(--p-text-dim)' }">
-                     {{ key === 'full_machine_access' ? '⚠️ ALERTA: AUTORIZAÇÃO TOTAL' : 'Permissão de ' + label.toLowerCase() }}
+                   <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 5px;">
+                      <span style="font-size: 1.2rem;">{{ item.icon }}</span>
+                      <h5 style="margin: 0; font-weight: 800; font-size: 1.1rem; color: #fff;">{{ item.label }}</h5>
+                   </div>
+                   <p style="margin: 4px 0 0; font-size: 0.8rem;" :style="{ color: key === 'full_machine_access' ? '#ef4444' : 'var(--p-text-dim)' }">
+                     {{ key === 'full_machine_access' ? '⚠️ ALERTA: AUTORIZAÇÃO TOTAL' : 'Permissão para manipular o sistema.' }}
                    </p>
                 </div>
                 
@@ -396,7 +459,7 @@ onMounted(() => {
            </div>
            <div class="mcp-actions-row" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin-top: 2rem;">
               <button @click="addMCPServer" class="btn-glow-blue" style="width: 100%;">INSTALAR SERVIDOR ⚡</button>
-              <button @click="liststore.mcpServers" class="btn-outline" style="width: 100%;">LISTAR REGISTRADOS 📋</button>
+              <button @click="listMCPServers" class="btn-outline" style="width: 100%;">LISTAR REGISTRADOS 📋</button>
            </div>
            <div v-if="store.showMcpList" class="mcp-output-container">
               <div class="output-header">SERVIDORES CONFIGURADOS</div>
@@ -417,10 +480,10 @@ onMounted(() => {
              <div class="premium-form-group">
                 <label>Caminho Absoluto do Repositório</label>
                 <div style="display: flex; gap: 10px;">
-                  <input v-model="store.repoPathInput" placeholder="Ex: C:\git\Lumaestro" class="maestro-input" style="border-color: rgba(139, 92, 246, 0.4); flex: 1;" />
-                  <button @click="handleSelectDirectory" class="btn-glow-blue" style="flex: 0 0 auto; padding: 0 24px; font-size: 1.2rem; background: linear-gradient(135deg, #a855f7, #6366f1); border: 1px solid rgba(168, 85, 247, 0.5); border-radius: 14px;" title="Navegar e Escolher Pasta">
-                    📁
-                  </button>
+                   <input v-model="store.repoPathInput" placeholder="Ex: C:\git\Lumaestro" class="maestro-input" style="border-color: rgba(139, 92, 246, 0.4); flex: 1;" />
+                   <button @click="handleSelectDirectory" class="btn-glow-blue" style="flex: 0 0 auto; padding: 0 24px; font-size: 1.2rem; background: linear-gradient(135deg, #a855f7, #6366f1); border: 1px solid rgba(168, 85, 247, 0.5); border-radius: 14px;" title="Navegar e Escolher Pasta">
+                     📁
+                   </button>
                 </div>
              </div>
              <div class="premium-form-group">
@@ -474,13 +537,13 @@ onMounted(() => {
       </section>
     </div>
 
-    <!-- Terminal de Logs (Restored Logic) -->
+    <!-- Terminal de Logs -->
     <footer class="maestro-terminal-v2" v-show="store.installStatus !== '' || store.installLogs.length > 0">
       <div class="t-bar">
          <span class="t-title">SYSTEM_ORCHESTRATOR_OUTPUT</span>
          <div class="t-pulse"><span></span> ACTIVE</div>
       </div>
-      <div class="t-contents" ref="store.logContainer">
+      <div class="t-contents">
         <div v-for="(log, i) in store.installLogs" :key="i" class="t-entry">> {{ log }}</div>
         <div v-if="store.installStatus" class="t-status">>> {{ store.installStatus }}</div>
       </div>
@@ -508,4 +571,59 @@ onMounted(() => {
 
 <style scoped>
 @import '../assets/css/Settings.css';
+
+/* 💎 Botão Contas Premium (Diamond Edition) */
+.unit-btn-diamond {
+  background: rgba(59, 130, 246, 0.05);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: #60a5fa;
+  border-radius: 12px;
+  padding: 10px 18px;
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+  cursor: pointer;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  position: relative;
+  overflow: hidden;
+  text-transform: uppercase;
+  height: 48px;
+  min-width: 140px;
+}
+
+.unit-btn-diamond::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  transition: 0.5s;
+}
+
+.unit-btn-diamond:hover {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: #60a5fa;
+  color: #fff;
+  transform: translateY(-2px);
+  box-shadow: 0 5px 20px rgba(59, 130, 246, 0.2), inset 0 0 10px rgba(96, 165, 250, 0.2);
+}
+
+.unit-btn-diamond:hover::before {
+  left: 100%;
+}
+
+.unit-btn-diamond:active {
+  transform: translateY(0);
+}
+
+.premier-action-btn:hover {
+   background: linear-gradient(135deg, rgba(59, 130, 246, 0.4), rgba(139, 92, 246, 0.4)) !important;
+   box-shadow: 0 0 30px rgba(59, 130, 246, 0.3) !important;
+}
 </style>

@@ -51,7 +51,7 @@ func (e *ACPExecutor) waitForResponse(id int, timeout time.Duration) (JSONRPCMes
 	}
 }
 
-func (e *ACPExecutor) getNextID() int {
+func (e *ACPExecutor) GetNextID() int {
 	return int(atomic.AddUint64(&e.msgIDCounter, 1))
 }
 

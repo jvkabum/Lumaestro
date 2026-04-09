@@ -4,7 +4,7 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import { SendTerminalData, ResizeTerminal } from '../../wailsjs/go/core/App'
-import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
+import { EventsOn, EventsOff } from '../../wailsjs/runtime'
 
 const props = defineProps({
   agent: { type: String, required: true },

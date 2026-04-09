@@ -82,6 +82,11 @@ type ACPSession struct {
 	// 🧬 Telemetria Lightning (Rastreamento de Elite)
 	RolloutID string
 	AttemptID string
+
+	// 📊 Telemetria de Cotas (ACP /stats)
+	ModelRequestsUsed  int
+	ModelRequestsLimit int
+	ModelRequestsInfo  string
 }
 
 // ACPRpcHandler lida com o despacho de mensagens do protocolo JSON-RPC.

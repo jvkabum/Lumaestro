@@ -36,7 +36,7 @@ export function useGraphSync() {
     store.showConfirmModal = false
     store.scanning = true
     try {
-      await window.go.main.App.FullSync()
+      await FullSync()
     } catch (e) {
       console.error("Erro na sincronização:", e)
     } finally {
@@ -61,9 +61,7 @@ export function useGraphSync() {
    * Sincroniza todos os nós conhecidos do banco na partida
    */
   const syncAllOnStartup = () => {
-    if (window.go && window.go.main && window.go.main.App) {
-      window.go.main.App.SyncAllNodes()
-    }
+    SyncAllNodes()
   }
 
   return {

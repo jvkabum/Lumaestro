@@ -3,6 +3,7 @@ package core
 import (
 
 	"Lumaestro/internal/agents/acp"
+	"encoding/json"
 	"fmt"
 	"os/exec"
 
@@ -145,4 +146,47 @@ func (a *App) RunInTerminal(command string) string {
 		return "Erro: " + err.Error()
 	}
 	return "Terminal aberto!"
+}
+// SetAgentModel troca o modelo da sessão ativa em tempo real via ACP JSON-RPC.
+func (a *App) SetAgentModel(agent string, modelID string) error {
+	sessionID := agent
+	a.executor.Mu.Lock()
+	session, ok := a.executor.ActiveSessions[sessionID]
+	a.executor.Mu.Unlock()
+
+	if !ok {
+		return fmt.Errorf("inicie a sessão do agente %s antes de trocar o modelo", agent)
+	}
+
+	fmt.Printf("[App] Trocando modelo do agente %s para: %s\n", agent, modelID)
+
+	// Envia o comando RPC via executor
+	params, _ := json.Marshal(map[string]interface{}{
+		"sessionId": session.ACPSessID,
+		"modelId":   modelID,
+	})
+
+	return a.executor.SendRPC(session, acp.JSONRPCMessage{
+		JSONRPC: acp.JSONRPCVersion,
+		ID:      a.executor.GetNextID(),
+		Method:  "unstable_setSessionModel",
+		Params:  params,
+	})
+}
+
+// RefreshAgentStats solicita as estatísticas de uso (cotas) do agente via comando de sistema.
+func (a *App) RefreshAgentStats(agent string) error {
+	sessionID := agent
+	a.executor.Mu.Lock()
+	_, ok := a.executor.ActiveSessions[sessionID]
+	a.executor.Mu.Unlock()
+
+	if !ok {
+		return nil
+	}
+
+	// 📡 Envia o comando silencioso /stats model
+	// O resultado será capturado pelo parseStatsInContent no handler.go
+	fmt.Printf("[App] Atualizando estatísticas de cota para: %s\n", agent)
+	return a.SendAgentInput(agent, "/stats model", nil)
 }

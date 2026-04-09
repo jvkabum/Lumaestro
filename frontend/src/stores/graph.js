@@ -62,13 +62,13 @@ export const useGraphStore = defineStore('graph', () => {
 
   const openSource = async () => {
     if (nodeDetails.value && nodeDetails.value.path) {
-      await window.go.main.App.OpenFileInEditor(nodeDetails.value.path)
+      await OpenFileInEditor(nodeDetails.value.path)
     }
   }
 
   const checkHealth = async () => {
     try {
-      const stats = await window.go.main.App.AnalyzeGraphHealth()
+      const stats = await AnalyzeGraphHealth()
       graphHealth.value = stats
     } catch (e) {
       console.error("Erro ao analisar saúde:", e)

@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { EventsOn } from '../../wailsjs/runtime'
 import { useGraphStore } from '../stores/graph'
 import { useOrchestratorStore } from '../stores/orchestrator'
 
@@ -26,7 +27,7 @@ export function useGraphEvents() {
     const Graph = store.graphInstance
 
     // 🌟 Destaques de Trajetória (Context-Flow inspirado no TrustGraph)
-    window.runtime.EventsOn('graph:highlight', (linkData) => {
+    EventsOn('graph:highlight', (linkData) => {
       const linkId1 = `${linkData.source}-${linkData.target}`
       const linkId2 = `${linkData.target}-${linkData.source}`
       
@@ -51,18 +52,18 @@ export function useGraphEvents() {
     })
 
     // ⚠️ Listener de Conflitos do Agente Validador
-    window.runtime.EventsOn("graph:conflict", (conflict) => {
+    EventsOn("graph:conflict", (conflict) => {
       store.currentConflict = conflict
       console.warn("⚠️ CONFLITO DETECTADO:", conflict)
     })
 
     // 🪐 Sincronização de Saúde (Automática após Sync)
-    window.runtime.EventsOn("graph:health:update", (stats) => {
+    EventsOn("graph:health:update", (stats) => {
       store.graphHealth = stats
     })
 
     // 🕸️ Ouvinte de Arestas Dinâmicas (Streaming de Conexões)
-    window.runtime.EventsOn("graph:edge", (edge) => {
+    EventsOn("graph:edge", (edge) => {
       if (!Graph || !edge?.source || !edge?.target) return
       
       const { nodes, links } = Graph.graphData()
@@ -108,7 +109,7 @@ export function useGraphEvents() {
     })
 
     // 🎬 Percurso Cinematográfico da IA: Anima cada hop individualmente com delay
-    window.runtime.EventsOn("graph:traverse", (data) => {
+    EventsOn("graph:traverse", (data) => {
       if (!Graph || !data?.hops?.length) return
 
       orchestrator.isNavigating = true
@@ -203,26 +204,16 @@ export function useGraphEvents() {
     store.currentConflict = null
 
     try {
-      // Tenta chamar no pacote modular 'core' (novo) com fallback para 'main' (legado)
-      const bridge = (window.go && window.go.core && window.go.core.App) || 
-                     (window.go && window.go.main && window.go.main.App);
-      
-      if (bridge && bridge.ResolveConflict) {
-        await bridge.ResolveConflict(
-          decision, 
-          c.subject, 
-          c.predicate, 
-          c.old_id, 
-          c.new, 
-          c.session_id
-        )
-      } else {
-        console.error("Função ResolveConflict não encontrada na bridge Wails");
-      }
+      await ResolveConflict(
+        decision, 
+        c.subject, 
+        c.predicate, 
+        c.old_id, 
+        c.new, 
+        c.session_id
+      )
     } catch (err) {
       console.error("Falha ao resolver conflito no backend:", err)
-      // Se falhar drasticamente, poderíamos restaurar o conflito para o usuário tentar denovo
-      // store.currentConflict = c
     }
   }
 
