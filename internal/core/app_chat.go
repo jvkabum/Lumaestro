@@ -166,6 +166,14 @@ func (a *App) SendAgentInput(agent string, input string, images []map[string]str
 	}
 
 	fmt.Printf("[App] ✅ Sinfonia roteada para %s com sucesso via JSON-RPC!\n", agent)
+
+	// 📡 Feedback Imediato: Reseta o timer do frontend e avisa que o processamento começou
+	runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+		"source":  "SYSTEM",
+		"content": "🧠 Maestro processando sinapses e raciocinando...",
+		"type":    "progress",
+	})
+	
 	return nil
 }
 

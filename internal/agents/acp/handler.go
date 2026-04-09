@@ -127,6 +127,7 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 					}
 					runtime.EventsEmit(h.Executor.Ctx, "agent:status", map[string]string{
 						"agent":  h.Session.AgentName,
+						"tool":   "thinking",
 						"action": action,
 						"kind":   "tool",
 					})
@@ -165,6 +166,11 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			Path string `json:"path"`
 		}
 		if json.Unmarshal(params, &p) == nil {
+			runtime.EventsEmit(h.Executor.Ctx, "agent:status", map[string]string{
+				"agent":  h.Session.AgentName,
+				"tool":   "read_file",
+				"action": fmt.Sprintf("Lendo arquivo: %s", p.Path),
+			})
 			cfg, _ := config.Load()
 			if cfg.Security.AllowRead {
 				content, err := h.Executor.Proxy.ReadFile(p.Path)
@@ -184,6 +190,11 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			Content string `json:"content"`
 		}
 		if json.Unmarshal(params, &p) == nil {
+			runtime.EventsEmit(h.Executor.Ctx, "agent:status", map[string]string{
+				"agent":  h.Session.AgentName,
+				"tool":   "write_file",
+				"action": fmt.Sprintf("Escrevendo em: %s", p.Path),
+			})
 			cfg, _ := config.Load()
 			fileExists := false
 			if _, err := os.Stat(p.Path); err == nil {
@@ -232,6 +243,11 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			Path string `json:"path"`
 		}
 		if json.Unmarshal(params, &p) == nil {
+			runtime.EventsEmit(h.Executor.Ctx, "agent:status", map[string]string{
+				"agent":  h.Session.AgentName,
+				"tool":   "delete_file",
+				"action": fmt.Sprintf("Deletando: %s", p.Path),
+			})
 			cfg, _ := config.Load()
 			if cfg.Security.AllowDelete {
 				if h.Executor.RequestReview(reviewID, "DELETAR ARQUIVO", p.Path) {
@@ -255,6 +271,11 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			NewPath string `json:"newPath"`
 		}
 		if json.Unmarshal(params, &p) == nil {
+			runtime.EventsEmit(h.Executor.Ctx, "agent:status", map[string]string{
+				"agent":  h.Session.AgentName,
+				"tool":   "move_file",
+				"action": fmt.Sprintf("Movendo: %s", p.OldPath),
+			})
 			cfg, _ := config.Load()
 			if cfg.Security.AllowMove {
 				details := fmt.Sprintf("%s -> %s", p.OldPath, p.NewPath)
@@ -279,6 +300,11 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			Args    []string `json:"args"`
 		}
 		if json.Unmarshal(params, &p) == nil {
+			runtime.EventsEmit(h.Executor.Ctx, "agent:status", map[string]string{
+				"agent":  h.Session.AgentName,
+				"tool":   "run_command",
+				"action": fmt.Sprintf("Executando: %s", p.Command),
+			})
 			cfg, _ := config.Load()
 			if cfg.Security.AllowRunCommands {
 				details := fmt.Sprintf("%s %s", p.Command, strings.Join(p.Args, " "))

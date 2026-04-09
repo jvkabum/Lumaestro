@@ -25,6 +25,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   const isThinking = ref(false);
   const isNavigating = ref(false); // 🔍 Inteligência de Navegação em Tempo Real
   const isTerminalMode = ref(false);
+  const isWeaving = ref(false); // 🧶 Teccelagem de Conhecimento em Background
   const activeAgent = ref(null);
   const activeProfile = ref(null); // 🎭 Perfil de Agente (Doc-Master, etc) - Começa limpo
   const currentStatus = ref(""); // 📡 Status de Ação em Tempo Real
@@ -68,15 +69,15 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     
     safetyTimer = setTimeout(() => {
       if (isThinking.value) {
-        console.warn("[Store] Silence Timeout (25s) - A Sinfonia parece travada.");
+        console.warn("[Store] Silence Timeout (60s) - A Sinfonia parece travada.");
         isThinking.value = false;
         messages.value.push({ 
           role: 'assistant', 
-          text: "⚠️ A Sinfonia está demorando para responder. O processo ainda pode estar ativo no background.", 
+          text: "⚠️ A Sinfonia está demorando para responder (mais de 60s). Verifique sua conexão ou se o motor local está processando muitas tarefas.", 
           mode: 'system' 
         });
       }
-    }, 25000);
+    }, 60000);
   };
 
   const stopSafetyTimeout = () => {
@@ -134,7 +135,8 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
             text: '', 
             thought: '',
             agent: source,
-            isPlanning: true
+            isPlanning: true,
+            isStreaming: true
           };
           messages.value = [...messages.value, lastMsg];
       }
@@ -149,6 +151,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
       }
       
       // Forçar atualização do array (Sincronização definitiva)
+      messages.value[idx].isStreaming = true;
       messages.value = [...messages.value];
       isThinking.value = false;
     });
@@ -198,22 +201,38 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     // 📡 Status de Atividade: Mostra o que a IA está fazendo AGORA (ex: lendo arquivo)
     EventsOn('agent:status', (s) => {
       console.log("[Store] 🛠️ Status da IA:", s);
-      currentStatus.value = s.action || "";
+      const actionRaw = s.action || s.Action || "";
+      currentStatus.value = {
+        agent: s.agent || s.Agent || "",
+        tool: s.tool || s.Tool || "",
+        action: actionRaw
+      };
       currentStatusKind.value = s.kind || 'status';
-      const action = String(s.action || 'Atualizando estado do agente...');
+      const actionStr = String(actionRaw || 'Atualizando estado do agente...');
       let kind = s.kind || 'status';
       if (kind === 'status') {
-        const lowered = action.toLowerCase();
+        const lowered = actionStr.toLowerCase();
         if (lowered.includes('ferramenta') || lowered.includes('tool')) kind = 'tool';
         if (lowered.includes('comando') || lowered.includes('cmd ') || lowered.includes('powershell') || lowered.includes('bash')) kind = 'command';
         if (lowered.includes('erro') || lowered.includes('falha')) kind = 'error';
         if (lowered.includes('memória') || lowered.includes('memoria') || lowered.includes('grafo') || lowered.includes('contexto')) kind = 'memory';
       }
-      pushStatus(action, kind);
+      pushStatus(actionStr, kind);
       // Status de memória é pós-processamento e não deve religar o spinner principal da resposta.
       if (kind !== 'memory') {
         isThinking.value = true;
       }
+    });
+
+    // 🧶 WEAVER: Sinalização de Tecelagem de Conhecimento
+    EventsOn('weaver:started', () => {
+      console.log("[Store] 🧶 WEAVER ativada: Tecendo conexões neurais...");
+      isWeaving.value = true;
+    });
+
+    EventsOn('weaver:finished', () => {
+      console.log("[Store] 🧶 WEAVER finalizada: Sinapses consolidadas.");
+      isWeaving.value = false;
     });
 
     // 🚀 Sincronização de Sinfonias (Checkpoints): Quando o turno termina, atualizamos a lista lateral e consolidamos a memória
@@ -236,11 +255,22 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
       console.log(`[Store] Turno concluído para ${agent}. Atualizando Sinfonias e Consolidando Memória...`);
       stopSafetyTimeout(); // 🛑 Turno finalizado, para o cronômetro
       isThinking.value = false;
-      if (currentStatus.value) {
+      if (currentStatus.value && currentStatus.value.action) {
+        pushStatus(`Concluído: ${currentStatus.value.action}`, 'status');
+      } else if (typeof currentStatus.value === 'string' && currentStatus.value) {
         pushStatus(`Concluído: ${currentStatus.value}`, 'status');
       }
-      currentStatus.value = ""; // 🧹 Limpa o status ao terminar
+      currentStatus.value = null; // 🧹 Limpa o status ao terminar
       currentStatusKind.value = 'status';
+
+      // Encerra a digitação da mensagem viva
+      if (messages.value.length > 0) {
+         const lastMsg = messages.value[messages.value.length - 1];
+         if (lastMsg.role === 'assistant') {
+            lastMsg.isStreaming = false;
+         }
+         messages.value = [...messages.value];
+      }
       fetchSessions(agent);
 
       // Consolidação de Conhecimento RAG em tempo real
@@ -428,8 +458,8 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   };
 
   return {
-    messages, isThinking, isTerminalMode, activeAgent, runningSessions, pendingReview,
-    sessions, currentACPID, isSidebarOpen, currentStatus, currentStatusKind, statusTimeline, statusFilter,
+    messages, isThinking, isTerminalMode, isWeaving, activeAgent, runningSessions, pendingReview,
+    sessions, currentACPID, isSidebarOpen, currentStatus, isNavigating, currentStatusKind, statusTimeline, statusFilter,
     initListeners, ask, startSession, sendInput, submitReview, switchAgent, stopSession,
     fetchSessions, loadSession, newSession, toggleSidebar, clearStatusTimeline
   };

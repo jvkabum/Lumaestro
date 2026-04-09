@@ -126,11 +126,28 @@ func (a *App) bootSequence() {
 	// 🚀 Auto-Start: Inicia os agentes e sincroniza conhecimento
 	if a.config != nil {
 		fmt.Println("[BOOT] Maestro Online. Sincronizando conhecimento e restaurando agentes...")
+		if len(a.config.AutoStartAgents) > 0 {
+			for _, agent := range a.config.AutoStartAgents {
+				a.emitBoot("agent", "🤖", "Iniciando agente "+agent+"...")
 
-		for _, agent := range a.config.AutoStartAgents {
-			a.emitBoot("agent", "🤖", "Iniciando agente "+agent+"...")
-			if err := a.StartAgentSession(agent); err != nil {
-				fmt.Printf("[BOOT] Falha ao iniciar agente %s: %v\n", agent, err)
+				// 🚀 BOOT ECONÔMICO: Sinalização de prontidão no ChatLog sem gasto de tokens
+				go func(agentName string) {
+					if err := a.StartAgentSession(agentName); err == nil {
+						time.Sleep(1 * time.Second)
+						runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+							"source":  "SYSTEM",
+							"content": "🟢 **MOTOR ACP ONLINE**: Sessão '" + agentName + "' ativa e pronta para o trabalho. (Economia de tokens ativa)",
+							"type":    "system",
+						})
+					} else {
+						runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+							"source":  "ERROR",
+							"content": "🔴 **FALHA NO MOTOR**: Não foi possível inicializar o agente '" + agentName + "'. Verifique os logs do terminal.",
+							"type":    "system",
+						})
+						fmt.Printf("[BOOT] Falha ao iniciar agente %s: %v\n", agentName, err)
+					}
+				}(agent)
 			}
 		}
 
