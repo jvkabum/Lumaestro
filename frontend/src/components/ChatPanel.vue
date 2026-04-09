@@ -17,20 +17,7 @@ const showRawTerminal = ref(false)
 const processingElapsed = ref(0)
 let processingTimer = null
 
-const filterOptions = [
-  { label: 'TODOS', value: 'all' },
-  { label: 'THINK', value: 'think' },
-  { label: 'TOOL', value: 'tool' },
-  { label: 'COMMAND', value: 'command' },
-  { label: 'MEMORY', value: 'memory' },
-  { label: 'ERROR', value: 'error' },
-  { label: 'STATUS', value: 'status' },
-]
 
-const filteredTimeline = computed(() => {
-  if (statusFilter.value === 'all') return statusTimeline.value || []
-  return (statusTimeline.value || []).filter((item) => item.kind === statusFilter.value)
-})
 
 const processingStages = [
   'Interpretando sua solicitação',
@@ -254,31 +241,7 @@ const handleSessionEnded = (agent) => {
           </div>
         </Transition>
 
-        <Transition name="status-fade">
-          <div v-if="statusTimeline.length > 0" class="activity-window glass">
-            <div class="activity-window-header">
-              <span>ATIVIDADE DO AGENTE</span>
-              <div class="activity-window-controls">
-                <button
-                  v-for="opt in filterOptions"
-                  :key="opt.value"
-                  class="activity-filter-btn"
-                  :class="{ active: statusFilter === opt.value }"
-                  @click="statusFilter = opt.value"
-                >
-                  {{ opt.label }}
-                </button>
-                <button class="activity-clear-btn" @click="orchestrator.clearStatusTimeline()">LIMPAR</button>
-              </div>
-            </div>
-            <div class="activity-window-list">
-              <div v-for="item in filteredTimeline.slice(-10).reverse()" :key="item.id" class="activity-window-item" :class="`kind-${item.kind || 'status'}`">
-                <span class="activity-time">{{ item.at }}</span>
-                <span class="activity-line">{{ item.text }}</span>
-              </div>
-            </div>
-          </div>
-        </Transition>
+
 
         <!-- Indicador de Navegação do Grafo (Context Flow) -->
         <Transition name="slide-up">
@@ -436,90 +399,6 @@ const handleSessionEnded = (agent) => {
   border-radius: 4px; cursor: pointer; font-size: 11px;
 }
 
-.activity-window {
-  margin: 10px 20px 0 20px;
-  border: 1px solid rgba(56, 189, 248, 0.22);
-  background: rgba(2, 6, 23, 0.55);
-  border-radius: 10px;
-  overflow: hidden;
-}
-
-.activity-window-header {
-  padding: 8px 12px;
-  font-size: 10px;
-  letter-spacing: 1px;
-  font-weight: 800;
-  color: #7dd3fc;
-  border-bottom: 1px solid rgba(125, 211, 252, 0.16);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.activity-window-controls {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.activity-filter-btn,
-.activity-clear-btn {
-  border: 1px solid rgba(148, 163, 184, 0.24);
-  background: rgba(15, 23, 42, 0.5);
-  color: #94a3b8;
-  border-radius: 999px;
-  padding: 2px 8px;
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.5px;
-  cursor: pointer;
-}
-
-.activity-filter-btn.active {
-  border-color: rgba(56, 189, 248, 0.45);
-  color: #bae6fd;
-  background: rgba(14, 116, 144, 0.35);
-}
-
-.activity-clear-btn {
-  border-color: rgba(239, 68, 68, 0.35);
-  color: #fca5a5;
-}
-
-.activity-window-list {
-  max-height: 140px;
-  overflow-y: auto;
-  padding: 8px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.activity-window-item {
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
-  font-size: 12px;
-  line-height: 1.35;
-}
-
-.activity-time {
-  color: #94a3b8;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
-  flex-shrink: 0;
-}
-
-.activity-line {
-  color: #cbd5e1;
-}
-
-.activity-window-item.kind-think .activity-line { color: #c4b5fd; }
-.activity-window-item.kind-tool .activity-line { color: #7dd3fc; }
-.activity-window-item.kind-command .activity-line { color: #86efac; }
-.activity-window-item.kind-memory .activity-line { color: #fcd34d; }
-.activity-window-item.kind-error .activity-line { color: #fca5a5; }
 
 .processing-beacon {
   margin: 10px 20px 0 20px;

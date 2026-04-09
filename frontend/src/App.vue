@@ -8,6 +8,7 @@ import HistorySidebar from './components/HistorySidebar.vue'
 import Settings from './components/Settings.vue'
 import DocViewer from './components/DocViewer.vue'
 import SwarmDashboard from './components/SwarmDashboard.vue'
+import AgentTerminal from './components/AgentTerminal.vue'
 import { useOrchestratorStore } from './stores/orchestrator'
 import { GetProjectDoc } from '../wailsjs/go/core/App'
 
@@ -26,6 +27,9 @@ const chatWidth = ref(500)
 const isResizing = ref(false)
 const minChatWidth = 500
 const maxChatWidth = 1400
+
+// Terminal Dock Inferior (Estilo VSCode)
+const isTerminalDockOpen = ref(true)
 
 const state = reactive({
   logs: [],
@@ -193,6 +197,15 @@ onMounted(async () => {
         <button @click="openDoc('walkthrough', 'Guia de Uso')" title="Manual de Operação">📖</button>
         
         <div class="sidebar-divider"></div>
+
+        <button @click="isTerminalDockOpen = !isTerminalDockOpen" :class="{ active: isTerminalDockOpen && currentView === 'orchestrator' }" title="Terminal de Sincronia (Atividade do Agente)">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: block; margin: auto;">
+            <polyline points="4 17 10 11 4 5"></polyline>
+            <line x1="12" y1="19" x2="20" y2="19"></line>
+          </svg>
+        </button>
+        
+        <div class="sidebar-divider"></div>
         
         <button @click="currentView = 'settings'" :class="{ active: currentView === 'settings' }" title="Configurações">⚙️</button>
       </nav>
@@ -202,11 +215,16 @@ onMounted(async () => {
       </div>
     </aside>
 
-    <!-- Área de Conteúdo -->
     <main id="lumaestro-main" :class="{ 'is-orchestrator': currentView === 'orchestrator' }">
       <template v-if="currentView === 'orchestrator'">
-        <div class="graph-area">
-          <GraphVisualizer :nodes="state.nodes" :edges="state.edges" :graphLogs="state.graphLogs" :activeNode="state.activeNode" />
+        <div class="left-workspace">
+          <div class="graph-area">
+            <GraphVisualizer :nodes="state.nodes" :edges="state.edges" :graphLogs="state.graphLogs" :activeNode="state.activeNode" />
+          </div>
+
+          <div class="orchestrator-bottom-terminal" v-show="isTerminalDockOpen">
+            <AgentTerminal :isOpen="isTerminalDockOpen" @close="isTerminalDockOpen = false" />
+          </div>
         </div>
 
         <!-- Resize Handle (arrastável) -->
@@ -374,7 +392,22 @@ nav button.active {
 #lumaestro-main.is-orchestrator {
   display: flex;
   flex-direction: row;
-  overflow: hidden; /* Mantém o grafo fixo */
+  overflow: hidden; /* Mantém o layout fixo */
+}
+
+.left-workspace {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.orchestrator-bottom-terminal {
+  height: 220px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .graph-area {
