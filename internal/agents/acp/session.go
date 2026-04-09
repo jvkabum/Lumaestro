@@ -38,6 +38,15 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 	// Resolver binário de forma robusta
 	binaryPath := agent
 	args := []string{"--acp", "--approval-mode=yolo"}
+
+	// 💎 Injeção Dinâmica de Modelo (Gemini)
+	if agent == "gemini" && cfgLoaded != nil && cfgLoaded.GeminiModel != "" {
+		if !strings.HasPrefix(cfgLoaded.GeminiModel, "auto-") {
+			args = append(args, "--model="+cfgLoaded.GeminiModel)
+			fmt.Printf("[ACP] 🎯 Forçando modelo Gemini: %s\n", cfgLoaded.GeminiModel)
+		}
+	}
+
 	if agent == "lmstudio" {
 		binaryPath = "go"
 		args = []string{"run", "./cmd/lmstudio-acp"}

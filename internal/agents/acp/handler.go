@@ -38,17 +38,48 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 		var p struct {
 			SessionId string `json:"sessionId"`
 			Update    struct {
-				SessionUpdate string `json:"sessionUpdate"`
+				SessionUpdate string      `json:"sessionUpdate"`
 				Content       struct {
 					Type string `json:"type"`
 					Text string `json:"text"`
 				} `json:"content"`
-				Text string `json:"text"` // Suporte para formato plano v0.36
+				Text  string      `json:"text"`  // Suporte para formato plano v0.36
+				Usage interface{} `json:"usage"` // 📊 Estatísticas de Token
+				Stats interface{} `json:"stats"` // ⚡ Latência e Quota
 			} `json:"update"`
 		}
 		if json.Unmarshal(params, &p) == nil {
 			update := p.Update
 			isBg := strings.Contains(h.Session.ID, "-background-")
+
+			// 📊 Monitoramento de Cotas e Performance
+			if (update.Usage != nil || update.Stats != nil) && !isBg {
+				info := ""
+				if usageMap, ok := update.Usage.(map[string]interface{}); ok {
+					pt := usageMap["prompt_tokens"]
+					ct := usageMap["candidates_tokens"]
+					if pt != nil && ct != nil {
+						info = fmt.Sprintf("%.0f in | %.0f out", pt, ct)
+					}
+				}
+				if statsMap, ok := update.Stats.(map[string]interface{}); ok {
+					latency := statsMap["latency"]
+					if latency != nil {
+						if info != "" {
+							info += fmt.Sprintf(" (%.0fms)", latency)
+						} else {
+							info = fmt.Sprintf("%.0fms", latency)
+						}
+					}
+				}
+
+				if info != "" {
+					runtime.EventsEmit(h.Executor.Ctx, "agent:stats", map[string]string{
+						"agent": h.Session.AgentName,
+						"info":  info,
+					})
+				}
+			}
 
 			if update.SessionUpdate == "agent_message_chunk" || update.SessionUpdate == "message_chunk" || update.SessionUpdate == "content_chunk" {
 				txt := update.Content.Text

@@ -196,6 +196,41 @@ func (a *App) ConsolidateChatKnowledge(sessionID string, chatText string) string
 	return "✅ Sinapses consolidadas com sucesso no Grafo de Conhecimento."
 }
 
+// SetAgentModel altera o modelo de um agente e persiste a configuração.
+func (a *App) SetAgentModel(agent string, model string) error {
+	fmt.Printf("[App] ⚙️ Alterando modelo do motor %s para: %s\n", agent, model)
+
+	cfg, _ := config.Load()
+	if agent == "gemini" {
+		cfg.GeminiModel = model
+	}
+	err := config.Save(*cfg)
+	if err != nil {
+		return err
+	}
+
+	// Sincroniza a config em tempo real no App
+	a.config = cfg
+
+	// Se houver uma sessão ativa, encerramos para forçar o reinício com o novo modelo no próximo input
+	if a.executor != nil {
+		if s, ok := a.executor.ActiveSessions[agent]; ok {
+			fmt.Printf("[App] 🔄 Reiniciando sessão %s para aplicar novo modelo...\n", agent)
+			if s.Cancel != nil {
+				s.Cancel()
+			}
+			delete(a.executor.ActiveSessions, agent)
+			
+			runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+				"source":  "SYSTEM",
+				"content": "🔄 Motor reiniciado para aplicar novo modelo: " + model,
+			})
+		}
+	}
+
+	return nil
+}
+
 // ResolveConflict executa a decisão do usuário sobre uma contradição semântica detectada.
 func (a *App) ResolveConflict(decision string, subject string, predicate string, oldID uint64, newValue string, sessionID string) string {
 	if decision == "new" {

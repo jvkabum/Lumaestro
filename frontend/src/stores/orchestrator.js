@@ -35,6 +35,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   const runningSessions = ref([]);
   const lastTurnCompleteByAgent = ref({});
   const listenersInitialized = ref(false);
+  const modelStats = ref({ agent: null, info: '' }); // 📊 Estatísticas de Cota e Performance
   const awaitingTurnByAgent = ref({});
   const forcedUnlock = ref(false); // 🔓 Trava de segurança: impede re-lock após watchdog/cancel
 
@@ -225,6 +226,14 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
       if (kind !== 'memory' && !forcedUnlock.value) {
         isThinking.value = true;
       }
+    });
+
+    // 📡 Listener de Estatísticas (Uso de Tokens/Latência)
+    EventsOn('agent:stats', (s) => {
+      modelStats.value = {
+        agent: s.agent || s.Agent || "",
+        info: s.info || s.Info || ""
+      };
     });
 
     // 🧶 WEAVER: Sinalização de Tecelagem de Conhecimento
@@ -498,7 +507,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   };
 
   return {
-    messages, isThinking, isTerminalMode, isWeaving, activeAgent, runningSessions, pendingReview,
+    messages, isThinking, isTerminalMode, isWeaving, activeAgent, runningSessions, pendingReview, modelStats,
     sessions, currentACPID, isSidebarOpen, currentStatus, isNavigating, currentStatusKind, statusTimeline, statusFilter,
     initListeners, ask, startSession, sendInput, submitReview, switchAgent, stopSession, forceUnlock,
     fetchSessions, loadSession, newSession, toggleSidebar, clearStatusTimeline, sendSteeringHint

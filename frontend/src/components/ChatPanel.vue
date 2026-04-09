@@ -1,6 +1,6 @@
 <script setup>
 import { storeToRefs } from 'pinia'
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useOrchestratorStore } from '../stores/orchestrator'
 import ChatInput from './ChatInput.vue'
 import ChatLog from './ChatLog.vue'
@@ -9,79 +9,11 @@ import ReviewBlock from './ReviewBlock.vue'
 
 // --- Uso da Store (Pinia) ---
 const orchestrator = useOrchestratorStore()
-const { messages, isThinking, isNavigating, isTerminalMode, activeAgent, runningSessions, pendingReview, statusTimeline, statusFilter, currentStatusKind } = storeToRefs(orchestrator)
+const { messages, isThinking, isNavigating, isTerminalMode, activeAgent, runningSessions, pendingReview, modelStats } = storeToRefs(orchestrator)
 
 // --- Estados Locais de UI ---
 const logContainer = ref(null)
 const showRawTerminal = ref(false)
-const processingElapsed = ref(0)
-let processingTimer = null
-
-
-
-const processingStages = [
-  'Interpretando sua solicitação',
-  'Explorando contexto e memória',
-  'Executando raciocínio e ferramentas',
-  'Montando a melhor resposta',
-]
-
-const activeEngineLabel = computed(() => {
-  const engine = orchestrator.activeProfile?.name || activeAgent.value || 'IA'
-  return String(engine).toUpperCase()
-})
-
-const processingStage = computed(() => {
-  if (orchestrator.currentStatus) return orchestrator.currentStatus
-  const index = Math.min(Math.floor(processingElapsed.value / 4), processingStages.length - 1)
-  return processingStages[index]
-})
-
-const processingKindLabel = computed(() => {
-  const kind = currentStatusKind.value || 'status'
-  if (kind === 'tool') return 'TOOL'
-  if (kind === 'command') return 'COMMAND'
-  if (kind === 'memory') return 'MEMORY'
-  if (kind === 'error') return 'ERROR'
-  return 'STATUS'
-})
-
-const processingElapsedLabel = computed(() => {
-  const total = processingElapsed.value
-  const minutes = Math.floor(total / 60)
-  const seconds = total % 60
-  if (minutes === 0) return `${seconds}s em processamento`
-  return `${minutes}m ${String(seconds).padStart(2, '0')}s em processamento`
-})
-
-const startProcessingTimer = () => {
-  if (processingTimer) return
-  processingTimer = window.setInterval(() => {
-    processingElapsed.value += 1
-  }, 1000)
-}
-
-const stopProcessingTimer = () => {
-  if (processingTimer) {
-    window.clearInterval(processingTimer)
-    processingTimer = null
-  }
-}
-
-watch(isThinking, (value) => {
-  if (value) {
-    processingElapsed.value = 0
-    startProcessingTimer()
-    return
-  }
-
-  stopProcessingTimer()
-  processingElapsed.value = 0
-}, { immediate: true })
-
-onUnmounted(() => {
-  stopProcessingTimer()
-})
 
 // O Terminal Bruto (Raw) só deve abrir via botão ou comando explícito (/cmd)
 // para garantir que a experiência primária (Chat) não seja interrompida.
@@ -98,40 +30,49 @@ const sendChatMessage = async (payload) => {
   if (!text.trim()) return
 
   // Roteamento de Comandos
-  if (text.startsWith('/cmd ')) {
-    const agentName = text.replace('/cmd ', '').trim()
-    await orchestrator.startSession(agentName || 'gemini')
-    showRawTerminal.value = true // Força o visual do terminal ao abrir sessão
-    return
-  }
-
-  if (text === '/exit' || text === '/quit') {
-    await orchestrator.stopSession()
-    return
-  }
-
-  if (text === '/scan') {
-    await orchestrator.runScan()
-    return
-  }
-
-  // Envio Padrão (Multimodal)
-  const targetAgent = payload.agent || 'gemini'
-  const isActMode = payload.mode === 'act'
-  const images = payload.images || [] // Captura as imagens do Ctrl+V
-
-  if (isActMode) {
-    // Garante que a sessão está ativa antes de enviar
-    if (!runningSessions.value.includes(targetAgent)) {
-      await orchestrator.startSession(targetAgent)
-      // Pequeno delay para a sessão inicializar no backend
-      await new Promise(r => setTimeout(r, 500))
+  try {
+    if (text.startsWith('/cmd ')) {
+      const agentName = text.replace('/cmd ', '').trim()
+      await orchestrator.startSession(agentName || 'gemini')
+      showRawTerminal.value = true 
+      return
     }
-    // 🛠️ SINCRONIZAÇÃO: Enviando texto e imagens capturadas
-    await orchestrator.sendInput(targetAgent, text, images)
-  } else {
-    // Modo CHAT (Legacy/RAG) - Agora também aceita contexto visual
-    await orchestrator.ask(targetAgent, text, images)
+
+    if (text === '/exit' || text === '/quit') {
+      await orchestrator.stopSession()
+      return
+    }
+
+    if (text === '/scan') {
+      await orchestrator.runScan()
+      return
+    }
+
+    // Envio Padrão (Multimodal)
+    const targetAgent = payload.agent || 'gemini'
+    const isActMode = payload.mode === 'act'
+    const images = payload.images || []
+
+    if (isActMode) {
+      console.log("[ChatPanel] Modo ACT detectado para:", targetAgent);
+      // Garante que a sessão está ativa antes de enviar
+      if (!runningSessions.value.includes(targetAgent)) {
+        await orchestrator.startSession(targetAgent)
+        await new Promise(r => setTimeout(r, 500))
+      }
+      await orchestrator.sendInput(targetAgent, text, images)
+    } else {
+      console.log("[ChatPanel] Modo CHAT detectado para:", targetAgent);
+      await orchestrator.ask(targetAgent, text, images)
+    }
+  } catch (err) {
+    console.error("[ChatPanel] Falha crítica no envio:", err);
+    // Injeta erro visual para o usuário
+    orchestrator.messages.push({
+      role: 'assistant',
+      text: `❌ Falha na Sinfonia: Não foi possível enviar a mensagem. (${err.message || 'Erro de Conexão'})`,
+      mode: 'system'
+    });
   }
 }
 
@@ -156,11 +97,18 @@ const handleSessionEnded = (agent) => {
           <span 
             v-if="orchestrator.activeProfile" 
             class="active-agent-badge" 
-            :class="((orchestrator.activeProfile.engine || orchestrator.activeProfile.name || '').toLowerCase()).replace(/\s+/g, '')"
+            :class="orchestrator.activeProfile.name.toLowerCase()"
           >
             {{ orchestrator.activeProfile.name.toUpperCase() }}
           </span>
+          <span v-else-if="orchestrator.isTerminalMode" class="active-agent-badge gemini">ACP ACTIVE</span>
           <span v-else class="active-agent-badge standby">STANDBY</span>
+          
+          <!-- 📊 Badge de Cota Diária (Injetado via ACP Stats) -->
+          <div v-if="activeAgent" class="quota-badge glass" :title="modelStats.agent === activeAgent ? 'Performance e Uso do Modelo' : 'Sessão Ativa'">
+             <span class="quota-icon">⚡</span>
+             <span class="quota-value">{{ modelStats.agent === activeAgent ? modelStats.info : 'PRONTO' }}</span>
+          </div>
         </div>
       </div>
       <div class="header-actions">
@@ -211,16 +159,16 @@ const handleSessionEnded = (agent) => {
 
         <ChatLog :messages="messages" :is-thinking="isThinking" />
 
-
-        <!-- 📡 Status compacto inline (não rouba espaço) -->
+        <!-- 📡 Pulso de Atividade: Mostra o que a IA está fazendo AGORA (Anti-Travamento) -->
         <Transition name="status-fade">
-          <div v-if="isThinking || (orchestrator.currentStatus && orchestrator.currentStatus.action)" class="compact-status-line">
-            <span class="compact-dot" :class="`kind-${currentStatusKind || 'status'}`"></span>
-            <span class="compact-text">{{ orchestrator.currentStatus?.action || processingStage }}</span>
+          <div v-if="orchestrator.currentStatus?.action" class="activity-status-bar glass">
+            <div class="activity-pulse"></div>
+            <div class="activity-info">
+              <span v-if="orchestrator.currentStatus?.tool" class="activity-tool">{{ String(orchestrator.currentStatus.tool).replace('_', ' ').toUpperCase() }}</span>
+              <span class="activity-text">{{ orchestrator.currentStatus.action }}</span>
+            </div>
           </div>
         </Transition>
-
-
 
         <!-- Indicador de Navegação do Grafo (Context Flow) -->
         <Transition name="slide-up">
@@ -243,7 +191,7 @@ const handleSessionEnded = (agent) => {
             v-for="agent in runningSessions"
             :key="agent"
             class="terminal-tab"
-            :class="{ active: activeAgent === agent, gemini: agent === 'gemini', claude: agent === 'claude', lmstudio: agent === 'lmstudio' }"
+            :class="{ active: activeAgent === agent, gemini: agent === 'gemini', claude: agent === 'claude' }"
             @click="orchestrator.switchAgent(agent)"
           >
             <span class="tab-dot"></span>
@@ -328,8 +276,28 @@ const handleSessionEnded = (agent) => {
 
 .active-agent-badge.gemini { background: rgba(59, 130, 246, 0.1); color: #60a5fa; }
 .active-agent-badge.claude { background: rgba(16, 185, 129, 0.1); color: #34d399; }
-.active-agent-badge.lmstudio { background: rgba(20, 184, 166, 0.12); color: #2dd4bf; }
-.active-agent-badge.standby { background: rgba(245, 158, 11, 0.1); color: #fbbf24; }
+.active-agent-badge.standby { background: rgba(148, 163, 184, 0.1); color: #94a3b8; }
+
+/* 📊 Monitor de Cotas Badge */
+.quota-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 2px 10px;
+  border-radius: 100px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  margin-left: 8px;
+  transition: all 0.3s;
+}
+
+.quota-badge:hover {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.2);
+}
+
+.quota-icon { font-size: 10px; color: #fbbf24; }
+.quota-value { font-size: 10px; font-weight: 800; color: #94a3b8; letter-spacing: 0.5px; }
 
 .header-actions { display: flex; align-items: center; gap: 10px; }
 
@@ -350,7 +318,11 @@ const handleSessionEnded = (agent) => {
 
 .chat-main-area { flex: 1; display: flex; flex-direction: column; min-height: 0; z-index: 5; }
 .chat-scroll-boundary { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.input-persistent-area { padding: 16px 20px 24px 20px; background: linear-gradient(to top, #0f172a 80%, transparent); }
+.input-persistent-area { 
+  padding: 10px 16px 16px 16px; /* 🗜️ Mais compacto para evitar cortes em janelas menores */
+  background: linear-gradient(to top, #0f172a 85%, transparent); 
+  z-index: 20; /* Garante que menus flutuantes fiquem visíveis */
+}
 
 .raw-terminal-view { flex: 1; display: flex; flex-direction: column; background: #000; min-height: 0; }
 .terminal-overlay-header {
@@ -370,61 +342,11 @@ const handleSessionEnded = (agent) => {
 .terminal-tab.active { color: #f8fafc; border-color: rgba(255, 255, 255, 0.15); }
 .terminal-tab.active.gemini { background: rgba(59, 130, 246, 0.15); border-color: rgba(59, 130, 246, 0.3); color: #60a5fa; }
 .terminal-tab.active.claude { background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.3); color: #34d399; }
-.terminal-tab.active.lmstudio { background: rgba(20, 184, 166, 0.15); border-color: rgba(20, 184, 166, 0.3); color: #2dd4bf; }
 .tab-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
 .terminal-stack { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .back-btn {
   background: #222; border: 1px solid #333; color: #888; padding: 4px 12px;
   border-radius: 4px; cursor: pointer; font-size: 11px;
-}
-
-
-.processing-beacon {
-  margin: 10px 20px 0 20px;
-  padding: 14px 16px;
-  border-radius: 14px;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  background: linear-gradient(135deg, rgba(15, 23, 42, 0.78), rgba(17, 24, 39, 0.54));
-  border: 1px solid rgba(96, 165, 250, 0.18);
-  box-shadow: 0 10px 30px rgba(2, 6, 23, 0.28);
-}
-/* 📡 Status Compacto Inline */
-.compact-status-line {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 20px;
-  font-size: 12px;
-  color: #8b949e;
-  font-weight: 600;
-}
-
-.compact-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #3b82f6;
-  flex-shrink: 0;
-  animation: compact-pulse 1.5s ease-in-out infinite;
-}
-
-.compact-dot.kind-tool { background: #06b6d4; }
-.compact-dot.kind-command { background: #22c55e; }
-.compact-dot.kind-memory { background: #eab308; }
-.compact-dot.kind-error { background: #ef4444; }
-.compact-dot.kind-think { background: #a78bfa; }
-
-.compact-text {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-@keyframes compact-pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.4; transform: scale(0.7); }
 }
 
 /* --- Loading Overlay & Splah Screen --- */
@@ -493,22 +415,6 @@ const handleSessionEnded = (agent) => {
 @keyframes bar-rise {
   0%, 100% { height: 40%; }
   50% { height: 100%; }
-}
-
-@keyframes processing-orb-pulse {
-  0%, 100% { transform: scale(0.92); opacity: 0.9; }
-  50% { transform: scale(1.06); opacity: 1; }
-}
-
-@keyframes processing-ring-expand {
-  0% { transform: scale(0.7); opacity: 0; }
-  20% { opacity: 0.65; }
-  100% { transform: scale(1.25); opacity: 0; }
-}
-
-@keyframes processing-dot-bounce {
-  0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
-  40% { transform: translateY(-4px); opacity: 1; }
 }
 
 /* Transições */
@@ -582,30 +488,6 @@ const handleSessionEnded = (agent) => {
 .status-fade-enter-from, .status-fade-leave-to {
   opacity: 0;
   transform: translateY(10px);
-}
-
-@media (max-width: 640px) {
-  .processing-beacon {
-    margin: 10px 12px 0 12px;
-    padding: 12px 14px;
-    gap: 12px;
-  }
-
-  .processing-stage {
-    font-size: 12px;
-  }
-
-  .processing-meta {
-    gap: 8px;
-    font-size: 10px;
-    flex-wrap: wrap;
-  }
-
-  .activity-status-bar {
-    left: 12px;
-    right: 12px;
-    bottom: 112px;
-  }
 }
 
 </style>

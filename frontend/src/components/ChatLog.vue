@@ -29,15 +29,6 @@
             </svg>
           </template>
 
-          <template v-else-if="msg.agent === 'LMSTUDIO' || msg.agent === 'LM Studio' || msg.agent === 'lmstudio'">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="4"></rect>
-              <circle cx="9" cy="9" r="1"></circle>
-              <circle cx="15" cy="9" r="1"></circle>
-              <path d="M7.5 15c1.2 1.2 2.4 1.8 4.5 1.8s3.3-.6 4.5-1.8"></path>
-            </svg>
-          </template>
-
           <template v-else>
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
@@ -46,6 +37,9 @@
         </div>
         
         <div class="message-content">
+          <!-- Badge de Direcionamento Local -->
+          <div v-if="msg.isSteering" class="steering-badge">⚡ DIRECIONAMENTO</div>
+
           <!-- Bloco de Raciocínio (Colapsável) -->
           <ThoughtBlock 
             v-if="msg.role === 'assistant' && msg.thought && msg.mode !== 'system'" 
@@ -69,7 +63,6 @@
           <!-- Metadados -->
           <div v-if="msg.role === 'assistant' && msg.agent && msg.mode !== 'system'" class="message-meta">
             <span class="agent-badge">{{ msg.agent }}</span>
-
           </div>
         </div>
       </div>
@@ -92,7 +85,7 @@
            </div>
            <div class="thinking-content">
              <div v-if="orchestrator.currentStatus?.tool" class="thinking-tool">
-               {{ orchestrator.currentStatus.tool.replace('_', ' ').toUpperCase() }}
+               {{ String(orchestrator.currentStatus.tool).replace('_', ' ').toUpperCase() }}
              </div>
              <div class="thinking-text">
                {{ orchestrator.currentStatus?.action || 'Harmonizando...' }}
@@ -192,7 +185,6 @@ const getIconClass = (msg) => {
   if (msg.role === 'user') return 'user-icon';
   if (msg.agent === 'Terminal') return 'terminal-icon';
   if (msg.agent === 'Claude') return 'claude-icon';
-  if (msg.agent === 'LMSTUDIO' || msg.agent === 'LM Studio' || msg.agent === 'lmstudio') return 'lmstudio-icon';
   return 'gemini-icon';
 };
 
@@ -271,7 +263,6 @@ onMounted(scrollToBottom);
 
 .gemini-icon { background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); color: #fff; }
 .claude-icon { background: linear-gradient(135deg, #064e3b 0%, #10b981 100%); color: #fff; }
-.lmstudio-icon { background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%); color: #fff; }
 .terminal-icon { background: linear-gradient(135deg, #78350f 0%, #f59e0b 100%); color: #fff; }
 .user-icon { background: #f8fafc; color: #0f172a; }
 
@@ -291,21 +282,22 @@ onMounted(scrollToBottom);
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
 }
 
-/* ⚡ Steering Hint Style */
-.user.steering-hint .message-text {
-  background: rgba(139, 92, 246, 0.1) !important;
-  border: 1px dashed rgba(139, 92, 246, 0.5) !important;
-  position: relative;
+/* ⚡ Estilo de Mensagem de Direcionamento */
+.message-row.user.steering-hint .message-text {
+  background: rgba(167, 139, 250, 0.1);
+  border: 1px dashed rgba(167, 139, 250, 0.4);
+  color: #c4b5fd;
 }
 
-.user.steering-hint .message-text::before {
-  content: '⚡ DIRECIONAMENTO';
-  position: absolute;
-  top: -18px;
-  right: 0;
+.steering-badge {
   font-size: 9px;
-  font-weight: 800;
+  font-weight: 900;
+  background: rgba(167, 139, 250, 0.2);
   color: #a78bfa;
+  padding: 2px 8px;
+  border-radius: 100px;
+  display: inline-block;
+  margin-bottom: 6px;
   letter-spacing: 1px;
 }
 

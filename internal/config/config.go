@@ -78,6 +78,7 @@ type Config struct {
 	// 🧠 Motor de RAG/Ontologia (geração textual para extração de triplas e chat semântico)
 	RAGProvider string `json:"rag_provider"` // "gemini", "lmstudio", ou "claude"
 	RAGModel    string `json:"rag_model"`    // Ex: "google/gemma-4-26b-a4b", "claude-3-5-sonnet-latest"
+	GeminiModel string `json:"gemini_model"` // Modelo padrão para chat (auto, 2.5-flash, etc)
 }
 
 // NormalizeProviders garante defaults seguros para o pool de provedores e motores.

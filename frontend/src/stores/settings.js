@@ -12,6 +12,7 @@ export const useSettingsStore = defineStore('settings', () => {
     qdrant_api_key: '',
     gemini_api_key: '',
     use_gemini_api_key: false,
+    gemini_model: 'auto-gemini-2.5',
     gemini_accounts: [],
     claude_api_key: '',
     use_claude_api_key: false,
