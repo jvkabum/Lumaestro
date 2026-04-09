@@ -246,3 +246,16 @@ func (a *App) SendTerminalData(agent string, data string) {
 	sessionID := "acp-session-" + agent
 	a.executor.SendInput(sessionID, data, nil)
 }
+
+// SendSteeringHint envia uma dica de direcionamento em tempo real para a sessão ativa do agente.
+func (a *App) SendSteeringHint(agent string, input string) string {
+	fmt.Printf("[App] ⚡ Enviando Steering Hint para %s: '%s'\n", agent, input)
+	
+	// No Lumaestro, a sessão ACP de chat principal usa o nome do agente como ID.
+	sessionID := agent
+	err := a.executor.SendInput(sessionID, input, nil)
+	if err != nil {
+		return "Erro ao enviar direcionamento: " + err.Error()
+	}
+	return "Dica enviada!"
+}

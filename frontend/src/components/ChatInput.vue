@@ -65,29 +65,42 @@
       </div>
 
       <!-- Área de Texto e Enviar -->
-      <div class="textarea-section">
+      <div class="textarea-section" :class="{ 'steering-mode': isThinking && messageText.trim() }">
         <textarea
           ref="textarea"
           v-model="messageText"
-          placeholder="Comande o Maestro para construir algo extraordinário..."
+          :placeholder="isThinking ? 'Direcione o Maestro (Steering hint)...' : 'Comande o Maestro para construir algo extraordinário...'"
           @keydown.enter.prevent="handleEnter"
           @paste="handlePaste"
-          :disabled="isThinking"
           :rows="1"
         ></textarea>
         
         <div class="actions">
-          <!-- Botão PARAR (aparece quando isThinking é true) -->
-          <button 
-            v-if="isThinking"
-            class="stop-btn"
-            @click="orchestrator.forceUnlock()"
-            title="Parar processamento e desbloquear o chat"
-          >
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-              <rect x="6" y="6" width="12" height="12" rx="2" />
-            </svg>
-          </button>
+          <!-- Botão Dinâmico: STOP ou STEERING (quando isThinking é true) -->
+          <template v-if="isThinking">
+            <button 
+              v-if="!messageText.trim()"
+              class="stop-btn"
+              @click="orchestrator.forceUnlock()"
+              title="Parar processamento e desbloquear o chat"
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <rect x="6" y="6" width="12" height="12" rx="2" />
+              </svg>
+            </button>
+            <button 
+              v-else
+              class="steer-btn"
+              @click="sendMessage"
+              title="Enviar direcionamento (Steering Hint) em tempo real"
+            >
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                <path d="M13,2L3,14H10V22L20,10H13V2Z" />
+              </svg>
+            </button>
+          </template>
+
+          <!-- Botão Enviar Padrão (quando isThinking é false) -->
           <button 
             v-else
             class="send-btn" 
@@ -202,8 +215,17 @@ const handleEnter = (e) => {
 };
 
 const sendMessage = () => {
-  if (props.isThinking) return;
   const text = messageText.value.trim();
+  
+  // ⚡ Lógica de Model Steering (Direcionamento ao Vivo)
+  if (props.isThinking) {
+    if (!text) return; // Se vazio, o botão de stop cuidará do clique
+    orchestrator.sendSteeringHint(selectedAgent.value, text);
+    messageText.value = '';
+    nextTick(() => { if (textarea.value) textarea.value.style.height = 'auto'; });
+    return;
+  }
+
   const images = attachedImages.value.map(img => ({ data: img.base64, type: img.type }));
   
   if (!text && images.length === 0) return;
@@ -216,6 +238,39 @@ const sendMessage = () => {
 </script>
 
 <style scoped>
+/* ⚡ Estilos de Steering Mode */
+.textarea-section.steering-mode {
+  border-bottom: 2px solid rgba(167, 139, 250, 0.4);
+  border-radius: 0 0 12px 12px;
+  transition: all 0.3s ease;
+}
+
+.steer-btn {
+  background: linear-gradient(135deg, #a78bfa 0%, #7c3aed 100%);
+  color: white;
+  border: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+  transition: all 0.2s ease;
+  animation: pulse-steer 2s infinite ease-in-out;
+}
+
+.steer-btn:hover {
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 0 6px 16px rgba(139, 92, 246, 0.4);
+}
+
+@keyframes pulse-steer {
+  0%, 100% { box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3); }
+  50% { box-shadow: 0 4px 20px rgba(139, 92, 246, 0.6); }
+}
+
 .chat-input-container {
   width: 100%;
   padding: 0;

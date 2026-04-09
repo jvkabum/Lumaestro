@@ -474,10 +474,33 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     }
   };
 
+  // ⚡ MODEL STEERING: Envia dicas de direcionamento enquanto o agente está processando
+  const sendSteeringHint = async (agent, text) => {
+    if (!text.trim()) return;
+
+    console.log(`[Store] ⚡ Enviando Steering Hint para ${agent}: ${text}`);
+    
+    // Adiciona feedback visual imediato no chat como uma mensagem de sistema/direcionamento
+    messages.value.push({
+      role: 'user',
+      text: text,
+      isSteering: true // Flag para estilização futura se desejado
+    });
+
+    pushStatus(`⚡ Direcionamento enviado: "${text.substring(0, 20)}..."`, 'status');
+
+    try {
+      await safeCall('main', 'SendSteeringHint', agent, text);
+    } catch (err) {
+      console.error('[Store] Falha ao enviar steering hint:', err);
+      pushStatus('❌ Falha ao enviar direcionamento', 'error');
+    }
+  };
+
   return {
     messages, isThinking, isTerminalMode, isWeaving, activeAgent, runningSessions, pendingReview,
     sessions, currentACPID, isSidebarOpen, currentStatus, isNavigating, currentStatusKind, statusTimeline, statusFilter,
     initListeners, ask, startSession, sendInput, submitReview, switchAgent, stopSession, forceUnlock,
-    fetchSessions, loadSession, newSession, toggleSidebar, clearStatusTimeline
+    fetchSessions, loadSession, newSession, toggleSidebar, clearStatusTimeline, sendSteeringHint
   };
 });

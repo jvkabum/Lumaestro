@@ -136,6 +136,8 @@ export function SendAgentInput(arg1:string,arg2:string,arg3:Array<Record<string,
 
 export function SendMessageToSwarm(arg1:string,arg2:string):Promise<string>;
 
+export function SendSteeringHint(arg1:string,arg2:string):Promise<string>;
+
 export function SendTerminalData(arg1:string,arg2:string):Promise<void>;
 
 export function SetAutonomousMode(arg1:boolean):Promise<string>;

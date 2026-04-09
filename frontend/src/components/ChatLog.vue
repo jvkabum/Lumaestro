@@ -1,6 +1,6 @@
 <template>
   <div class="chat-log-container" ref="logContainer" @click="handleLogClick">
-    <div v-for="(msg, index) in messages" :key="index" :class="['message-row', msg.role, msg.mode]">
+    <div v-for="(msg, index) in messages" :key="index" :class="['message-row', msg.role, msg.mode, { 'steering-hint': msg.isSteering }]">
       <div class="message-bubble" :class="getMessageClasses(msg)">
         
         <!-- Ícone Dinâmico por Agente -->
@@ -289,6 +289,24 @@ onMounted(scrollToBottom);
   padding: 12px 18px;
   border-radius: 18px 2px 18px 18px;
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+/* ⚡ Steering Hint Style */
+.user.steering-hint .message-text {
+  background: rgba(139, 92, 246, 0.1) !important;
+  border: 1px dashed rgba(139, 92, 246, 0.5) !important;
+  position: relative;
+}
+
+.user.steering-hint .message-text::before {
+  content: '⚡ DIRECIONAMENTO';
+  position: absolute;
+  top: -18px;
+  right: 0;
+  font-size: 9px;
+  font-weight: 800;
+  color: #a78bfa;
+  letter-spacing: 1px;
 }
 
 .system-message .message-text {

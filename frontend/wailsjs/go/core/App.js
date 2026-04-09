@@ -262,6 +262,10 @@ export function SendMessageToSwarm(arg1, arg2) {
   return window['go']['core']['App']['SendMessageToSwarm'](arg1, arg2);
 }
 
+export function SendSteeringHint(arg1, arg2) {
+  return window['go']['core']['App']['SendSteeringHint'](arg1, arg2);
+}
+
 export function SendTerminalData(arg1, arg2) {
   return window['go']['core']['App']['SendTerminalData'](arg1, arg2);
 }
