@@ -44,7 +44,7 @@ func (h *ACPRpcHandler) reportTurnCost() {
 		if ct == 0 { ct = 200 }
 
 		cfg, _ := config.Load()
-		modelName := "gemini-1.5-flash"
+		modelName := "gemini-3-flash-preview"
 		if cfg != nil && cfg.GeminiModel != "" {
 			modelName = cfg.GeminiModel
 		}

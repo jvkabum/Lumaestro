@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	config "Lumaestro/internal/config"
 	"Lumaestro/internal/utils"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -195,4 +196,65 @@ func (e *ACPExecutor) SetSessionModel(sessionID string, model string) error {
 	// Aguarda um breve retorno ou timeout para confirmar o recebimento
 	_, err = e.waitForResponse(id, 5*time.Second)
 	return err
+}
+// HandleQuotaExhausted aciona a rotação da frota de resiliência.
+func (e *ACPExecutor) HandleQuotaExhausted(sessionID string) {
+	e.Mu.Lock()
+	session, ok := e.ActiveSessions[sessionID]
+	e.Mu.Unlock()
+
+	if !ok || session == nil {
+		return
+	}
+
+	// 1. Rotacionar a chave no pool do Config
+	cfg, err := config.Load()
+	if err != nil {
+		return
+	}
+
+	// Se houver mais chaves, rotaciona. 
+	// Se for modelo Pro, tentamos o fallback para Flash na mesma chave antes de rotacionar (opcional).
+	_ = cfg.RotateGeminiKey() // Rotaciona e ignora o retorno (o índice interno já é atualizado)
+	
+	// 2. Notificar UI
+	if e.Ctx != nil {
+		runtime.EventsEmit(e.Ctx, "agent:status", map[string]string{
+			"agent":  session.AgentName,
+			"action": fmt.Sprintf("🔄 Cota exaurida! Trocando chave API (Pool %d/%d) e reiniciando motor...", cfg.GeminiKeyIndex+1, cfg.GeminiKeyCount()),
+			"kind":   "warning",
+		})
+	}
+
+	// 3. Reiniciar a sessão CLI (O StartSession já mata a anterior se o ID colidir)
+	// Como estamos dentro do Executor, podemos chamar StartSession.
+	// Precisamos apenas dos parâmetros originais.
+	time.Sleep(1 * time.Second) // Delay tático para limpeza de pipes
+	
+	err = e.StartSession(e.Ctx, session.AgentName, session.ID, "LATEST", session.AgentID, session.CurrentIssueID)
+	if err != nil {
+		fmt.Printf("[Resilience] Erro ao reiniciar motor: %v\n", err)
+		return
+	}
+
+	// 4. Auto-Retry (Se houver input salvo)
+	if session.LastInput != "" {
+		fmt.Printf("[Resilience] Re-enviando último input após rotação...\n")
+		time.Sleep(2 * time.Second) // Aguarda o boot do novo processo
+		
+		// Injetamos um aviso de log para o usuário saber que o maestro voltou
+		e.LogChan <- ExecutionLog{
+			Source:  "SYSTEM",
+			Content: "🛡️ Frota rotacionada com sucesso. Tentando novamente...",
+			Type:    "system",
+		}
+
+		// Chama SendInput (precisamos do método que está no input.go)
+		var images []map[string]string
+		if session.LastImagesJSON != "" {
+			json.Unmarshal([]byte(session.LastImagesJSON), &images)
+		}
+		
+		go e.SendInput(session.ID, session.LastInput, images)
+	}
 }

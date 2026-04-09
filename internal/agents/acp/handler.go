@@ -433,8 +433,16 @@ func (h *ACPRpcHandler) HandleResponse(id interface{}, result json.RawMessage, r
 	}
 
 		if rpcErr != nil {
+		isQuotaError := strings.Contains(rpcErr.Message, "exhausted your daily quota") || 
+						strings.Contains(rpcErr.Message, "429") || 
+						strings.Contains(rpcErr.Message, "quota exceeded")
+
 		if strings.Contains(rpcErr.Message, "Model stream ended with empty response") {
 			h.Executor.LogChan <- ExecutionLog{Source: "SYSTEM", Content: "O Gemini decidiu não responder agora."}
+		} else if isQuotaError {
+			h.Executor.LogChan <- ExecutionLog{Source: "RESILIENCE", Content: "🔄 Cota exaurida detectada! Iniciando rotação de frota..."}
+			// Tenta rotacionar a chave e o modelo em background
+			go h.Executor.HandleQuotaExhausted(h.Session.ID)
 		} else {
 			h.Executor.LogChan <- ExecutionLog{Source: "ERROR", Content: fmt.Sprintf("❌ Erro ACP: %s", rpcErr.Message)}
 		}

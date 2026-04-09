@@ -230,24 +230,35 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 	}
 
 	methodId := "oauth-personal"
+	shouldAuthenticate := true
+
 	if agent == "lmstudio" {
 		methodId = "lmstudio-local"
 	} else if cfgLoaded != nil && cfgLoaded.UseGeminiAPIKey {
 		methodId = "gemini-api-key"
+	} else {
+		// 🌐 Lógica de Silêncio: Se já houver credenciais OAuth, não pede login de novo
+		credsPath := filepath.Join(sessionHome, "oauth_creds.json")
+		if _, err := os.Stat(credsPath); err == nil {
+			fmt.Printf("[ACP] 🛡️ Credenciais OAuth detectadas em %s. Pulando login redundante.\n", sessionHome)
+			shouldAuthenticate = false
+		}
 	}
 
-	e.SendRPC(session, JSONRPCMessage{
-		JSONRPC: JSONRPCVersion,
-		ID:      e.getNextID(),
-		Method:  "authenticate",
-		Params:  json.RawMessage(`{"methodId":"` + methodId + `"}`),
-	})
+	if shouldAuthenticate {
+		e.SendRPC(session, JSONRPCMessage{
+			JSONRPC: JSONRPCVersion,
+			ID:      e.getNextID(),
+			Method:  "authenticate",
+			Params:  json.RawMessage(`{"methodId":"` + methodId + `"}`),
+		})
 
-	select {
-	case <-session.initDone:
-		fmt.Println("[ACP] Estágio 2 (authenticate) concluído.")
-	case <-time.After(60 * time.Second):
-		return fmt.Errorf("timeout no 'authenticate' do Gemini (Autenticação lenta)")
+		select {
+		case <-session.initDone:
+			fmt.Println("[ACP] Estágio 2 (authenticate) concluído.")
+		case <-time.After(60 * time.Second):
+			return fmt.Errorf("timeout no 'authenticate' do Gemini (Autenticação lenta)")
+		}
 	}
 
 	if loadSessionID != "" {

@@ -13,6 +13,11 @@ func (e *ACPExecutor) SendInput(sessionID string, input string, images []map[str
 	
 	e.Mu.Lock()
 	session, ok := e.ActiveSessions[sessionID]
+	if ok && session != nil {
+		session.LastInput = input
+		imgData, _ := json.Marshal(images)
+		session.LastImagesJSON = string(imgData)
+	}
 	e.Mu.Unlock()
 
 	if !ok || session == nil {

@@ -87,6 +87,10 @@ type ACPSession struct {
 	LastPromptTokens     int
 	LastCandidatesTokens int
 	LastCacheTokens      int
+
+	// 🔄 Resilience Fleet (Auto-Retry)
+	LastInput      string
+	LastImagesJSON string
 }
 
 // ACPRpcHandler lida com o despacho de mensagens do protocolo JSON-RPC.
