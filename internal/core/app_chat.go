@@ -76,6 +76,15 @@ func (a *App) AskAgent(agentName string, prompt string) string {
 }
 
 func (a *App) SendAgentInput(agent string, input string, images []map[string]string) error {
+	// 🧭 MODEL STEERING: Detecta se o motor está ocupado e envia como dica em tempo real
+	if a.executor != nil && a.executor.IsTurnPending(agent) {
+		fmt.Printf("[App] 🧭 Direcionamento (Steering) detectado para %s. Enviando dica...\n", agent)
+		a.emitAgentStatus(agent, "Direcionando motor em tempo real (Steering Hint)", "status")
+		
+		// Envia diretamente sem passar por RAG/Orquestrador para garantir latência zero na dica
+		return a.executor.SendInput(agent, "[DIRECIONAMENTO DO USUÁRIO]: "+input, images)
+	}
+
 	// ⚡ Log Premium e Limpo
 	previewInput := input
 	if len(previewInput) > 60 {
@@ -150,13 +159,11 @@ func (a *App) SendAgentInput(agent string, input string, images []map[string]str
 	})
 	a.emitAgentStatus(agentName, "Perfil ativo definido. Preparando execução", "status")
 
-	// 🚀 Disparo ACP via Protocolo ndJSON
-	if agentName == "lmstudio" {
-		a.emitAgentStatus(agentName, "Inicializando sessão ACP do LM Studio", "status")
-		if err := a.StartAgentSession("lmstudio"); err != nil {
-			fmt.Printf("[App] ERRO ao iniciar sessão ACP do LM Studio: %v\n", err)
-			return fmt.Errorf("erro ao iniciar lmstudio em modo ACP: %v", err)
-		}
+	// 🚀 Disparo ACP via Protocolo ndJSON: Garante que o motor está online (Auto-Start)
+	a.emitAgentStatus(agentName, "Garantindo que o motor '"+agentName+"' está online", "status")
+	if err := a.StartAgentSession(agentName); err != nil {
+		fmt.Printf("[App] ERRO ao iniciar sessão ACP do motor %s: %v\n", agentName, err)
+		return fmt.Errorf("erro ao iniciar motor %s em modo ACP: %v", agentName, err)
 	}
 
 	a.emitAgentStatus(agentName, "Enviando instruções para o agente", "status")
@@ -199,7 +206,7 @@ func (a *App) ConsolidateChatKnowledge(sessionID string, chatText string) string
 
 // SetAgentModel altera o modelo de um agente e persiste a configuração.
 func (a *App) SetAgentModel(agent string, model string) error {
-	fmt.Printf("[App] ⚙️ Alterando modelo do motor %s para: %s\n", agent, model)
+	fmt.Printf("[App] ⚙️ Iniciando troca de modelo do motor %s para: %s\n", agent, model)
 
 	cfg, _ := config.Load()
 	if agent == "gemini" {
@@ -210,22 +217,36 @@ func (a *App) SetAgentModel(agent string, model string) error {
 		return err
 	}
 
-	// Sincroniza a config em tempo real no App
 	a.config = cfg
 
-	// Se houver uma sessão ativa, encerramos para forçar o reinício com o novo modelo no próximo input
+	// 🚀 Tenta troca via RPC Dinâmico (Zero-Restart)
 	if a.executor != nil {
-		if s, ok := a.executor.ActiveSessions[agent]; ok {
-			fmt.Printf("[App] 🔄 Reiniciando sessão %s para aplicar novo modelo...\n", agent)
-			if s.Cancel != nil {
-				s.Cancel()
-			}
-			delete(a.executor.ActiveSessions, agent)
+		if _, ok := a.executor.ActiveSessions[agent]; ok {
+			fmt.Printf("[App] ⚡ Tentando troca dinâmica via RPC (unstable_setSessionModel)...\n")
+			errRPC := a.executor.SetSessionModel(agent, model)
 			
-			runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
-				"source":  "SYSTEM",
-				"content": "🔄 Motor reiniciado para aplicar novo modelo: " + model,
-			})
+			if errRPC == nil {
+				fmt.Printf("[App] ✅ Troca dinâmica concluída com sucesso para %s!\n", model)
+				runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+					"source":  "SYSTEM",
+					"content": "⚡ Modelo alterado dinamicamente para: " + model,
+				})
+				return nil
+			}
+
+			// Se falhou (ex: método não suportado no binário atual), fazemos o fallback para Reinício
+			fmt.Printf("[App] ⚠️ Falha na troca dinâmica (%v). Fazendo fallback para reinício do motor...\n", errRPC)
+			if s, ok := a.executor.ActiveSessions[agent]; ok {
+				if s.Cancel != nil {
+					s.Cancel()
+				}
+				delete(a.executor.ActiveSessions, agent)
+				
+				runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+					"source":  "SYSTEM",
+					"content": "🔄 Reiniciando motor para aplicar novo modelo: " + model,
+				})
+			}
 		}
 	}
 

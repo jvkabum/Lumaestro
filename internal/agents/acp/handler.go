@@ -58,8 +58,22 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 				if usageMap, ok := update.Usage.(map[string]interface{}); ok {
 					pt := usageMap["prompt_tokens"]
 					ct := usageMap["candidates_tokens"]
+					cache := usageMap["cachedContentTokenCount"]
+					if cache == nil {
+						cache = usageMap["cached_content_token_count"]
+					}
+
+					// Salva os valores na sessão para reportar no final do turno
+					if pt != nil { h.Session.LastPromptTokens = int(pt.(float64)) }
+					if ct != nil { h.Session.LastCandidatesTokens = int(ct.(float64)) }
+					if cache != nil { h.Session.LastCacheTokens = int(cache.(float64)) }
+
 					if pt != nil && ct != nil {
-						info = fmt.Sprintf("%.0f in | %.0f out", pt, ct)
+						if cache != nil && cache.(float64) > 0 {
+							info = fmt.Sprintf("🧊 %.0f cache | %.0f in | %.0f out", cache, pt, ct)
+						} else {
+							info = fmt.Sprintf("%.0f in | %.0f out", pt, ct)
+						}
 					}
 				}
 				if statsMap, ok := update.Stats.(map[string]interface{}); ok {

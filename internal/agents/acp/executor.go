@@ -96,6 +96,14 @@ func (e *ACPExecutor) SendRPC(s *ACPSession, msg JSONRPCMessage) error {
 	return err
 }
 
+// IsTurnPending verifica se o agente ainda está processando uma mensagem.
+func (e *ACPExecutor) IsTurnPending(sessionID string) bool {
+	e.turnMu.Lock()
+	_, pending := e.turnChannels[sessionID]
+	e.turnMu.Unlock()
+	return pending
+}
+
 // RequestReview emite um evento para o Wails e aguarda a resposta do usuário.
 func (e *ACPExecutor) RequestReview(reviewID string, action string, details string) bool {
 	if e.AutonomousMode && strings.EqualFold(strings.TrimSpace(action), "EXECUTAR COMANDO") {
@@ -146,8 +154,45 @@ func (e *ACPExecutor) SubmitReview(reviewID string, approved bool) {
 	e.reviewMu.Lock()
 	ch, ok := e.pendingReviews[reviewID]
 	e.reviewMu.Unlock()
-
 	if ok {
 		ch <- approved
 	}
+}
+
+// SetSessionModel altera o modelo da IA em runtime via RPC 'unstable_setSessionModel'.
+func (e *ACPExecutor) SetSessionModel(sessionID string, model string) error {
+	e.Mu.Lock()
+	session, ok := e.ActiveSessions[sessionID]
+	e.Mu.Unlock()
+
+	if !ok || session == nil {
+		return fmt.Errorf("sessão %s não encontrada", sessionID)
+	}
+
+	if session.ACPSessID == "" {
+		return fmt.Errorf("sessão ainda não inicializada via ACP")
+	}
+
+	fmt.Printf("[ACP] >> Solicitando troca de modelo para: %s (Sessão: %s)\n", model, session.ACPSessID)
+
+	params, _ := json.Marshal(map[string]interface{}{
+		"sessionId": session.ACPSessID,
+		"model":     model,
+	})
+
+	id := e.getNextID()
+	err := e.SendRPC(session, JSONRPCMessage{
+		JSONRPC: JSONRPCVersion,
+		ID:      id,
+		Method:  "unstable_setSessionModel",
+		Params:  params,
+	})
+
+	if err != nil {
+		return err
+	}
+
+	// Aguarda um breve retorno ou timeout para confirmar o recebimento
+	_, err = e.waitForResponse(id, 5*time.Second)
+	return err
 }

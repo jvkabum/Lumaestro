@@ -3,6 +3,7 @@ package acp
 import (
 	"strings"
 
+	"Lumaestro/internal/config"
 	"Lumaestro/internal/orchestration"
 	"github.com/google/uuid"
 )
@@ -35,6 +36,37 @@ func (h *ACPRpcHandler) logNetworkActivity() {
 // reportTurnCost calcula e registra o custo fixo por turno enquanto o CLI não expõe usage.usage.
 func (h *ACPRpcHandler) reportTurnCost() {
 	if h.Session.AgentID != uuid.Nil {
-		_ = orchestration.RegistrarCusto(h.Session.AgentID, h.Session.CurrentIssueID, "google", "gemini-1.5-flash", 800, 400, 2)
+		pt := h.Session.LastPromptTokens
+		ct := h.Session.LastCandidatesTokens
+		
+		// Fallback para valores padrão caso a telemetria tenha falhado
+		if pt == 0 { pt = 500 }
+		if ct == 0 { ct = 200 }
+
+		cfg, _ := config.Load()
+		modelName := "gemini-1.5-flash"
+		if cfg != nil && cfg.GeminiModel != "" {
+			modelName = cfg.GeminiModel
+		}
+
+		// Preços (Estimativas): 
+		// Flash: in ~$0.000000075 / out ~$0.0000003
+		// Pro: in ~$0.0000035 / out ~$0.0000105
+		var costUSD float64
+		if strings.Contains(strings.ToLower(modelName), "pro") {
+			costUSD = float64(pt)*0.0000035 + float64(ct)*0.0000105
+		} else {
+			costUSD = float64(pt)*0.000000075 + float64(ct)*0.0000003
+		}
+
+		// RegistrarCusto espera costCents em INT
+		costCents := int(costUSD * 100)
+		
+		_ = orchestration.RegistrarCusto(h.Session.AgentID, h.Session.CurrentIssueID, "google", modelName, pt, ct, costCents)
+		
+		// Reseta para o próximo turno
+		h.Session.LastPromptTokens = 0
+		h.Session.LastCandidatesTokens = 0
+		h.Session.LastCacheTokens = 0
 	}
 }
