@@ -20,7 +20,7 @@ type ChatService struct {
 	Orchestrator *acp.Orchestrator
 	Search       *SearchService
 	Nav          *GraphNavigator
-	Embedder     *provider.EmbeddingService
+	Embedder     provider.Embedder
 	Installer    *tools.Installer
 }
 
@@ -30,7 +30,7 @@ func (s *ChatService) SetContext(ctx context.Context) {
 }
 
 // NewChatService inicializa o orquestrador de chat baseado em CLI.
-func NewChatService(executor *agents.Executor, orchestrator *acp.Orchestrator, search *SearchService, nav *GraphNavigator, embedder *provider.EmbeddingService, installer *tools.Installer) *ChatService {
+func NewChatService(executor *agents.Executor, orchestrator *acp.Orchestrator, search *SearchService, nav *GraphNavigator, embedder provider.Embedder, installer *tools.Installer) *ChatService {
 	return &ChatService{
 		Executor:     executor,
 		Orchestrator: orchestrator,
@@ -59,31 +59,35 @@ func (s *ChatService) Ask(ctx context.Context, agent string, sessionID string, q
 	// 2. Gerar vetor da pergunta e relatar início do raciocínio
 	now := time.Now().Format("15:04")
 	runtime.EventsEmit(s.ctx, "graph:log", fmt.Sprintf("[%s] 🔍 buscando '%s'...", now, question))
-	
-	vector, err := s.Embedder.GenerateEmbedding(ctx, question, true)
-	if err != nil {
-		runtime.EventsEmit(s.ctx, "graph:log", fmt.Sprintf("[%s] ❌ Erro ao criar semântica.", now))
-		return "", err
-	}
-	
-	// 2. Busca Vetorial (RAG): Busca por proximidade semântica
-	// Aumentado de 3 para 5 para maior cobertura de contexto
-	notes, _ := s.Search.SearchNote(ctx, vector, 5)
-	if len(notes) > 0 {
-		runtime.EventsEmit(s.ctx, "graph:log", fmt.Sprintf("[%s] 📄 encontradas %d notas matrizes para a resposta.", now, len(notes)))
-	}
 
-	fullContext := s.Nav.ExpandContext(ctx, notes)
-	contextData := strings.Join(fullContext, "\n---\n")
+	contextData := ""
+	if s.Embedder == nil {
+		runtime.EventsEmit(s.ctx, "graph:log", fmt.Sprintf("[%s] ⚠️ RAG semântico indisponível. Prosseguindo sem contexto vetorial.", now))
+	} else {
+		vector, err := s.Embedder.GenerateEmbedding(ctx, question, true)
+		if err != nil {
+			runtime.EventsEmit(s.ctx, "graph:log", fmt.Sprintf("[%s] ⚠️ Semântica indisponível no momento. Prosseguindo sem RAG.", now))
+		} else {
+			// 2. Busca Vetorial (RAG): Busca por proximidade semântica
+			// Aumentado de 3 para 5 para maior cobertura de contexto
+			notes, _ := s.Search.SearchNote(ctx, vector, 5)
+			if len(notes) > 0 {
+				runtime.EventsEmit(s.ctx, "graph:log", fmt.Sprintf("[%s] 📄 encontradas %d notas matrizes para a resposta.", now, len(notes)))
+			}
 
-	// 3. Brilhar as notas iniciais encontradas no Grafo e lançar Log
-	for _, note := range notes {
-		if noteName, ok := note["name"].(string); ok {
-			runtime.EventsEmit(s.ctx, "graph:log", fmt.Sprintf("[%s] ✨ lendo notas mestre -> %s", time.Now().Format("15:04"), noteName))
-			runtime.EventsEmit(s.ctx, "node:active", noteName)
-			
-			// Envia o própio nó principal para o painel se ele não foi carregado
-			runtime.EventsEmit(s.ctx, "graph:node", map[string]string{"id": noteName, "name": noteName})
+			fullContext := s.Nav.ExpandContext(ctx, notes)
+			contextData = strings.Join(fullContext, "\n---\n")
+
+			// 3. Brilhar as notas iniciais encontradas no Grafo e lançar Log
+			for _, note := range notes {
+				if noteName, ok := note["name"].(string); ok {
+					runtime.EventsEmit(s.ctx, "graph:log", fmt.Sprintf("[%s] ✨ lendo notas mestre -> %s", time.Now().Format("15:04"), noteName))
+					runtime.EventsEmit(s.ctx, "node:active", noteName)
+
+					// Envia o própio nó principal para o painel se ele não foi carregado
+					runtime.EventsEmit(s.ctx, "graph:node", map[string]string{"id": noteName, "name": noteName})
+				}
+			}
 		}
 	}
 

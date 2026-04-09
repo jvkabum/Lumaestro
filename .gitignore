@@ -1,6 +1,7 @@
 build/bin
 node_modules
 frontend/dist
+*.exe
 
 # Gemini / Agentes
 .gemini/
@@ -15,8 +16,29 @@ tmp/
 
 # 📊 Banco de Dados Local (DuckDB / SQLite / Cache)
 .lumaestro/
+.lumaestro/parallel-memory.json
 .lumaestro.json
 .context/
 *.db
 *.db-journal
 *.db.wal
+
+# 🔐 Segredos e Credenciais Locais
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+*secret*.json
+*secrets*.json
+*token*.json
+*credential*.json
+
+# 🧪 Artefatos de Runtime Local
+qdrant_storage/
+debug_stderr.log
+*.exe

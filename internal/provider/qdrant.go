@@ -6,14 +6,43 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 )
 
 // QdrantClient gerencia a comunicação com o servidor remoto.
 type QdrantClient struct {
 	BaseURL string
 	APIKey  string
+
+	fallbackEnabled bool
+	fallbackMu      sync.RWMutex
+	fallbackData    map[string]*fallbackCollection
+	fallbackActive  bool
+	fallbackPath    string
+}
+
+type fallbackPoint struct {
+	ID      uint64
+	Vector  []float32
+	Payload map[string]interface{}
+}
+
+type fallbackCollection struct {
+	Points map[uint64]fallbackPoint
+	Order  []uint64
+}
+
+type fallbackStore struct {
+	Collections map[string]fallbackCollectionSnapshot `json:"collections"`
+}
+
+type fallbackCollectionSnapshot struct {
+	Points []fallbackPoint `json:"points"`
 }
 
 // NewQdrantClient inicializa o cliente com a URL e a chave de autenticação (Coolify).
@@ -22,7 +51,366 @@ func NewQdrantClient(baseURL string, apiKey string) *QdrantClient {
 	if baseURL == "" {
 		fmt.Println("[QDRANT] ⚠️ AVISO: URL do Qdrant está vazia! O sistema falhará ao conectar.")
 	}
-	return &QdrantClient{BaseURL: baseURL, APIKey: strings.TrimSpace(apiKey)}
+	envToggle := strings.TrimSpace(strings.ToLower(os.Getenv("LUMAESTRO_PARALLEL_MEMORY")))
+	fallbackEnabled := true
+	if envToggle == "0" || envToggle == "false" || envToggle == "off" {
+		fallbackEnabled = false
+	}
+	fallbackPath := strings.TrimSpace(os.Getenv("LUMAESTRO_PARALLEL_MEMORY_PATH"))
+	if fallbackPath == "" {
+		fallbackPath = filepath.Join(".lumaestro", "parallel-memory.json")
+	}
+
+	client := &QdrantClient{
+		BaseURL:         baseURL,
+		APIKey:          strings.TrimSpace(apiKey),
+		fallbackEnabled: fallbackEnabled,
+		fallbackData:    make(map[string]*fallbackCollection),
+		fallbackPath:    fallbackPath,
+	}
+
+	if err := client.loadFallbackFromDisk(); err != nil {
+		fmt.Printf("[QDRANT] ⚠️ Falha ao carregar memória paralela local: %v\n", err)
+	}
+
+	return client
+}
+
+func (c *QdrantClient) loadFallbackFromDisk() error {
+	if !c.fallbackEnabled || strings.TrimSpace(c.fallbackPath) == "" {
+		return nil
+	}
+	body, err := os.ReadFile(c.fallbackPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	if len(bytes.TrimSpace(body)) == 0 {
+		return nil
+	}
+
+	var store fallbackStore
+	if err := json.Unmarshal(body, &store); err != nil {
+		return err
+	}
+
+	c.fallbackMu.Lock()
+	defer c.fallbackMu.Unlock()
+	for name, snapshot := range store.Collections {
+		col := &fallbackCollection{Points: map[uint64]fallbackPoint{}, Order: make([]uint64, 0, len(snapshot.Points))}
+		for _, point := range snapshot.Points {
+			id := point.ID
+			col.Points[id] = fallbackPoint{
+				ID:      id,
+				Vector:  cloneVector(point.Vector),
+				Payload: clonePayload(point.Payload),
+			}
+			col.Order = append(col.Order, id)
+		}
+		c.fallbackData[name] = col
+	}
+	return nil
+}
+
+func (c *QdrantClient) snapshotFallbackStore() fallbackStore {
+	store := fallbackStore{Collections: make(map[string]fallbackCollectionSnapshot, len(c.fallbackData))}
+	for name, col := range c.fallbackData {
+		snapshot := fallbackCollectionSnapshot{Points: make([]fallbackPoint, 0, len(col.Points))}
+		seen := make(map[uint64]struct{}, len(col.Points))
+		for _, id := range col.Order {
+			point, ok := col.Points[id]
+			if !ok {
+				continue
+			}
+			snapshot.Points = append(snapshot.Points, fallbackPoint{
+				ID:      point.ID,
+				Vector:  cloneVector(point.Vector),
+				Payload: clonePayload(point.Payload),
+			})
+			seen[id] = struct{}{}
+		}
+		for id, point := range col.Points {
+			if _, ok := seen[id]; ok {
+				continue
+			}
+			snapshot.Points = append(snapshot.Points, fallbackPoint{
+				ID:      point.ID,
+				Vector:  cloneVector(point.Vector),
+				Payload: clonePayload(point.Payload),
+			})
+		}
+		store.Collections[name] = snapshot
+	}
+	return store
+}
+
+func (c *QdrantClient) persistFallbackToDisk() {
+	if !c.fallbackEnabled || strings.TrimSpace(c.fallbackPath) == "" {
+		return
+	}
+
+	c.fallbackMu.RLock()
+	store := c.snapshotFallbackStore()
+	c.fallbackMu.RUnlock()
+
+	body, err := json.MarshalIndent(store, "", "  ")
+	if err != nil {
+		fmt.Printf("[QDRANT] ⚠️ Falha ao serializar memória paralela local: %v\n", err)
+		return
+	}
+
+	dir := filepath.Dir(c.fallbackPath)
+	if dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			fmt.Printf("[QDRANT] ⚠️ Falha ao criar diretório da memória paralela local: %v\n", err)
+			return
+		}
+	}
+
+	if err := os.WriteFile(c.fallbackPath, body, 0o600); err != nil {
+		fmt.Printf("[QDRANT] ⚠️ Falha ao persistir memória paralela local: %v\n", err)
+	}
+}
+
+func clonePayload(src map[string]interface{}) map[string]interface{} {
+	if src == nil {
+		return map[string]interface{}{}
+	}
+	dst := make(map[string]interface{}, len(src))
+	for k, v := range src {
+		dst[k] = v
+	}
+	return dst
+}
+
+func cloneVector(src []float32) []float32 {
+	if src == nil {
+		return nil
+	}
+	dst := make([]float32, len(src))
+	copy(dst, src)
+	return dst
+}
+
+func cosineSimilarity(a []float32, b []float32) float64 {
+	if len(a) == 0 || len(b) == 0 || len(a) != len(b) {
+		return 0
+	}
+	var dot, na, nb float64
+	for i := 0; i < len(a); i++ {
+		av := float64(a[i])
+		bv := float64(b[i])
+		dot += av * bv
+		na += av * av
+		nb += bv * bv
+	}
+	if na == 0 || nb == 0 {
+		return 0
+	}
+	return dot / (math.Sqrt(na) * math.Sqrt(nb))
+}
+
+func (c *QdrantClient) ensureFallbackCollection(name string) *fallbackCollection {
+	col, ok := c.fallbackData[name]
+	if !ok {
+		col = &fallbackCollection{Points: map[uint64]fallbackPoint{}, Order: []uint64{}}
+		c.fallbackData[name] = col
+	}
+	return col
+}
+
+func (c *QdrantClient) activateFallback(reason error) {
+	if !c.fallbackEnabled {
+		return
+	}
+	if reason == nil {
+		return
+	}
+	c.fallbackMu.Lock()
+	defer c.fallbackMu.Unlock()
+	if c.fallbackActive {
+		return
+	}
+	c.fallbackActive = true
+	fmt.Printf("[QDRANT] ⚠️ Conexão indisponível. Ativando memória paralela local: %v\n", reason)
+}
+
+func (c *QdrantClient) useFallback(err error) bool {
+	if !c.fallbackEnabled {
+		return false
+	}
+	if err != nil {
+		c.activateFallback(err)
+		return true
+	}
+	c.fallbackMu.RLock()
+	active := c.fallbackActive
+	c.fallbackMu.RUnlock()
+	return active
+}
+
+func (c *QdrantClient) fallbackSetPayload(collection string, id uint64, payload map[string]interface{}) error {
+	c.fallbackMu.Lock()
+	col := c.ensureFallbackCollection(collection)
+	p, ok := col.Points[id]
+	if !ok {
+		c.fallbackMu.Unlock()
+		return fmt.Errorf("item %d não encontrado na coleção %s", id, collection)
+	}
+	for k, v := range payload {
+		p.Payload[k] = v
+	}
+	col.Points[id] = p
+	c.fallbackMu.Unlock()
+	c.persistFallbackToDisk()
+	return nil
+}
+
+func (c *QdrantClient) fallbackUpsertPoint(collection string, id uint64, vector []float32, payload map[string]interface{}) error {
+	c.fallbackMu.Lock()
+	col := c.ensureFallbackCollection(collection)
+	_, exists := col.Points[id]
+	col.Points[id] = fallbackPoint{ID: id, Vector: cloneVector(vector), Payload: clonePayload(payload)}
+	if !exists {
+		col.Order = append(col.Order, id)
+	}
+	c.fallbackMu.Unlock()
+	c.persistFallbackToDisk()
+	return nil
+}
+
+func (c *QdrantClient) fallbackSearch(collection string, vector []float32, limit int) ([]map[string]interface{}, error) {
+	c.fallbackMu.RLock()
+	defer c.fallbackMu.RUnlock()
+	col, ok := c.fallbackData[collection]
+	if !ok || len(col.Order) == 0 || limit <= 0 {
+		return []map[string]interface{}{}, nil
+	}
+
+	if vector == nil {
+		out := make([]map[string]interface{}, 0, limit)
+		for i := len(col.Order) - 1; i >= 0 && len(out) < limit; i-- {
+			id := col.Order[i]
+			if p, ok := col.Points[id]; ok {
+				out = append(out, clonePayload(p.Payload))
+			}
+		}
+		return out, nil
+	}
+
+	type scored struct {
+		Payload map[string]interface{}
+		Score   float64
+	}
+	scoredList := make([]scored, 0, len(col.Points))
+	for _, id := range col.Order {
+		p, ok := col.Points[id]
+		if !ok {
+			continue
+		}
+		score := cosineSimilarity(vector, p.Vector)
+		scoredList = append(scoredList, scored{Payload: clonePayload(p.Payload), Score: score})
+	}
+
+	for i := 0; i < len(scoredList); i++ {
+		for j := i + 1; j < len(scoredList); j++ {
+			if scoredList[j].Score > scoredList[i].Score {
+				scoredList[i], scoredList[j] = scoredList[j], scoredList[i]
+			}
+		}
+	}
+
+	if limit > len(scoredList) {
+		limit = len(scoredList)
+	}
+	out := make([]map[string]interface{}, 0, limit)
+	for i := 0; i < limit; i++ {
+		out = append(out, scoredList[i].Payload)
+	}
+	return out, nil
+}
+
+func (c *QdrantClient) fallbackSearchByField(collection string, key string, value string) (map[string]interface{}, error) {
+	c.fallbackMu.RLock()
+	defer c.fallbackMu.RUnlock()
+	col, ok := c.fallbackData[collection]
+	if !ok {
+		return nil, fmt.Errorf("item '%s' não encontrado em %s", value, key)
+	}
+	for _, id := range col.Order {
+		p, ok := col.Points[id]
+		if !ok {
+			continue
+		}
+		if v, ok := p.Payload[key]; ok && fmt.Sprintf("%v", v) == value {
+			return clonePayload(p.Payload), nil
+		}
+	}
+	return nil, fmt.Errorf("item '%s' não encontrado em %s", value, key)
+}
+
+func (c *QdrantClient) fallbackSearchWithScores(collection string, vector []float32, limit int) ([]map[string]interface{}, error) {
+	results, err := c.fallbackSearch(collection, vector, limit)
+	if err != nil {
+		return nil, err
+	}
+	for i := range results {
+		if _, ok := results[i]["_score"]; !ok {
+			results[i]["_score"] = 0.0
+		}
+	}
+	return results, nil
+}
+
+func (c *QdrantClient) fallbackCheckCollectionExists(name string) (bool, error) {
+	c.fallbackMu.RLock()
+	defer c.fallbackMu.RUnlock()
+	_, ok := c.fallbackData[name]
+	return ok, nil
+}
+
+func (c *QdrantClient) fallbackCreateCollection(name string, _ int) error {
+	c.fallbackMu.Lock()
+	c.ensureFallbackCollection(name)
+	c.fallbackMu.Unlock()
+	c.persistFallbackToDisk()
+	return nil
+}
+
+func (c *QdrantClient) fallbackGetPoints(collection string, ids []uint64) ([]map[string]interface{}, error) {
+	c.fallbackMu.RLock()
+	defer c.fallbackMu.RUnlock()
+	col, ok := c.fallbackData[collection]
+	if !ok {
+		return []map[string]interface{}{}, nil
+	}
+	out := make([]map[string]interface{}, 0, len(ids))
+	for _, id := range ids {
+		if p, ok := col.Points[id]; ok {
+			out = append(out, clonePayload(p.Payload))
+		}
+	}
+	return out, nil
+}
+
+func (c *QdrantClient) fallbackCountPoints(collection string) (int, error) {
+	c.fallbackMu.RLock()
+	defer c.fallbackMu.RUnlock()
+	col, ok := c.fallbackData[collection]
+	if !ok {
+		return 0, nil
+	}
+	return len(col.Points), nil
+}
+
+func (c *QdrantClient) fallbackDeleteCollection(name string) error {
+	c.fallbackMu.Lock()
+	delete(c.fallbackData, name)
+	c.fallbackMu.Unlock()
+	c.persistFallbackToDisk()
+	return nil
 }
 
 // checkResponse valida se o status da resposta é de sucesso (2xx).
@@ -55,6 +443,9 @@ func (c *QdrantClient) SetPayload(collection string, id uint64, payload map[stri
 	body, _ := json.Marshal(data)
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
 	if err != nil {
+		if c.useFallback(err) {
+			return c.fallbackSetPayload(collection, id, payload)
+		}
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -73,11 +464,17 @@ func (c *QdrantClient) SetPayload(collection string, id uint64, payload map[stri
 	}
 	resp, err := client.Do(req)
 	if err != nil {
+		if c.useFallback(err) {
+			return c.fallbackSetPayload(collection, id, payload)
+		}
 		return err
 	}
 	defer resp.Body.Close()
 
 	if err := c.checkResponse(resp); err != nil {
+		if c.useFallback(err) {
+			return c.fallbackSetPayload(collection, id, payload)
+		}
 		return err
 	}
 	return nil
@@ -100,6 +497,9 @@ func (c *QdrantClient) UpsertPoint(collection string, id uint64, vector []float3
 	body, _ := json.Marshal(point)
 	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(body))
 	if err != nil {
+		if c.useFallback(err) {
+			return c.fallbackUpsertPoint(collection, id, vector, payload)
+		}
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -116,11 +516,17 @@ func (c *QdrantClient) UpsertPoint(collection string, id uint64, vector []float3
 	}
 	resp, err := client.Do(req)
 	if err != nil {
+		if c.useFallback(err) {
+			return c.fallbackUpsertPoint(collection, id, vector, payload)
+		}
 		return err
 	}
 	defer resp.Body.Close()
 
 	if err := c.checkResponse(resp); err != nil {
+		if c.useFallback(err) {
+			return c.fallbackUpsertPoint(collection, id, vector, payload)
+		}
 		return err
 	}
 	return nil
@@ -151,6 +557,9 @@ func (c *QdrantClient) Search(collection string, vector []float32, limit int) ([
 	body, _ := json.Marshal(query)
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
 	if err != nil {
+		if c.useFallback(err) {
+			return c.fallbackSearch(collection, vector, limit)
+		}
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -168,11 +577,17 @@ func (c *QdrantClient) Search(collection string, vector []float32, limit int) ([
 	}
 	resp, err := client.Do(req)
 	if err != nil {
+		if c.useFallback(err) {
+			return c.fallbackSearch(collection, vector, limit)
+		}
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	if err := c.checkResponse(resp); err != nil {
+		if c.useFallback(err) {
+			return c.fallbackSearch(collection, vector, limit)
+		}
 		return nil, err
 	}
 
@@ -181,11 +596,14 @@ func (c *QdrantClient) Search(collection string, vector []float32, limit int) ([
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		if c.useFallback(err) {
+			return c.fallbackSearch(collection, vector, limit)
+		}
 		return nil, err
 	}
 
 	outputs := make([]map[string]interface{}, 0)
-	
+
 	// Trata a diferença de retorno entre Search (Slice) e Scroll (Map com Points)
 	if vector == nil {
 		scrollRes, _ := result.Result.(map[string]interface{})
@@ -229,6 +647,9 @@ func (c *QdrantClient) SearchByField(collection string, key string, value string
 	body, _ := json.Marshal(query)
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
 	if err != nil {
+		if c.useFallback(err) {
+			return c.fallbackSearchByField(collection, key, value)
+		}
 		return nil, fmt.Errorf("erro ao criar requisição: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -246,11 +667,17 @@ func (c *QdrantClient) SearchByField(collection string, key string, value string
 	}
 	resp, err := client.Do(req)
 	if err != nil {
+		if c.useFallback(err) {
+			return c.fallbackSearchByField(collection, key, value)
+		}
 		return nil, fmt.Errorf("falha de conexão com Qdrant: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if err := c.checkResponse(resp); err != nil {
+		if c.useFallback(err) {
+			return c.fallbackSearchByField(collection, key, value)
+		}
 		return nil, err
 	}
 
@@ -263,6 +690,9 @@ func (c *QdrantClient) SearchByField(collection string, key string, value string
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		if c.useFallback(err) {
+			return c.fallbackSearchByField(collection, key, value)
+		}
 		return nil, fmt.Errorf("erro ao decodificar resposta do Qdrant: %w", err)
 	}
 
@@ -286,6 +716,9 @@ func (c *QdrantClient) SearchWithScores(collection string, vector []float32, lim
 	body, _ := json.Marshal(query)
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
 	if err != nil {
+		if c.useFallback(err) {
+			return c.fallbackSearchWithScores(collection, vector, limit)
+		}
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -303,9 +736,19 @@ func (c *QdrantClient) SearchWithScores(collection string, vector []float32, lim
 	}
 	resp, err := client.Do(req)
 	if err != nil {
+		if c.useFallback(err) {
+			return c.fallbackSearchWithScores(collection, vector, limit)
+		}
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	if err := c.checkResponse(resp); err != nil {
+		if c.useFallback(err) {
+			return c.fallbackSearchWithScores(collection, vector, limit)
+		}
+		return nil, err
+	}
 
 	var result struct {
 		Result []struct {
@@ -315,6 +758,9 @@ func (c *QdrantClient) SearchWithScores(collection string, vector []float32, lim
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		if c.useFallback(err) {
+			return c.fallbackSearchWithScores(collection, vector, limit)
+		}
 		return nil, err
 	}
 
@@ -333,6 +779,9 @@ func (c *QdrantClient) CheckCollectionExists(name string) (bool, error) {
 	url := fmt.Sprintf("%s/collections/%s", c.BaseURL, name)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
+		if c.useFallback(err) {
+			return c.fallbackCheckCollectionExists(name)
+		}
 		return false, err
 	}
 	if c.APIKey != "" {
@@ -349,6 +798,9 @@ func (c *QdrantClient) CheckCollectionExists(name string) (bool, error) {
 	}
 	resp, err := client.Do(req)
 	if err != nil {
+		if c.useFallback(err) {
+			return c.fallbackCheckCollectionExists(name)
+		}
 		return false, err
 	}
 	defer resp.Body.Close()
@@ -371,6 +823,9 @@ func (c *QdrantClient) CreateCollection(name string, dimension int) error {
 	body, _ := json.Marshal(config)
 	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(body))
 	if err != nil {
+		if c.useFallback(err) {
+			return c.fallbackCreateCollection(name, dimension)
+		}
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -388,12 +843,18 @@ func (c *QdrantClient) CreateCollection(name string, dimension int) error {
 	}
 	resp, err := client.Do(req)
 	if err != nil {
+		if c.useFallback(err) {
+			return c.fallbackCreateCollection(name, dimension)
+		}
 		return err
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("falha ao criar coleção: status %d", resp.StatusCode)
+	if err := c.checkResponse(resp); err != nil {
+		if c.useFallback(err) {
+			return c.fallbackCreateCollection(name, dimension)
+		}
+		return fmt.Errorf("falha ao criar coleção: %w", err)
 	}
 
 	return nil
@@ -411,6 +872,9 @@ func (c *QdrantClient) GetPoints(collection string, ids []uint64) ([]map[string]
 	body, _ := json.Marshal(query)
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
 	if err != nil {
+		if c.useFallback(err) {
+			return c.fallbackGetPoints(collection, ids)
+		}
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -428,9 +892,19 @@ func (c *QdrantClient) GetPoints(collection string, ids []uint64) ([]map[string]
 	}
 	resp, err := client.Do(req)
 	if err != nil {
+		if c.useFallback(err) {
+			return c.fallbackGetPoints(collection, ids)
+		}
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	if err := c.checkResponse(resp); err != nil {
+		if c.useFallback(err) {
+			return c.fallbackGetPoints(collection, ids)
+		}
+		return nil, err
+	}
 
 	var result struct {
 		Result []struct {
@@ -439,6 +913,9 @@ func (c *QdrantClient) GetPoints(collection string, ids []uint64) ([]map[string]
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		if c.useFallback(err) {
+			return c.fallbackGetPoints(collection, ids)
+		}
 		return nil, err
 	}
 
@@ -455,6 +932,9 @@ func (c *QdrantClient) CountPoints(collection string) (int, error) {
 	url := fmt.Sprintf("%s/collections/%s", c.BaseURL, collection)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
+		if c.useFallback(err) {
+			return c.fallbackCountPoints(collection)
+		}
 		return 0, err
 	}
 	if c.APIKey != "" {
@@ -470,22 +950,31 @@ func (c *QdrantClient) CountPoints(collection string) (int, error) {
 	}
 	resp, err := client.Do(req)
 	if err != nil {
+		if c.useFallback(err) {
+			return c.fallbackCountPoints(collection)
+		}
 		return 0, err
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("erro ao obter estatísticas da coleção %s: status %d", collection, resp.StatusCode)
+	if err := c.checkResponse(resp); err != nil {
+		if c.useFallback(err) {
+			return c.fallbackCountPoints(collection)
+		}
+		return 0, fmt.Errorf("erro ao obter estatísticas da coleção %s: %w", collection, err)
 	}
 
 	var result struct {
 		Result struct {
-			PointsCount int `json:"points_count"`
+			PointsCount  int `json:"points_count"`
 			VectorsCount int `json:"vectors_count"`
 		} `json:"result"`
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		if c.useFallback(err) {
+			return c.fallbackCountPoints(collection)
+		}
 		return 0, err
 	}
 
@@ -497,6 +986,9 @@ func (c *QdrantClient) DeleteCollection(name string) error {
 	url := fmt.Sprintf("%s/collections/%s", c.BaseURL, name)
 	req, err := http.NewRequest("DELETE", url, nil)
 	if err != nil {
+		if c.useFallback(err) {
+			return c.fallbackDeleteCollection(name)
+		}
 		return err
 	}
 	if c.APIKey != "" {
@@ -512,12 +1004,18 @@ func (c *QdrantClient) DeleteCollection(name string) error {
 	}
 	resp, err := client.Do(req)
 	if err != nil {
+		if c.useFallback(err) {
+			return c.fallbackDeleteCollection(name)
+		}
 		return err
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("falha ao excluir coleção %s: status %d", name, resp.StatusCode)
+	if err := c.checkResponse(resp); err != nil {
+		if c.useFallback(err) {
+			return c.fallbackDeleteCollection(name)
+		}
+		return fmt.Errorf("falha ao excluir coleção %s: %w", name, err)
 	}
 
 	return nil

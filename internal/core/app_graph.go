@@ -56,10 +56,16 @@ func (a *App) GetNodeDetails(nodeID string) (map[string]interface{}, error) {
 func (a *App) AnalyzeGraphHealth() (map[string]interface{}, error) {
 	fmt.Println("[Audit] Analisando saúde do Grafo de Contexto...")
 
-	count, err := a.qdrant.CountPoints("obsidian_knowledge")
+	obsidianCount, err := a.qdrant.CountPoints("obsidian_knowledge")
 	if err != nil {
 		return nil, err
 	}
+	memoryCount, err := a.qdrant.CountPoints("knowledge_graph")
+	if err != nil {
+		return nil, err
+	}
+
+	count := obsidianCount + memoryCount
 
 	// Cálculo de Densidade Orgânica (Progressão Logarítmica)
 	// Com 816 notas, queremos um valor que faça sentido visual.
@@ -68,7 +74,9 @@ func (a *App) AnalyzeGraphHealth() (map[string]interface{}, error) {
 		// Quanto mais notas, mais o cérebro se torna denso (Log10)
 		densityValue += (float64(count) / 1000.0) * 0.2 // Linear suave até 1000 notas
 	}
-	if densityValue > 1.0 { densityValue = 1.0 }
+	if densityValue > 1.0 {
+		densityValue = 1.0
+	}
 
 	stats := map[string]interface{}{
 		"density":      densityValue,
@@ -82,7 +90,7 @@ func (a *App) AnalyzeGraphHealth() (map[string]interface{}, error) {
 		a.GEngine.ComputeCommunities() // Afinidade Semântica
 		a.GEngine.ComputeBetweenness() // Notas Ponte (Gargalos)
 		a.GEngine.ComputeHITS()        // Hubs vs Authorities
-		
+
 		cycles := a.GEngine.DetectCycles()
 		stats["conflicts"] = len(cycles)
 		stats["communities"] = countCommunities(a.GEngine)
@@ -91,7 +99,9 @@ func (a *App) AnalyzeGraphHealth() (map[string]interface{}, error) {
 	// Gatilho: Se o usuário pediu saúde, aproveitamos para tecer pontes neurais
 	// Aumentamos o lote de processamento conforme o tamanho do cofre
 	batchSize := 100
-	if count > 500 { batchSize = 250 }
+	if count > 500 {
+		batchSize = 250
+	}
 	go a.WeaveNeuralLinks(batchSize)
 
 	return stats, nil
@@ -100,7 +110,7 @@ func (a *App) AnalyzeGraphHealth() (map[string]interface{}, error) {
 // WeaveNeuralLinks percorre o grafo e cria conexões por similaridade (brain mapping).
 func (a *App) WeaveNeuralLinks(limit int) {
 	fmt.Printf("[Neural] Tecendo pontes em lote de %d notas...\n", limit)
-	
+
 	// 1. Busca as notas (as 50 mais recentes + uma amostra aleatória se possível)
 	notes, err := a.qdrant.Search("obsidian_knowledge", nil, limit)
 	if err != nil || len(notes) == 0 {
@@ -121,7 +131,7 @@ func (a *App) WeaveNeuralLinks(limit int) {
 		}
 
 		// 3. Busca os 5 vizinhos mais próximos (aumentado de 3 para 5)
-		similars, err := a.qdrant.SearchWithScores("obsidian_knowledge", vector, 6) 
+		similars, err := a.qdrant.SearchWithScores("obsidian_knowledge", vector, 6)
 		if err != nil {
 			continue
 		}
@@ -183,11 +193,15 @@ func (a *App) IsExplorationMode() bool {
 
 // RunReconScan dispara a busca por conexões perdidas e informa o frontend das propostas.
 func (a *App) RunReconScan() string {
-	if a.Recon == nil { return "🔴 Agente Recon offline." }
-	
+	if a.Recon == nil {
+		return "🔴 Agente Recon offline."
+	}
+
 	proposals, err := a.Recon.ScanMissingLinks(a.ctx)
-	if err != nil { return "🔴 Erro no Scan: " + err.Error() }
-	
+	if err != nil {
+		return "🔴 Erro no Scan: " + err.Error()
+	}
+
 	count := 0
 	for _, p := range proposals {
 		if !p.Auto {
@@ -195,28 +209,32 @@ func (a *App) RunReconScan() string {
 			runtime.EventsEmit(a.ctx, "agent:proposal", p)
 		}
 	}
-	
+
 	return fmt.Sprintf("🕵️🌐 Recon Scan concluído! %d novas sinapses propostas para sua revisão.", count)
 }
 
 // PruneGraph executa a poda neural baseada em PageRank para limpar o Dashboard.
 func (a *App) PruneGraph(threshold float64) string {
-	if a.GEngine == nil { return "🔴 Motor de grafos offline." }
-	
+	if a.GEngine == nil {
+		return "🔴 Motor de grafos offline."
+	}
+
 	removed := a.GEngine.Prune(threshold)
 	if len(removed) > 0 {
 		// Sincroniza visualmente (Reset de Grafo no Front)
 		a.SyncAllNodes()
 		return fmt.Sprintf("🧹 Poda Neural concluída: %d nós irrelevantes removidos.", len(removed))
 	}
-	
+
 	return "✅ O grafo já está otimizado (sem nós abaixo do threshold)."
 }
 
 // GetSkeletalGraph retorna apenas as arestas vitais (MST) para despoluir a visão.
 func (a *App) GetSkeletalGraph() map[string]interface{} {
-	if a.GEngine == nil { return nil }
-	
+	if a.GEngine == nil {
+		return nil
+	}
+
 	mstEdges := a.GEngine.GetMSTEdges()
 	return map[string]interface{}{
 		"edges": mstEdges,

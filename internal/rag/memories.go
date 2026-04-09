@@ -15,7 +15,7 @@ type KnowledgeWeaver struct {
 	ctx      context.Context // Contexto persistente do Wails
 	Ontology *provider.OntologyService
 	Qdrant   *provider.QdrantClient
-	Embedder *provider.EmbeddingService
+	Embedder provider.Embedder
 }
 
 // SetContext injeta o contexto oficial do Wails para processos de background.
@@ -24,7 +24,7 @@ func (w *KnowledgeWeaver) SetContext(ctx context.Context) {
 }
 
 // NewKnowledgeWeaver inicializa o tecelão.
-func NewKnowledgeWeaver(ontology *provider.OntologyService, qdrant *provider.QdrantClient, embedder *provider.EmbeddingService) *KnowledgeWeaver {
+func NewKnowledgeWeaver(ontology *provider.OntologyService, qdrant *provider.QdrantClient, embedder provider.Embedder) *KnowledgeWeaver {
 	return &KnowledgeWeaver{
 		Ontology: ontology,
 		Qdrant:   qdrant,

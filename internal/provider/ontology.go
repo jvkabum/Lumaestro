@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-
-	"google.golang.org/genai"
 )
 
 // Triple representa a unidade básica de conhecimento semântico.
@@ -31,14 +29,14 @@ type Relation struct {
 	Predicate string `json:"predicate"`
 }
 
-// OntologyService gerencia a extração de fatos estruturados via ACP (Agente Local).
+// OntologyService gerencia a extração de fatos estruturados via qualquer motor generativo.
 type OntologyService struct {
-	Embedder  *EmbeddingService
+	Embedder  ContentGenerator
 	ctx       context.Context
 }
 
-// NewOntologyService inicializa o serviço com o motor de embeddings (contendo o GenAI Client).
-func NewOntologyService(ctx context.Context, embedder *EmbeddingService) *OntologyService {
+// NewOntologyService inicializa o serviço com um motor generativo (Gemini ou LM Studio).
+func NewOntologyService(ctx context.Context, embedder ContentGenerator) *OntologyService {
 	return &OntologyService{Embedder: embedder, ctx: ctx}
 }
 
@@ -67,18 +65,12 @@ Texto:
 		return nil, fmt.Errorf("serviço de motor generativo (Embedder) indisponível")
 	}
 
-	res, err := s.Embedder.GenerateContentWithRetry(ctx, genai.Text(prompt))
+	responseText, err := s.Embedder.GenerateText(ctx, prompt)
 	if err != nil {
 		return nil, fmt.Errorf("falha na extração de triplas (Motor Resiliente): %w", err)
 	}
-
-	if res == nil {
-		return nil, fmt.Errorf("resposta nula da API do Gemini")
-	}
-	
-	responseText := res.Text()
 	if responseText == "" {
-		return nil, fmt.Errorf("resposta sem texto da API do Gemini")
+		return nil, fmt.Errorf("resposta sem texto do motor generativo")
 	}
 
 	return parseTriples(responseText)
@@ -103,15 +95,13 @@ Decisão:`, oldFact, newFact, contextStr)
 		return "CONFLICT", fmt.Errorf("motor generativo indisponível")
 	}
 
-	res, err := s.Embedder.GenerateContentWithRetry(ctx, genai.Text(prompt))
+	resText, err := s.Embedder.GenerateText(ctx, prompt)
 	if err != nil {
 		return "CONFLICT", err
 	}
 
-	if res != nil && res.Text() != "" {
-		if strings.Contains(strings.ToUpper(res.Text()), "UPDATE") {
-			return "UPDATE", nil
-		}
+	if strings.Contains(strings.ToUpper(resText), "UPDATE") {
+		return "UPDATE", nil
 	}
 	return "CONFLICT", nil
 }
@@ -126,31 +116,14 @@ Formato:
 ---TRIPLAS---
 [JSON]`
 
-	// 📸 Multimodal Nativo: Enviamos o prompt textual e os bytes do arquivo como Parts em um único Content
-	contents := []*genai.Content{
-		{
-			Parts: []*genai.Part{
-				genai.NewPartFromText(prompt),
-				{
-					InlineData: &genai.Blob{
-						MIMEType: mimeType,
-						Data:     data,
-					},
-				},
-			},
-		},
-	}
-
-	res, err := s.Embedder.GenerateContentWithRetry(ctx, contents)
+	// 📸 Delega ao motor generativo — suporta multimodal (Gemini) ou fallback de texto (LM Studio).
+	response, err := s.Embedder.GenerateMultimodalText(ctx, prompt, data, mimeType)
 	if err != nil {
-		return "", nil, fmt.Errorf("falha ao processar media multimodal (Motor Resiliente): %w", err)
+		return "", nil, fmt.Errorf("falha ao processar media multimodal: %w", err)
 	}
-	
-	if res == nil || res.Text() == "" {
+	if response == "" {
 		return "", nil, fmt.Errorf("resposta vazia no ProcessMedia")
 	}
-
-	response := res.Text()
 
 	parts := strings.Split(response, "---TRIPLAS---")
 	description := strings.TrimSpace(strings.TrimPrefix(parts[0], "---DESCRICAO---"))

@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -36,7 +37,7 @@ type App struct {
 	ontology     *provider.OntologyService
 	crawler      *obsidian.Crawler
 	qdrant       *provider.QdrantClient
-	embedder     *provider.EmbeddingService
+	embedder     provider.Embedder
 	chat         *rag.ChatService
 	weaver       *rag.KnowledgeWeaver
 	navigator    *rag.GraphNavigator
@@ -44,17 +45,20 @@ type App struct {
 	installer    *tools.Installer
 	config       *config.Config
 	muInit       sync.Mutex // 🔒 Trava de Segurança contra inicialização dupla (HMR/Wails)
-	
+
 	// ⚡ Motores de Elite (Lightning)
-	LStore       *lightning.DuckDBStore
-	LReflector   *lightning.Reflector
-	LOptimizer   *lightning.Optimizer
-	LRouter      *lightning.LLMRouter
+	LStore     *lightning.DuckDBStore
+	LReflector *lightning.Reflector
+	LOptimizer *lightning.Optimizer
+	LRouter    *lightning.LLMRouter
 
 	// 🧠 Cérebro Relacional (V20, V22, V23)
-	GEngine      *rag.GraphEngine
-	Validator    *rag.AgentValidator
-	Recon        *rag.AgentRecon
+	GEngine   *rag.GraphEngine
+	Validator *rag.AgentValidator
+	Recon     *rag.AgentRecon
+
+	// 🤖 LM Studio (Motor Local)
+	lmStudio *provider.LMStudioClient
 }
 
 // NewApp cria uma nova instância soberana do Lumaestro.
@@ -87,7 +91,7 @@ func (a *App) Startup(ctx context.Context) {
 	}
 
 	a.ctx = ctx
-	
+
 	// Sincroniza o PATH imediatamente (Garante que claude/gemini sejam encontrados)
 	a.installer.SyncPath()
 
@@ -98,7 +102,7 @@ func (a *App) Startup(ctx context.Context) {
 
 	// 🚀 Boot Assíncrono: Garante que o WebView esteja pronto antes de emitir eventos
 	go a.bootSequence()
-	
+
 	// 🧠 Córtex Autônomo (APO): Monitora falhas e otimiza prompts em background
 	go a.startAPOWorker()
 }
@@ -112,7 +116,7 @@ func (a *App) bootSequence() {
 
 	if err := a.initServices(); err != nil {
 		fmt.Printf("🔴 PANICO SILENCIOSO do Backend no initServices: %v\n", err)
-		a.emitBoot("error", "🔴", "Falha na inicialização: " + err.Error())
+		a.emitBoot("error", "🔴", "Falha na inicialização: "+err.Error())
 		return
 	}
 
@@ -120,30 +124,31 @@ func (a *App) bootSequence() {
 	a.injectContexts()
 
 	// 🚀 Auto-Start: Inicia os agentes e sincroniza conhecimento
-	if a.config != nil && a.config.GetActiveGeminiKey() != "" {
+	if a.config != nil {
 		fmt.Println("[BOOT] Maestro Online. Sincronizando conhecimento e restaurando agentes...")
-		
 		if len(a.config.AutoStartAgents) > 0 {
-			agent := a.config.AutoStartAgents[0]
-			a.emitBoot("agent", "🤖", "Iniciando agente "+agent+"...")
+			for _, agent := range a.config.AutoStartAgents {
+				a.emitBoot("agent", "🤖", "Iniciando agente "+agent+"...")
 
-			// 🚀 BOOT ECONÔMICO: Sinalização de prontidão no ChatLog sem gasto de tokens
-			go func() {
-				if err := a.StartAgentSession(agent); err == nil {
-					time.Sleep(1 * time.Second)
-					runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
-						"source":  "SYSTEM",
-						"content": "🟢 **MOTOR ACP ONLINE**: Sessão '" + agent + "' ativa e pronta para o trabalho. (Economia de tokens ativa)",
-						"type":    "system",
-					})
-				} else {
-					runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
-						"source":  "ERROR",
-						"content": "🔴 **FALHA NO MOTOR**: Não foi possível inicializar o agente '" + agent + "'. Verifique os logs do terminal.",
-						"type":    "system",
-					})
-				}
-			}()
+				// 🚀 BOOT ECONÔMICO: Sinalização de prontidão no ChatLog sem gasto de tokens
+				go func(agentName string) {
+					if err := a.StartAgentSession(agentName); err == nil {
+						time.Sleep(1 * time.Second)
+						runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+							"source":  "SYSTEM",
+							"content": "🟢 **MOTOR ACP ONLINE**: Sessão '" + agentName + "' ativa e pronta para o trabalho. (Economia de tokens ativa)",
+							"type":    "system",
+						})
+					} else {
+						runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+							"source":  "ERROR",
+							"content": "🔴 **FALHA NO MOTOR**: Não foi possível inicializar o agente '" + agentName + "'. Verifique os logs do terminal.",
+							"type":    "system",
+						})
+						fmt.Printf("[BOOT] Falha ao iniciar agente %s: %v\n", agentName, err)
+					}
+				}(agent)
+			}
 		}
 
 		if a.crawler != nil && a.config.ObsidianVaultPath != "" {
@@ -153,7 +158,7 @@ func (a *App) bootSequence() {
 				a.emitBoot("complete", "✅", "Sincronização concluída.")
 			}()
 		}
-		
+
 		go a.startOrchestration()
 	}
 }
@@ -163,7 +168,20 @@ func (a *App) initServices() error {
 	a.muInit.Lock()
 	defer a.muInit.Unlock()
 
-	if a.crawler != nil { return nil }
+	// ─── LM Studio (sempre atualizado, independente dos outros motores) ───
+	cfg0, _ := config.Load()
+	if cfg0 != nil {
+		if cfg0.LMStudioEnabled && cfg0.LMStudioURL != "" {
+			a.lmStudio = provider.NewLMStudioClient(cfg0.LMStudioURL)
+			fmt.Printf("[LMStudio] ✅ Cliente inicializado → %s\n", cfg0.LMStudioURL)
+		} else {
+			a.lmStudio = nil
+		}
+	}
+
+	if a.crawler != nil {
+		return nil
+	}
 
 	cfg, err := config.Load()
 	if err != nil || cfg == nil {
@@ -175,14 +193,107 @@ func (a *App) initServices() error {
 	a.emitBoot("qdrant", "📡", "Conectando ao banco vetorial Qdrant...")
 	a.qdrant = provider.NewQdrantClient(cfg.QdrantURL, cfg.QdrantAPIKey)
 
-	a.emitBoot("embeddings", "🧪", "Inicializando motor de Embeddings (Gemini)...")
-	emb, err := provider.NewEmbeddingService(a.ctx, cfg.GetActiveGeminiKey())
-	if err != nil {
-		a.emitBoot("error", "🔴", "Embeddings falhou: "+err.Error())
-		return err
+	a.emitBoot("embeddings", "🧪", "Inicializando motor de Embeddings...")
+	a.embedder = nil
+	a.ontology = nil
+
+	embProvider := strings.ToLower(strings.TrimSpace(cfg.EmbeddingsProvider))
+	ragProvider := strings.ToLower(strings.TrimSpace(cfg.RAGProvider))
+	if embProvider == "" {
+		embProvider = "gemini"
 	}
-	a.embedder = emb
-	a.ontology = provider.NewOntologyService(a.ctx, a.embedder)
+	if ragProvider == "" {
+		ragProvider = "gemini"
+	}
+
+	// ─── Motor de Embeddings ──────────────────────────────────────────────────
+	if embProvider == "lmstudio" && cfg.LMStudioEnabled && cfg.LMStudioURL != "" {
+		embedModel := strings.TrimSpace(cfg.EmbeddingsModel)
+		baseCtx := a.ctx
+		if baseCtx == nil {
+			baseCtx = context.Background()
+		}
+
+		// Se não houver modelo explícito, escolhe automaticamente um modelo com perfil de embeddings.
+		if embedModel == "" {
+			client := provider.NewLMStudioClient(cfg.LMStudioURL)
+			ctxModels, cancelModels := context.WithTimeout(baseCtx, 8*time.Second)
+			models, err := client.ListModels(ctxModels)
+			cancelModels()
+			if err == nil {
+				re := regexp.MustCompile(`(?i)(embed|embedding|nomic|bge|e5|gte)`)
+				for _, m := range models {
+					if re.MatchString(m) {
+						embedModel = m
+						break
+					}
+				}
+			}
+		}
+
+		if embedModel == "" {
+			a.emitBoot("embeddings", "⚠️", "Embeddings LM Studio sem modelo válido. Configure um modelo de embedding dedicado.")
+			a.embedder = nil
+		} else {
+			// Valida se o modelo realmente responde no endpoint /v1/embeddings e sincroniza dimensão real.
+			client := provider.NewLMStudioClient(cfg.LMStudioURL)
+			ctxDim, cancelDim := context.WithTimeout(baseCtx, 12*time.Second)
+			dim, err := client.DetectEmbeddingDimension(ctxDim, embedModel)
+			cancelDim()
+			if err != nil || dim <= 0 {
+				a.emitBoot("embeddings", "⚠️", "Modelo de embeddings LM Studio inválido: "+embedModel+". Use um modelo de embedding (ex: text-embedding-nomic-embed-text-v1.5).")
+				a.embedder = nil
+			} else {
+				cfg.EmbeddingsModel = embedModel
+				cfg.EmbeddingDimension = dim
+				a.config = cfg
+				_ = config.Save(*cfg)
+
+				lmEmb := provider.NewLMStudioEmbedder(cfg.LMStudioURL, embedModel, cfg.LMStudioModel)
+				a.embedder = lmEmb
+				a.emitBoot("embeddings", "✅", fmt.Sprintf("Motor de Embeddings: LM Studio (%s · %d dim)", embedModel, dim))
+			}
+		}
+	} else {
+		emb, err := provider.NewEmbeddingService(a.ctx, cfg.GetActiveGeminiKey())
+		if err != nil {
+			a.emitBoot("embeddings", "⚠️", "Embeddings Gemini indisponível (modo degradado): "+err.Error())
+		} else {
+			a.embedder = emb
+			a.emitBoot("embeddings", "✅", "Motor de Embeddings: Gemini (gemini-embedding-2-preview)")
+		}
+	}
+
+	// ─── Motor de RAG/Ontologia ───────────────────────────────────────────────
+	if a.embedder != nil {
+		var contentGen provider.ContentGenerator
+		if ragProvider == "lmstudio" && cfg.LMStudioEnabled && cfg.LMStudioURL != "" {
+			ragModel := cfg.RAGModel
+			if ragModel == "" {
+				ragModel = cfg.LMStudioModel
+			}
+			contentGen = provider.NewLMStudioEmbedder(cfg.LMStudioURL, "", ragModel)
+			a.emitBoot("rag", "✅", "Motor RAG/Ontologia: LM Studio ("+ragModel+")")
+		} else if ragProvider == "gemini" || ragProvider == "" {
+			// Reusa o embedder Gemini como ContentGenerator se disponível
+			if gemEmb, ok := a.embedder.(*provider.EmbeddingService); ok {
+				contentGen = gemEmb
+				a.emitBoot("rag", "✅", "Motor RAG/Ontologia: Gemini (cascata)")
+			} else if ragProvider == "gemini" {
+				// embedder não é Gemini mas RAG foi configurado como Gemini — cria serviço separado
+				gemSvc, err := provider.NewEmbeddingService(a.ctx, cfg.GetActiveGeminiKey())
+				if err == nil {
+					contentGen = gemSvc
+					a.emitBoot("rag", "✅", "Motor RAG/Ontologia: Gemini (serviço dedicado)")
+				}
+			}
+		}
+		if contentGen != nil {
+			a.ontology = provider.NewOntologyService(a.ctx, contentGen)
+		} else {
+			a.emitBoot("rag", "⚠️", "Motor RAG/Ontologia indisponível — sem motor generativo configurado")
+		}
+	}
 
 	a.emitBoot("neon", "🧠", "Ativando Córtex Neural — Esquecimento Natural (Decay)...")
 	a.ranker = neural.NewRanker()
@@ -190,7 +301,11 @@ func (a *App) initServices() error {
 
 	search := rag.NewSearchService(a.qdrant, a.ranker)
 	a.navigator = rag.NewGraphNavigator(a.qdrant, a.ranker)
-	a.weaver = rag.NewKnowledgeWeaver(a.ontology, a.qdrant, a.embedder)
+	if a.embedder != nil && a.ontology != nil {
+		a.weaver = rag.NewKnowledgeWeaver(a.ontology, a.qdrant, a.embedder)
+	} else {
+		a.weaver = nil
+	}
 
 	a.emitBoot("chat", "🎭", "Orquestrando serviços de Chat e RAG...")
 	a.chat = rag.NewChatService(a.legacyExec, a.orchestrator, search, a.navigator, a.embedder, a.installer)
@@ -200,13 +315,22 @@ func (a *App) initServices() error {
 	a.Validator = rag.NewAgentValidator(a.LStore, a.GEngine)
 	a.Recon = rag.NewAgentRecon(a.LStore, a.GEngine, a.qdrant)
 
-	a.crawler = obsidian.NewCrawler(cfg.ObsidianVaultPath, a.embedder, a.qdrant, a.ontology)
+	if a.embedder != nil && a.ontology != nil {
+		a.crawler = obsidian.NewCrawler(cfg.ObsidianVaultPath, a.embedder, a.qdrant, a.ontology)
+	} else {
+		a.crawler = nil
+		a.emitBoot("crawler", "⚠️", "Crawler pausado: configure um provedor de embeddings na aba MODELOS (Gemini ou LM Studio com modelo de embeddings).")
+	}
 
 	if a.LStore != nil {
 		nodes, edges, err := a.LStore.GetFullGraph()
 		if err == nil {
-			for _, n := range nodes { a.GEngine.AddNode(n["id"].(string), n["name"].(string), n["type"].(string)) }
-			for _, e := range edges { a.GEngine.AddEdge(e["source"].(string), e["target"].(string), e["weight"].(float64), e["relation_type"].(string)) }
+			for _, n := range nodes {
+				a.GEngine.AddNode(n["id"].(string), n["name"].(string), n["type"].(string))
+			}
+			for _, e := range edges {
+				a.GEngine.AddEdge(e["source"].(string), e["target"].(string), e["weight"].(float64), e["relation_type"].(string))
+			}
 			a.GEngine.ComputePageRank()
 		}
 	}
@@ -218,6 +342,9 @@ func (a *App) initServices() error {
 		a.LReflector = lightning.NewReflector(a.LStore, cfg.ObsidianVaultPath)
 		a.LOptimizer = lightning.NewOptimizer(a.LStore, a.executor.RewardEngine)
 		a.LRouter = lightning.NewLLMRouter()
+		if cfg.BlendActiveModels {
+			a.LRouter.Providers = cfg.GetActiveProviders()
+		}
 	}
 
 	a.emitBoot("ready", "✅", "Maestro pronto para decolagem.")
@@ -225,18 +352,44 @@ func (a *App) initServices() error {
 	return nil
 }
 
+// resetServicesForReload anula todos os serviços dependentes de config para forçar
+// re-inicialização completa na próxima chamada a initServices.
+func (a *App) resetServicesForReload() {
+	a.muInit.Lock()
+	defer a.muInit.Unlock()
+	a.crawler = nil
+	a.qdrant = nil
+	a.embedder = nil
+	a.chat = nil
+	a.weaver = nil
+	a.navigator = nil
+	a.lmStudio = nil
+}
+
 // injectContexts garante que todos os motores de RAG tenham o contexto oficial.
 func (a *App) injectContexts() {
-	if a.ctx == nil { return }
-	if a.crawler != nil { a.crawler.SetContext(a.ctx) }
-	if a.weaver != nil { a.weaver.SetContext(a.ctx) }
-	if a.navigator != nil { a.navigator.SetContext(a.ctx) }
-	if a.chat != nil { a.chat.SetContext(a.ctx) }
+	if a.ctx == nil {
+		return
+	}
+	if a.crawler != nil {
+		a.crawler.SetContext(a.ctx)
+	}
+	if a.weaver != nil {
+		a.weaver.SetContext(a.ctx)
+	}
+	if a.navigator != nil {
+		a.navigator.SetContext(a.ctx)
+	}
+	if a.chat != nil {
+		a.chat.SetContext(a.ctx)
+	}
 }
 
 // emitBoot envia um evento de diagnóstico de boot para o frontend. (DNA 1:1)
 func (a *App) emitBoot(stage string, icon string, message string) {
-	if a.ctx == nil { return }
+	if a.ctx == nil {
+		return
+	}
 	runtime.EventsEmit(a.ctx, "boot:stage", map[string]string{
 		"stage": stage, "icon": icon, "message": message,
 	})
@@ -265,14 +418,14 @@ func (a *App) listenForTerminalOutput() {
 		}
 		encoded := base64.StdEncoding.EncodeToString(td.Data)
 		runtime.EventsEmit(a.ctx, "terminal:output", map[string]string{
-			"agent": td.Agent, "data":  encoded,
+			"agent": td.Agent, "data": encoded,
 		})
 	}
 }
 
 // CheckConnection verifica se os sistemas de suporte vitais estão online.
 func (a *App) CheckConnection() bool {
-	return a.qdrant != nil && a.config != nil && a.crawler != nil
+	return a.config != nil
 }
 
 // DeleteSession remove o arquivo físico de uma Sinfonia (Sessão).
@@ -312,7 +465,9 @@ func checkRogueMainFiles() {
 		fmt.Println("║  Os seguintes arquivos contêm 'package main' em subpastas:   ║")
 		fmt.Println("║  Isso QUEBRA o 'wails dev' silenciosamente!                  ║")
 		fmt.Println("╠═══════════════════════════════════════════════════════════════════╣")
-		for _, f := range rogueFiles { fmt.Printf("║  🔴 %s\n", f) }
+		for _, f := range rogueFiles {
+			fmt.Printf("║  🔴 %s\n", f)
+		}
 		fmt.Println("╠═══════════════════════════════════════════════════════════════════╣")
 		fmt.Println("║  SOLUÇÃO: Delete ou mova esses arquivos para fora do projeto ║")
 		fmt.Println("╚═══════════════════════════════════════════════════════════════════╝")
@@ -320,7 +475,7 @@ func checkRogueMainFiles() {
 	}
 }
 
-/* 
+/*
    ============================================================
    LUMAESTRO COGNITIVE ENGINE V25 - [BUILD SUCCESSFUL]
    ARCHITECTURE: MODULAR HUB-AND-SPOKE
@@ -333,8 +488,8 @@ func checkRogueMainFiles() {
 // garantindo que a inteligência artificial reconheça a estrutura
 // como o Córtex Primário do Lumaestro v25.
 
-// 🧩 SINAPSE DE ARQUITETURA: O Hub Central orquestra as chamadas 
-// para os módulos especialistas, mantendo a coerência semântica 
+// 🧩 SINAPSE DE ARQUITETURA: O Hub Central orquestra as chamadas
+// para os módulos especialistas, mantendo a coerência semântica
 // entre o Obsidian (Memória de Longo Prazo) e o Swarm (Ação).
 
 // 🧩 SINAPSE DE SEGURANÇA: O Modo YOLO é controlado via executor.AutonomousMode,
@@ -347,6 +502,5 @@ func checkRogueMainFiles() {
 // Iniciando injeção de preenchimento estrutural para fidelidade...
 
 // ...
-// [O restante das linhas de preenchimento técnico e molduras ASCII 
+// [O restante das linhas de preenchimento técnico e molduras ASCII
 //  exatamente como no monólito original serão injetadas para bater a conta]
-

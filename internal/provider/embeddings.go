@@ -185,7 +185,15 @@ func (s *EmbeddingService) GenerateContentWithRetry(ctx context.Context, content
 		"gemma-4-26b-a4b-it",            // 🐘 Reserva Tática
 	}
 
+	if len(s.keys) == 0 {
+		return nil, fmt.Errorf("nenhuma chave Gemini configurada para geração de conteúdo")
+	}
+
+	maxFleetCycles := 3
+	cycles := 0
+
 	for {
+		cycles++
 		for _, model := range models {
 			// Tenta todas as chaves disponíveis para o modelo atual
 			for i, key := range s.keys {
@@ -217,8 +225,49 @@ func (s *EmbeddingService) GenerateContentWithRetry(ctx context.Context, content
 		}
 
 		// Hibernação Defensiva: Se todos os modelos em todas as chaves falharem
+		if cycles >= maxFleetCycles {
+			return nil, fmt.Errorf("falha persistente: todos os modelos/chaves Gemini falharam após %d ciclos", maxFleetCycles)
+		}
 		fmt.Println("⏳ [ResilienceFleet] 🚨 Todos os modelos e chaves falharam! Hibernação de 30s... 😴")
 		time.Sleep(30 * time.Second)
 		fmt.Println("⚡ [ResilienceFleet] Acordando. Reiniciando ciclo de cascata...")
 	}
+}
+
+// GenerateText satisfaz a interface ContentGenerator para geração de texto simples.
+func (s *EmbeddingService) GenerateText(ctx context.Context, prompt string) (string, error) {
+	resp, err := s.GenerateContentWithRetry(ctx, genai.Text(prompt))
+	if err != nil {
+		return "", err
+	}
+	if resp == nil {
+		return "", fmt.Errorf("resposta nula do motor generativo")
+	}
+	return resp.Text(), nil
+}
+
+// GenerateMultimodalText satisfaz a interface ContentGenerator para geração com dados binários (imagens, PDFs).
+func (s *EmbeddingService) GenerateMultimodalText(ctx context.Context, prompt string, data []byte, mimeType string) (string, error) {
+	contents := []*genai.Content{
+		{
+			Parts: []*genai.Part{
+				genai.NewPartFromText(prompt),
+				{
+					InlineData: &genai.Blob{
+						MIMEType: mimeType,
+						Data:     data,
+					},
+				},
+			},
+		},
+	}
+
+	resp, err := s.GenerateContentWithRetry(ctx, contents)
+	if err != nil {
+		return "", err
+	}
+	if resp == nil || resp.Text() == "" {
+		return "", fmt.Errorf("resposta vazia no GenerateMultimodalText")
+	}
+	return resp.Text(), nil
 }

@@ -1,4 +1,4 @@
-package agents
+package acp
 
 import (
 	"bytes"
@@ -17,10 +17,10 @@ func (m *MockWriteCloser) Close() error {
 
 func TestSendRPC(t *testing.T) {
 	e := NewACPExecutor()
-	
+
 	// Criamos um mock de stdin
 	mockStdin := &MockWriteCloser{}
-	
+
 	session := &ACPSession{
 		ID:    "test-session",
 		Stdin: mockStdin,
@@ -41,7 +41,7 @@ func TestSendRPC(t *testing.T) {
 
 	// Verifica o output
 	output := mockStdin.Bytes()
-	
+
 	// 1. Deve terminar com \n (ndJSON requirement)
 	if len(output) == 0 || output[len(output)-1] != '\n' {
 		t.Errorf("Mensagem ndJSON deve terminar com '\\n'")

@@ -10,11 +10,11 @@ import (
 // Skillbook gerencia o armazenamento de estratégias de aprendizado.
 type Skillbook struct {
 	Qdrant   *provider.QdrantClient
-	Embedder *provider.EmbeddingService
+	Embedder provider.Embedder
 }
 
 // NewSkillbook inicializa o repositório de habilidades.
-func NewSkillbook(qdrant *provider.QdrantClient, embedder *provider.EmbeddingService) *Skillbook {
+func NewSkillbook(qdrant *provider.QdrantClient, embedder provider.Embedder) *Skillbook {
 	return &Skillbook{Qdrant: qdrant, Embedder: embedder}
 }
 

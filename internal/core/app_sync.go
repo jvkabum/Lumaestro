@@ -15,6 +15,23 @@ import (
 func (a *App) ScanVault() string {
 	fmt.Println("[BACKEND] ScanVault disparado assincronamente...")
 
+	// Tenta auto-recuperar os motores antes de iniciar o job assíncrono.
+	if a.crawler == nil || a.ctx == nil {
+		_ = a.initServices()
+	}
+
+	if a.ctx == nil {
+		return "⚠️ Sincronização indisponível: contexto do app ainda não inicializado."
+	}
+
+	if a.crawler == nil {
+		runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+			"source":  "SYSTEM",
+			"content": "⚠️ Sync Obsidian 3D bloqueado: sem motor de embeddings ativo. Configure Gemini API Key (aba CHAVES) para habilitar indexação vetorial.",
+		})
+		return "⚠️ Sync Obsidian 3D bloqueado: sem motor de embeddings ativo. Configure Gemini API Key para liberar indexação vetorial."
+	}
+
 	// 🕵️⚡ RAG em Segundo Plano: Previne travamento total da UI e do Chat
 	go func() {
 		// 1. Verificação Crítica de Motor e Contexto
@@ -73,7 +90,10 @@ func (a *App) ScanVault() string {
 // FullSync limpa o cache e inicia uma indexação completa atômica.
 func (a *App) FullSync() string {
 	if a.crawler == nil {
-		return "⚠️ Motor de indexação indisponível."
+		_ = a.initServices()
+	}
+	if a.crawler == nil {
+		return "⚠️ Motor de indexação indisponível: sem provedor de embeddings ativo."
 	}
 	fmt.Println("[BACKEND] 🔄 Solicitado FullSync Atômico. Limpando cache...")
 	a.crawler.PurgeCache()
@@ -134,7 +154,7 @@ func (a *App) ResetQdrantDB() string {
 	}
 
 	fmt.Println("[RESET] 🚨 Iniciando Reset do Banco de Dados Qdrant...")
-	
+
 	collections := []string{"obsidian_knowledge", "knowledge_graph"}
 	for _, name := range collections {
 		err := a.qdrant.DeleteCollection(name)
@@ -153,7 +173,11 @@ func (a *App) ResetQdrantDB() string {
 	os.Remove(".lumaestro_topology.json") // Expurga cache visual 3D
 
 	// 3. Recria Infraestrutura do zero
-	fmt.Println("[RESET] 🏗️ Recriando infraestrutura (3072 dim)...")
+	dim := 3072
+	if a.config != nil && a.config.EmbeddingDimension > 0 {
+		dim = a.config.EmbeddingDimension
+	}
+	fmt.Printf("[RESET] 🏗️ Recriando infraestrutura (%d dim)...\n", dim)
 	if a.crawler != nil {
 		a.crawler.EnsureCollections(a.ctx)
 	}
@@ -209,7 +233,7 @@ func (a *App) SyncAllNodes() {
 	if cachedBatch != nil && len(cachedBatch) > 0 {
 		fmt.Printf("[Sync] ⚡ Carregando %d nós instantaneamente via Fast Topology Cache (0 delay de infraestrutura)...\n", len(cachedBatch))
 		runtime.EventsEmit(a.ctx, "graph:nodes:batch", cachedBatch)
-		
+
 		go func() {
 			time.Sleep(500 * time.Millisecond) // Pequeno respiro para o motor físico
 			stats, _ := a.AnalyzeGraphHealth()
@@ -225,7 +249,25 @@ func (a *App) SyncAllNodes() {
 		fmt.Printf("[Sync] Erro ao buscar nós para sincronização: %v\n", err)
 		return
 	}
+	memoryPoints, err := a.qdrant.Search("knowledge_graph", nil, 1500)
+	if err != nil {
+		fmt.Printf("[Sync] Erro ao buscar memórias para sincronização: %v\n", err)
+	}
+
 	var batch []map[string]interface{}
+	batchIndex := map[string]struct{}{}
+	addNode := func(node map[string]interface{}) {
+		id, _ := node["id"].(string)
+		if id == "" {
+			return
+		}
+		if _, exists := batchIndex[id]; exists {
+			return
+		}
+		batchIndex[id] = struct{}{}
+		batch = append(batch, node)
+	}
+
 	for _, p := range points {
 		name, _ := p["name"].(string)
 		if name == "" {
@@ -233,11 +275,22 @@ func (a *App) SyncAllNodes() {
 		}
 
 		nodeID := strings.ToLower(name)
-		
+		summary := summarizeNodeContent(p)
+		whatItDoes := inferNodePurpose(p, summary)
+
 		nodeData := map[string]interface{}{
 			"id":            nodeID,
 			"name":          name,
 			"document-type": "markdown",
+			"summary":       summary,
+			"what-it-does":  whatItDoes,
+		}
+
+		if docType, ok := p["document-type"].(string); ok && strings.TrimSpace(docType) != "" {
+			nodeData["document-type"] = docType
+		}
+		if fileType, ok := p["type"].(string); ok && strings.TrimSpace(fileType) != "" {
+			nodeData["file-type"] = fileType
 		}
 
 		// ⚖️ Injeta métricas do Cérebro Relacional (se disponível)
@@ -245,15 +298,50 @@ func (a *App) SyncAllNodes() {
 			nodeData["pagerank"] = a.GEngine.GetRank(nodeID)
 			nodeData["community"] = a.GEngine.GetCommunity(nodeID)
 			nodeData["betweenness"] = a.GEngine.GetBetweenness(nodeID)
-			
+
 			h, auth := a.GEngine.GetHITS(nodeID)
 			nodeData["hub"] = h
 			nodeData["authority"] = auth
 		}
 
-		batch = append(batch, nodeData)
+		addNode(nodeData)
 	}
-	
+
+	for _, p := range memoryPoints {
+		subject, _ := p["subject"].(string)
+		object, _ := p["object"].(string)
+		sessionID, _ := p["session_id"].(string)
+		predicate, _ := p["predicate"].(string)
+
+		if subject != "" {
+			addNode(map[string]interface{}{
+				"id":            subject,
+				"name":          subject,
+				"document-type": "memory",
+				"session-id":    sessionID,
+				"summary":       fmt.Sprintf("Fato semântico em memória: %s %s %s", subject, predicate, object),
+				"what-it-does":  "Conecta fatos aprendidos no chat para dar contexto em respostas futuras.",
+			})
+		}
+		if object != "" {
+			addNode(map[string]interface{}{
+				"id":            object,
+				"name":          object,
+				"document-type": "memory",
+				"session-id":    sessionID,
+				"summary":       fmt.Sprintf("Entidade relacionada ao fato: %s %s %s", subject, predicate, object),
+				"what-it-does":  "Serve como nó de ligação da memória semântica no grafo.",
+			})
+		}
+		if subject != "" && object != "" {
+			runtime.EventsEmit(a.ctx, "graph:edge", map[string]interface{}{
+				"source": subject,
+				"target": object,
+				"weight": 1,
+			})
+		}
+	}
+
 	// Grava o Cache novinho em folha
 	a.saveTopologyCache(batch)
 
@@ -267,6 +355,79 @@ func (a *App) SyncAllNodes() {
 		stats, _ := a.AnalyzeGraphHealth()
 		runtime.EventsEmit(a.ctx, "graph:health:update", stats)
 	}()
+}
+
+func summarizeNodeContent(payload map[string]interface{}) string {
+	if s, ok := payload["summary"].(string); ok && strings.TrimSpace(s) != "" {
+		return clampSummary(s, 220)
+	}
+
+	content, _ := payload["content"].(string)
+	if strings.TrimSpace(content) == "" {
+		return "Sem resumo disponível ainda. Faça uma sincronização completa para enriquecer o contexto."
+	}
+
+	clean := strings.ReplaceAll(content, "\n", " ")
+	clean = strings.ReplaceAll(clean, "\r", " ")
+	clean = strings.Join(strings.Fields(clean), " ")
+	if clean == "" {
+		return "Sem resumo disponível ainda."
+	}
+
+	if idx := strings.Index(clean, ". "); idx > 40 {
+		return clampSummary(clean[:idx+1], 220)
+	}
+
+	return clampSummary(clean, 220)
+}
+
+func inferNodePurpose(payload map[string]interface{}, summary string) string {
+	// Usa o campo armazenado se disponível (gerado individualmente por conteúdo do arquivo)
+	if w, ok := payload["what-it-does"].(string); ok && strings.TrimSpace(w) != "" {
+		return clampSummary(w, 220)
+	}
+
+	docType, _ := payload["document-type"].(string)
+	fileType, _ := payload["type"].(string)
+
+	switch strings.ToLower(strings.TrimSpace(docType)) {
+	case "memory":
+		return "Representa conhecimento consolidado do chat para melhorar respostas futuras."
+	case "code-file":
+		return "Arquivo de código indexado para responder perguntas técnicas com contexto real do projeto."
+	case "project-file":
+		return "Documento de repositório satélite usado pelo RAG radial para navegação contextual."
+	case "source":
+		return "Fonte multimodal (imagem/PDF) convertida em contexto pesquisável no RAG."
+	case "markdown":
+		return "Nota base de conhecimento usada para recuperação semântica e expansão por grafo."
+	}
+
+	switch strings.ToLower(strings.TrimSpace(fileType)) {
+	case ".go", ".js", ".ts", ".tsx", ".py", ".html", ".css":
+		return "Trecho de código indexado para explicar implementação e dependências."
+	case ".md":
+		return "Nota documental que alimenta o contexto semântico das respostas."
+	case ".pdf", ".png", ".jpg", ".jpeg":
+		return "Fonte multimodal analisada para extrair descrição e fatos estruturados."
+	}
+
+	if strings.TrimSpace(summary) != "" {
+		return "Nó de conhecimento disponível para busca semântica e conexão contextual."
+	}
+
+	return "Nó semântico do grafo utilizado pelo RAG para responder com contexto."
+}
+
+func clampSummary(text string, limit int) string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return ""
+	}
+	if len(text) <= limit {
+		return text
+	}
+	return strings.TrimSpace(text[:limit-3]) + "..."
 }
 
 // RunVectorDiagnostic executa um Stress Test pontual para validar Gemini + Qdrant Cloud.

@@ -29,7 +29,31 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   const activeAgent = ref(null);
   const activeProfile = ref(null); // 🎭 Perfil de Agente (Doc-Master, etc) - Começa limpo
   const currentStatus = ref(""); // 📡 Status de Ação em Tempo Real
+  const currentStatusKind = ref('status');
+  const statusTimeline = ref([]); // 🪟 Janela de atividade (histórico curto)
+  const statusFilter = ref('all');
   const runningSessions = ref([]);
+  const lastTurnCompleteByAgent = ref({});
+  const listenersInitialized = ref(false);
+  const awaitingTurnByAgent = ref({});
+
+  const pushStatus = (text, kind = 'status') => {
+    const line = String(text || '').trim();
+    if (!line) return;
+    statusTimeline.value.push({
+      id: Date.now() + Math.random(),
+      text: line,
+      kind,
+      at: new Date().toLocaleTimeString('pt-BR', { hour12: false })
+    });
+    if (statusTimeline.value.length > 40) {
+      statusTimeline.value = statusTimeline.value.slice(-40);
+    }
+  };
+
+  const clearStatusTimeline = () => {
+    statusTimeline.value = [];
+  };
   
   // Estado para histórico e checkpoints (Sinfonias)
   const sessions = ref([]);
@@ -64,6 +88,12 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   };
 
   const initListeners = () => {
+    if (listenersInitialized.value) {
+      console.log('[Store] Listeners já inicializados. Ignorando nova inscrição para evitar duplicidade.');
+      return;
+    }
+    listenersInitialized.value = true;
+
     // 0. Sinal de Início do Motor (Recuperação de Sessão)
     EventsOn('agent:starting', (agent) => {
       console.log("[Store] Motor ligando para:", agent);
@@ -81,6 +111,13 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
       const content = log.content || log.Content || "";
       const source = log.source || log.Source || "Gemini";
       const type = log.type || log.Type || "message";
+
+      if (type === 'thought') {
+        pushStatus(content, 'think');
+      }
+      if (source === 'ERROR') {
+        pushStatus(content, 'error');
+      }
 
       // TRATAMENTO DE SISTEMA
       if (source === 'SYSTEM' || source === 'ERROR' || source === 'CRAWLER') {
@@ -164,12 +201,27 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     // 📡 Status de Atividade: Mostra o que a IA está fazendo AGORA (ex: lendo arquivo)
     EventsOn('agent:status', (s) => {
       console.log("[Store] 🛠️ Status da IA:", s);
+      const actionRaw = s.action || s.Action || "";
       currentStatus.value = {
         agent: s.agent || s.Agent || "",
         tool: s.tool || s.Tool || "",
-        action: s.action || s.Action || ""
+        action: actionRaw
       };
-      isThinking.value = true;
+      currentStatusKind.value = s.kind || 'status';
+      const actionStr = String(actionRaw || 'Atualizando estado do agente...');
+      let kind = s.kind || 'status';
+      if (kind === 'status') {
+        const lowered = actionStr.toLowerCase();
+        if (lowered.includes('ferramenta') || lowered.includes('tool')) kind = 'tool';
+        if (lowered.includes('comando') || lowered.includes('cmd ') || lowered.includes('powershell') || lowered.includes('bash')) kind = 'command';
+        if (lowered.includes('erro') || lowered.includes('falha')) kind = 'error';
+        if (lowered.includes('memória') || lowered.includes('memoria') || lowered.includes('grafo') || lowered.includes('contexto')) kind = 'memory';
+      }
+      pushStatus(actionStr, kind);
+      // Status de memória é pós-processamento e não deve religar o spinner principal da resposta.
+      if (kind !== 'memory') {
+        isThinking.value = true;
+      }
     });
 
     // 🧶 WEAVER: Sinalização de Tecelagem de Conhecimento
@@ -184,11 +236,32 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     });
 
     // 🚀 Sincronização de Sinfonias (Checkpoints): Quando o turno termina, atualizamos a lista lateral e consolidamos a memória
-    window.runtime.EventsOn("agent:turn_complete", async (agent) => {
+    EventsOn('agent:turn_complete', async (agent) => {
+      const key = String(agent || 'unknown').toLowerCase();
+
+      // Só processa 1 encerramento por mensagem enviada para evitar loops de pós-processamento.
+      if (!awaitingTurnByAgent.value[key]) {
+        return;
+      }
+
+      const now = Date.now();
+      const last = lastTurnCompleteByAgent.value[key] || 0;
+      if (now-last < 800) {
+        return;
+      }
+      lastTurnCompleteByAgent.value[key] = now;
+      awaitingTurnByAgent.value[key] = false;
+
       console.log(`[Store] Turno concluído para ${agent}. Atualizando Sinfonias e Consolidando Memória...`);
       stopSafetyTimeout(); // 🛑 Turno finalizado, para o cronômetro
       isThinking.value = false;
+      if (currentStatus.value && currentStatus.value.action) {
+        pushStatus(`Concluído: ${currentStatus.value.action}`, 'status');
+      } else if (typeof currentStatus.value === 'string' && currentStatus.value) {
+        pushStatus(`Concluído: ${currentStatus.value}`, 'status');
+      }
       currentStatus.value = null; // 🧹 Limpa o status ao terminar
+      currentStatusKind.value = 'status';
 
       // Encerra a digitação da mensagem viva
       if (messages.value.length > 0) {
@@ -198,7 +271,6 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
          }
          messages.value = [...messages.value];
       }
-
       fetchSessions(agent);
 
       // Consolidação de Conhecimento RAG em tempo real
@@ -207,7 +279,14 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
       
       if (lastMessages) {
         console.log("[Store] Disparando ConsolidateChatKnowledge para sessão:", sessionID);
-        await safeCall('main', 'ConsolidateChatKnowledge', sessionID, lastMessages);
+        try {
+          await safeCall('main', 'ConsolidateChatKnowledge', sessionID, lastMessages);
+        } finally {
+          // Garante encerramento visual do ciclo após pós-processamento de memória.
+          isThinking.value = false;
+          currentStatus.value = "";
+          currentStatusKind.value = 'status';
+        }
       }
     });
 
@@ -230,12 +309,15 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     messages.value.push({ role: 'user', text: prompt });
     isThinking.value = true;
     activeAgent.value = agent;
+    const key = String(agent || 'unknown').toLowerCase();
+    awaitingTurnByAgent.value[key] = true;
 
     try {
       await safeCall('main', 'AskAgent', agent, prompt);
     } catch (err) {
       messages.value.push({ role: 'assistant', text: `❌ Erro: ${err}`, mode: 'system' });
       isThinking.value = false;
+      awaitingTurnByAgent.value[key] = false;
     }
   };
 
@@ -325,6 +407,8 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     
     isThinking.value = true; // Feedback visual imediato
     resetSafetyTimeout(); // Inicia o contador de silêncio
+    const key = String(agent || 'unknown').toLowerCase();
+    awaitingTurnByAgent.value[key] = true;
 
     try {
       // 🛠️ SINCRONIZAÇÃO CRÍTICA: Agora enviamos 3 argumentos conforme o novo contrato Go
@@ -334,6 +418,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
       console.error('[Store] Erro ao enviar input:', err);
       isThinking.value = false;
       stopSafetyTimeout();
+      awaitingTurnByAgent.value[key] = false;
     }
   };
 
@@ -374,8 +459,8 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
 
   return {
     messages, isThinking, isTerminalMode, isWeaving, activeAgent, runningSessions, pendingReview,
-    sessions, currentACPID, isSidebarOpen, currentStatus, isNavigating,
+    sessions, currentACPID, isSidebarOpen, currentStatus, isNavigating, currentStatusKind, statusTimeline, statusFilter,
     initListeners, ask, startSession, sendInput, submitReview, switchAgent, stopSession,
-    fetchSessions, loadSession, newSession, toggleSidebar
+    fetchSessions, loadSession, newSession, toggleSidebar, clearStatusTimeline
   };
 });

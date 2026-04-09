@@ -8,13 +8,14 @@ import (
 
 	"Lumaestro/internal/config"
 	"Lumaestro/internal/utils"
+
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // HandleNotification processa notificações assíncronas do processo ACP (streaming, progresso, etc).
 func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage) {
 	// fmt.Printf("<< [ACP RECV Notify] %s: %s\n", method, string(params))
-	
+
 	// 1. Notificações de Progresso
 	if method == "agent/progress" || method == "agentProgress" {
 		var p struct {
@@ -48,16 +49,18 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 		if json.Unmarshal(params, &p) == nil {
 			update := p.Update
 			isBg := strings.Contains(h.Session.ID, "-background-")
-			
+
 			if update.SessionUpdate == "agent_message_chunk" || update.SessionUpdate == "message_chunk" || update.SessionUpdate == "content_chunk" {
 				txt := update.Content.Text
-				if txt == "" { txt = update.Text }
-				
+				if txt == "" {
+					txt = update.Text
+				}
+
 				if txt != "" && !isBg {
 					if !h.Session.isLoggingMessage {
 						utils.LogInfo("O Maestro está orquestrando a resposta...", "💬")
 						h.Session.isLoggingMessage = true
-						h.Session.isLoggingThought = false 
+						h.Session.isLoggingThought = false
 					}
 					h.Executor.LogChan <- ExecutionLog{
 						Source:  h.Session.AgentName,
@@ -67,13 +70,15 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 				}
 			} else if update.SessionUpdate == "agent_thought_chunk" || update.SessionUpdate == "thought_chunk" {
 				txt := update.Content.Text
-				if txt == "" { txt = update.Text }
-				
+				if txt == "" {
+					txt = update.Text
+				}
+
 				if txt != "" && !isBg {
 					if !h.Session.isLoggingThought {
 						utils.LogInfo(fmt.Sprintf("Processando raciocínio: %s...", strings.ToUpper(h.Session.AgentName)), "🧠")
 						h.Session.isLoggingThought = true
-						h.Session.isLoggingMessage = false 
+						h.Session.isLoggingMessage = false
 					}
 					h.Executor.LogChan <- ExecutionLog{
 						Source:  h.Session.AgentName,
@@ -85,6 +90,10 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 				h.Session.isLoggingThought = false
 				h.Session.isLoggingMessage = false
 				h.reportTurnCost()
+
+				if !isBg {
+					runtime.EventsEmit(h.Executor.Ctx, "agent:turn_complete", h.Session.AgentName)
+				}
 
 				h.Executor.turnMu.Lock()
 				if ch, ok := h.Executor.turnChannels[h.Session.ID]; ok {
@@ -110,10 +119,17 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 				// 📡 TRANSPARÊNCIA: Avisa o Frontend qual ferramenta está sendo preparada
 				// Gemini v0.36 envia tool_call via session/update
 				if !isBg {
+					action := "Executando ferramenta de análise..."
+					if strings.TrimSpace(update.Content.Text) != "" {
+						action = update.Content.Text
+					} else if strings.TrimSpace(update.Text) != "" {
+						action = update.Text
+					}
 					runtime.EventsEmit(h.Executor.Ctx, "agent:status", map[string]string{
 						"agent":  h.Session.AgentName,
 						"tool":   "thinking",
-						"action": "Preparando execução de ferramenta...",
+						"action": action,
+						"kind":   "tool",
 					})
 				}
 			}
@@ -146,7 +162,9 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 
 	switch normMethod {
 	case "readfile", "read_file", "read_text_file":
-		var p struct { Path string `json:"path"` }
+		var p struct {
+			Path string `json:"path"`
+		}
 		if json.Unmarshal(params, &p) == nil {
 			runtime.EventsEmit(h.Executor.Ctx, "agent:status", map[string]string{
 				"agent":  h.Session.AgentName,
@@ -156,9 +174,14 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			cfg, _ := config.Load()
 			if cfg.Security.AllowRead {
 				content, err := h.Executor.Proxy.ReadFile(p.Path)
-				if err == nil { result = map[string]string{"content": content}
-				} else { rpcErr = &RPCError{Code: -32000, Message: err.Error()} }
-			} else { rpcErr = &RPCError{Code: 403, Message: "🛡️ LEITURA BLOQUEADA"} }
+				if err == nil {
+					result = map[string]string{"content": content}
+				} else {
+					rpcErr = &RPCError{Code: -32000, Message: err.Error()}
+				}
+			} else {
+				rpcErr = &RPCError{Code: 403, Message: "🛡️ LEITURA BLOQUEADA"}
+			}
 		}
 
 	case "writefile", "write_file", "write_text_file", "write_file_content":
@@ -174,28 +197,51 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			})
 			cfg, _ := config.Load()
 			fileExists := false
-			if _, err := os.Stat(p.Path); err == nil { fileExists = true }
+			if _, err := os.Stat(p.Path); err == nil {
+				fileExists = true
+			}
 
 			canAct := false
-			if fileExists { canAct = cfg.Security.AllowWrite } else { canAct = cfg.Security.AllowCreate }
+			if fileExists {
+				canAct = cfg.Security.AllowWrite
+			} else {
+				canAct = cfg.Security.AllowCreate
+			}
 
 			if canAct {
 				needsReview := !cfg.Security.FullMachineAccess || strings.HasSuffix(p.Path, ".go") || strings.HasSuffix(p.Path, ".json")
 				if needsReview {
-					actionLabel := "ESCREVER ARQUIVO"; if !fileExists { actionLabel = "CRIAR ARQUIVO" }
+					actionLabel := "ESCREVER ARQUIVO"
+					if !fileExists {
+						actionLabel = "CRIAR ARQUIVO"
+					}
 					if h.Executor.RequestReview(reviewID, actionLabel, p.Path) {
 						err := h.Executor.Proxy.WriteFile(p.Path, p.Content)
-						if err == nil { result = map[string]bool{"success": true} } else { rpcErr = &RPCError{Code: -32001, Message: err.Error()} }
-					} else { rpcErr = &RPCError{Code: 403, Message: "Ação recusada."} }
+						if err == nil {
+							result = map[string]bool{"success": true}
+						} else {
+							rpcErr = &RPCError{Code: -32001, Message: err.Error()}
+						}
+					} else {
+						rpcErr = &RPCError{Code: 403, Message: "Ação recusada."}
+					}
 				} else {
 					err := h.Executor.Proxy.WriteFile(p.Path, p.Content)
-					if err == nil { result = map[string]bool{"success": true} } else { rpcErr = &RPCError{Code: -32001, Message: err.Error()} }
+					if err == nil {
+						result = map[string]bool{"success": true}
+					} else {
+						rpcErr = &RPCError{Code: -32001, Message: err.Error()}
+					}
 				}
-			} else { rpcErr = &RPCError{Code: 403, Message: "🛡️ ESCRITA BLOQUEADA"} }
+			} else {
+				rpcErr = &RPCError{Code: 403, Message: "🛡️ ESCRITA BLOQUEADA"}
+			}
 		}
 
 	case "deletefile", "delete_file", "remove":
-		var p struct { Path string `json:"path"` }
+		var p struct {
+			Path string `json:"path"`
+		}
 		if json.Unmarshal(params, &p) == nil {
 			runtime.EventsEmit(h.Executor.Ctx, "agent:status", map[string]string{
 				"agent":  h.Session.AgentName,
@@ -206,13 +252,24 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			if cfg.Security.AllowDelete {
 				if h.Executor.RequestReview(reviewID, "DELETAR ARQUIVO", p.Path) {
 					err := h.Executor.Proxy.DeleteFile(p.Path)
-					if err == nil { result = map[string]bool{"success": true} } else { rpcErr = &RPCError{Code: -32002, Message: err.Error()} }
-				} else { rpcErr = &RPCError{Code: 403, Message: "Recusado."} }
-			} else { rpcErr = &RPCError{Code: 403, Message: "🛡️ DELEÇÃO BLOQUEADA"} }
+					if err == nil {
+						result = map[string]bool{"success": true}
+					} else {
+						rpcErr = &RPCError{Code: -32002, Message: err.Error()}
+					}
+				} else {
+					rpcErr = &RPCError{Code: 403, Message: "Recusado."}
+				}
+			} else {
+				rpcErr = &RPCError{Code: 403, Message: "🛡️ DELEÇÃO BLOQUEADA"}
+			}
 		}
 
 	case "movefile", "move_file":
-		var p struct { OldPath string `json:"oldPath"`; NewPath string `json:"newPath"` }
+		var p struct {
+			OldPath string `json:"oldPath"`
+			NewPath string `json:"newPath"`
+		}
 		if json.Unmarshal(params, &p) == nil {
 			runtime.EventsEmit(h.Executor.Ctx, "agent:status", map[string]string{
 				"agent":  h.Session.AgentName,
@@ -224,13 +281,24 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 				details := fmt.Sprintf("%s -> %s", p.OldPath, p.NewPath)
 				if h.Executor.RequestReview(reviewID, "MOVER/RENOMEAR", details) {
 					err := h.Executor.Proxy.MoveFile(p.OldPath, p.NewPath)
-					if err == nil { result = map[string]bool{"success": true} } else { rpcErr = &RPCError{Code: -32003, Message: err.Error()} }
-				} else { rpcErr = &RPCError{Code: 403, Message: "Recusado."} }
-			} else { rpcErr = &RPCError{Code: 403, Message: "🛡️ MOVIMENTAÇÃO BLOQUEADA"} }
+					if err == nil {
+						result = map[string]bool{"success": true}
+					} else {
+						rpcErr = &RPCError{Code: -32003, Message: err.Error()}
+					}
+				} else {
+					rpcErr = &RPCError{Code: 403, Message: "Recusado."}
+				}
+			} else {
+				rpcErr = &RPCError{Code: 403, Message: "🛡️ MOVIMENTAÇÃO BLOQUEADA"}
+			}
 		}
 
 	case "runcommand", "run_command", "run_shell_command", "execute_command":
-		var p struct { Command string `json:"command"`; Args []string `json:"args"` }
+		var p struct {
+			Command string   `json:"command"`
+			Args    []string `json:"args"`
+		}
 		if json.Unmarshal(params, &p) == nil {
 			runtime.EventsEmit(h.Executor.Ctx, "agent:status", map[string]string{
 				"agent":  h.Session.AgentName,
@@ -240,28 +308,48 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			cfg, _ := config.Load()
 			if cfg.Security.AllowRunCommands {
 				details := fmt.Sprintf("%s %s", p.Command, strings.Join(p.Args, " "))
+				runtime.EventsEmit(h.Executor.Ctx, "agent:status", map[string]string{
+					"agent":  h.Session.AgentName,
+					"action": "Executando comando: " + details,
+					"kind":   "command",
+				})
+				h.Executor.LogChan <- ExecutionLog{Source: h.Session.AgentName, Content: "🧰 " + details, Type: "thought"}
 				if h.Executor.RequestReview(reviewID, "EXECUTAR COMANDO", details) {
 					output, err := h.Executor.Proxy.RunCommand(p.Command, p.Args)
 					if err == nil {
-						result = map[string]interface{}{ "content": []map[string]interface{}{ {"type": "text", "text": output}, }, }
+						result = map[string]interface{}{"content": []map[string]interface{}{{"type": "text", "text": output}}}
+						out := strings.TrimSpace(output)
+						if len(out) > 300 {
+							out = out[:300] + "..."
+						}
+						h.Executor.LogChan <- ExecutionLog{Source: h.Session.AgentName, Content: "✅ Comando concluído: " + out, Type: "thought"}
 						h.emitReward(details, nil)
 					} else {
 						rpcErr = &RPCError{Code: -32004, Message: err.Error()}
+						h.Executor.LogChan <- ExecutionLog{Source: "ERROR", Content: "❌ Erro no comando: " + err.Error()}
 						h.emitReward(details, err)
 					}
-				} else { rpcErr = &RPCError{Code: 403, Message: "Recusado."} }
-			} else { rpcErr = &RPCError{Code: 403, Message: "🛡️ EXECUÇÃO BLOQUEADA"} }
+				} else {
+					rpcErr = &RPCError{Code: 403, Message: "Recusado."}
+				}
+			} else {
+				rpcErr = &RPCError{Code: 403, Message: "🛡️ EXECUÇÃO BLOQUEADA"}
+			}
 		}
 
 	default:
 		if method == "session/request_permission" {
-			result = map[string]interface{}{ "permitted": true }
+			result = map[string]interface{}{"permitted": true}
 		} else if strings.HasPrefix(method, "Lumaestro/") {
 			toolName := strings.TrimPrefix(method, "Lumaestro/")
 			res, err := h.executeNativeTool(toolName, params)
-			if err == nil { result = res } else { rpcErr = &RPCError{Code: -32005, Message: err.Error()} }
+			if err == nil {
+				result = res
+			} else {
+				rpcErr = &RPCError{Code: -32005, Message: err.Error()}
+			}
 		} else {
-			rpcErr = &RPCError{ Code: -32601, Message: "🛡️ AÇÃO BLOQUEADA" }
+			rpcErr = &RPCError{Code: -32601, Message: "🛡️ AÇÃO BLOQUEADA"}
 		}
 	}
 
@@ -280,7 +368,10 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 // HandleResponse processa as respostas diretas às requisições feitas pelo executor.
 func (h *ACPRpcHandler) HandleResponse(id interface{}, result json.RawMessage, rpcErr *RPCError) {
 	// fmt.Printf("<< [ACP RECV Resp] ID %v: %s\n", id, string(result))
-	idFloat, ok := id.(float64); if !ok { return }
+	idFloat, ok := id.(float64)
+	if !ok {
+		return
+	}
 	idInt := int(idFloat)
 
 	h.Executor.requestsMu.Lock()
@@ -288,7 +379,11 @@ func (h *ACPRpcHandler) HandleResponse(id interface{}, result json.RawMessage, r
 	h.Executor.requestsMu.Unlock()
 
 	if found {
-		ch <- JSONRPCMessage{ID: id, Result: result, Error:  rpcErr}
+		ch <- JSONRPCMessage{ID: id, Result: result, Error: rpcErr}
+		if idInt > 3 && strings.EqualFold(h.Session.AgentName, "lmstudio") && !strings.Contains(h.Session.ID, "-background-") {
+			// Fallback para LM Studio: alguns fluxos podem não publicar session/update final.
+			runtime.EventsEmit(h.Executor.Ctx, "agent:turn_complete", h.Session.AgentName)
+		}
 		return
 	}
 
@@ -315,20 +410,28 @@ func (h *ACPRpcHandler) HandleResponse(id interface{}, result json.RawMessage, r
 			h.Session.ACPSessID = sessID
 		}
 	}
-	
+
 	if idInt <= 3 {
-		select { case h.Session.initDone <- struct{}{}: default: }
+		select {
+		case h.Session.initDone <- struct{}{}:
+		default:
+		}
 		return
 	}
 
-	select { case h.Session.initDone <- struct{}{}: default: }
+	select {
+	case h.Session.initDone <- struct{}{}:
+	default:
+	}
 	if !strings.Contains(h.Session.ID, "-background-") {
 		runtime.EventsEmit(h.Executor.Ctx, "agent:turn_complete", h.Session.AgentName)
 	}
 }
 
 func (h *ACPRpcHandler) wrapResult(res interface{}) json.RawMessage {
-	if res == nil { return nil }
+	if res == nil {
+		return nil
+	}
 	b, _ := json.Marshal(res)
 	return b
 }

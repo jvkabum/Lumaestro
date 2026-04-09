@@ -2,18 +2,37 @@ package acp
 
 import (
 	"fmt"
+	"runtime"
 	"strings"
 )
 
 // AgentProfile define a identidade e o comportamento de um agente específico.
 type AgentProfile struct {
-	Name        string
+	Name         string
 	SystemPrompt string
 }
 
 const (
 	LanguageDirective = "[SYSTEM DIRECTIVE: Você DEVE pensar, raciocinar e responder exclusivamente em Português do Brasil. Isso se aplica ao seu 'Thought Channel' e à sua resposta final. NÃO use inglês para raciocínio interno.]"
 )
+
+func buildEnvironmentDirective() string {
+	osName := strings.ToLower(runtime.GOOS)
+	if osName == "windows" {
+		return "[AMBIENTE: Sistema operacional Windows. Priorize comandos e caminhos Windows (PowerShell/cmd), use barras invertidas em paths quando apropriado e evite sintaxe exclusiva de Linux/macOS.]"
+	}
+	if osName == "darwin" {
+		return "[AMBIENTE: Sistema operacional macOS. Priorize sintaxe POSIX/zsh e comandos compatíveis com macOS.]"
+	}
+	return "[AMBIENTE: Sistema operacional Linux. Priorize sintaxe POSIX/bash e comandos compatíveis com Linux.]"
+}
+
+func buildAutonomyDirective(autonomous bool) string {
+	if autonomous {
+		return "[AUTONOMIA: Modo autônomo ATIVO. Execute as ações necessárias sem pedir confirmação ao usuário para operações permitidas. Só peça confirmação quando houver bloqueio explícito de segurança do sistema.]"
+	}
+	return "[AUTONOMIA: Modo autônomo INATIVO. Quando uma ação impactar arquivos/comandos críticos, solicite confirmação antes de prosseguir.]"
+}
 
 var (
 	ProfileCoder = AgentProfile{
@@ -66,11 +85,13 @@ func NewPromptBuilder() *PromptBuilder {
 }
 
 // Build gera o prompt final injetando contexto e histórico.
-func (b *PromptBuilder) Build(profile AgentProfile, context string, history []string, goal string) string {
+func (b *PromptBuilder) Build(profile AgentProfile, context string, history []string, goal string, autonomous bool) string {
 	var sb strings.Builder
 
 	// 1. Identidade e Idioma do Sistema
 	sb.WriteString(fmt.Sprintf("%s\n\n", LanguageDirective))
+	sb.WriteString(fmt.Sprintf("%s\n\n", buildEnvironmentDirective()))
+	sb.WriteString(fmt.Sprintf("%s\n\n", buildAutonomyDirective(autonomous)))
 	sb.WriteString(fmt.Sprintf("INSTRUÇÕES DE SISTEMA:\n%s\n\n", profile.SystemPrompt))
 	sb.WriteString(fmt.Sprintf("%s\n\n", GlobalLightningDirective))
 

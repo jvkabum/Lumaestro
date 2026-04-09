@@ -64,7 +64,9 @@ func (a *App) SaveConfig(cfg config.Config) string {
 		return "Erro ao salvar: " + err.Error()
 	}
 
-	// Reinicializa os motores com a nova configuração.
+	// Anula serviços obsoletos e reinicializa com a nova configuração.
+	a.config = &cfg
+	a.resetServicesForReload()
 	go a.initServices()
 	return "Configurações salvas e serviços reiniciados!"
 }

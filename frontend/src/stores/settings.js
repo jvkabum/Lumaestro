@@ -29,7 +29,25 @@ export const useSettingsStore = defineStore('settings', () => {
       allow_move: false,
       allow_run_commands: false,
       full_machine_access: false
-    }
+    },
+    // LM Studio (Motor Local)
+    lmstudio_url: 'http://localhost:1234',
+    lmstudio_model: '',
+    lmstudio_enabled: false,
+
+    // Pool de motores ativos (blend entre provedores)
+    blend_active_models: true,
+    active_model_providers: ['gemini', 'claude', 'lmstudio'],
+    primary_provider: 'gemini',
+
+    // Motor de Embeddings (vetores semânticos para Qdrant)
+    embeddings_provider: 'gemini',      // 'gemini' ou 'lmstudio'
+    embeddings_model: '',               // Ex: 'nomic-embed-text', 'text-embedding-nomic-embed-text-v1.5'
+    embedding_dimension: 3072,         // 3072=Gemini, 768=nomic, 1536=text-embedding-ada-002
+
+    // Motor de RAG/Ontologia (geração textual para triplas e chat semântico)
+    rag_provider: 'gemini',            // 'gemini', 'lmstudio' ou 'claude'
+    rag_model: '',                     // Ex: 'google/gemma-4-26b-a4b', 'claude-3-5-sonnet-latest'
   })
 
   // ── Status de Ferramentas ──
@@ -78,6 +96,12 @@ export const useSettingsStore = defineStore('settings', () => {
   const includeCodeToggle = ref(false)
   const repoStatusMsg = ref('')
 
+  // ── LM Studio ──
+  const lmModels = ref([])
+  const lmTesting = ref(false)
+  const lmTestResult = ref(null)
+  const lmLoadingModels = ref(false)
+
   // ── Computed ──
   const geminiKeyCount = computed(() => {
     const raw = (config.value.gemini_api_key || '').trim()
@@ -95,6 +119,7 @@ export const useSettingsStore = defineStore('settings', () => {
     mcpName, mcpCommand, mcpServers, showMcpList,
     newAccName,
     repoPathInput, coreNodeInput, includeCodeToggle, repoStatusMsg,
+    lmModels, lmTesting, lmTestResult, lmLoadingModels,
     geminiKeyCount
   }
 })

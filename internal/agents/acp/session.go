@@ -13,6 +13,7 @@ import (
 
 	"Lumaestro/internal/config"
 	"Lumaestro/internal/db"
+
 	"github.com/google/uuid"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -32,10 +33,15 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 	}
 
 	cmdCtx, cancel := context.WithCancel(ctx)
+	cfgLoaded, _ := config.Load()
 
 	// Resolver binário de forma robusta
 	binaryPath := agent
 	args := []string{"--acp", "--approval-mode=yolo"}
+	if agent == "lmstudio" {
+		binaryPath = "go"
+		args = []string{"run", "./cmd/lmstudio-acp"}
+	}
 
 	// 1. Tenta binário global (LookPath)
 	if globalPath, errGL := exec.LookPath(binaryPath); errGL == nil {
@@ -73,7 +79,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		}
 	}
 
-	if absPath, errAbs := filepath.Abs(binaryPath); errAbs == nil && binaryPath != "node" {
+	if absPath, errAbs := filepath.Abs(binaryPath); errAbs == nil && binaryPath != "node" && binaryPath != "go" {
 		binaryPath = absPath
 	}
 
@@ -84,13 +90,13 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 	cmd.Env = os.Environ()
 
 	cwd, _ := os.Getwd()
-	sessionHome := cwd 
+	sessionHome := cwd
 
 	if _, err := os.Stat(filepath.Join(cwd, ".gemini")); err == nil {
 		fmt.Println("[ACP] 📂 Pasta .gemini local detectada! Forçando modo Project-Specific.")
 		sessionHome = cwd
-	} else if cfg, errCfg := config.Load(); errCfg == nil {
-		for _, acc := range cfg.GeminiAccounts {
+	} else if cfgLoaded != nil {
+		for _, acc := range cfgLoaded.GeminiAccounts {
 			if acc.Active && acc.HomeDir != "" {
 				sessionHome = acc.HomeDir
 				break
@@ -98,15 +104,19 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		}
 	}
 	cmd.Env = append(cmd.Env, "GEMINI_CLI_HOME="+sessionHome)
+	if agent == "lmstudio" && cfgLoaded != nil {
+		cmd.Env = append(cmd.Env, "LUMAESTRO_LMSTUDIO_URL="+cfgLoaded.LMStudioURL)
+		cmd.Env = append(cmd.Env, "LUMAESTRO_LMSTUDIO_MODEL="+cfgLoaded.LMStudioModel)
+	}
 
 	cmd.Env = append(cmd.Env, "GEMINI_TELEMETRY_ENABLED=true")
 	cmd.Env = append(cmd.Env, "GEMINI_TELEMETRY_TARGET=local")
 	diagLog := filepath.Join(sessionHome, "gemini-telemetry.json")
 	cmd.Env = append(cmd.Env, "GEMINI_TELEMETRY_OUTFILE="+diagLog)
 
-	if cfg, errCfg := config.Load(); errCfg == nil {
-		if agent == "claude" && cfg.ClaudeAPIKey != "" {
-			cmd.Env = append(cmd.Env, "ANTHROPIC_API_KEY="+cfg.ClaudeAPIKey)
+	if cfgLoaded != nil {
+		if agent == "claude" && cfgLoaded.ClaudeAPIKey != "" {
+			cmd.Env = append(cmd.Env, "ANTHROPIC_API_KEY="+cfgLoaded.ClaudeAPIKey)
 		}
 	}
 
@@ -181,7 +191,9 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 	}
 
 	methodId := "oauth-personal"
-	if cfg, errCfg := config.Load(); errCfg == nil && cfg.UseGeminiAPIKey {
+	if agent == "lmstudio" {
+		methodId = "lmstudio-local"
+	} else if cfgLoaded != nil && cfgLoaded.UseGeminiAPIKey {
 		methodId = "gemini-api-key"
 	}
 
@@ -216,7 +228,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 				fmt.Printf("[ACP] Sessão anterior (%s) restaurada com sucesso!\n", targetID)
 			} else {
 				fmt.Printf("[ACP] Erro ao carregar sessão anterior (tentando nova): %v\n", errLoad)
-				targetID = "" 
+				targetID = ""
 			}
 		}
 
@@ -265,7 +277,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 
 	go func() {
 		err := cmd.Wait()
-		
+
 		e.Mu.Lock()
 		currentSession, isCurrentlyActive := e.ActiveSessions[sessionID]
 		stillActive := isCurrentlyActive && currentSession.Cmd == cmd
@@ -286,7 +298,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		if stillActive {
 			fmt.Printf("[ACP] Sessão %s encerrada do mapa.\n", agent)
 			runtime.EventsEmit(e.Ctx, "terminal:closed", agent)
-			
+
 			e.LogChan <- ExecutionLog{
 				Source:  "SYSTEM",
 				Content: "Sessão ACP " + agent + " encerrada.",
@@ -319,8 +331,8 @@ func (e *ACPExecutor) StopSession(sessionID string) error {
 func (e *ACPExecutor) ListSessions(s *ACPSession) ([]SessionInfo, error) {
 	// 1. Determinar o diretório de base (.gemini)
 	userHome, _ := os.UserHomeDir()
-	sessionHome := filepath.Join(userHome, ".gemini") 
-	
+	sessionHome := filepath.Join(userHome, ".gemini")
+
 	cwd, _ := os.Getwd()
 	if cfg, errCfg := config.Load(); errCfg == nil {
 		for _, acc := range cfg.GeminiAccounts {
@@ -334,7 +346,7 @@ func (e *ACPExecutor) ListSessions(s *ACPSession) ([]SessionInfo, error) {
 			sessionHome = filepath.Join(cwd, ".gemini")
 		}
 	}
-	
+
 	projectID := "lumaestro"
 	projectsPath := filepath.Join(sessionHome, "projects.json")
 	if data, err := os.ReadFile(projectsPath); err == nil {
@@ -389,9 +401,9 @@ func (e *ACPExecutor) ListSessions(s *ACPSession) ([]SessionInfo, error) {
 
 				var meta struct {
 					ID        string `json:"id"`
-					SessID    string `json:"sessionId"` 
+					SessID    string `json:"sessionId"`
 					Title     string `json:"title"`
-					DispName  string `json:"displayName"` 
+					DispName  string `json:"displayName"`
 					UpdatedAt string `json:"updatedAt"`
 					CreatedAt string `json:"createdAt"`
 				}
@@ -419,7 +431,7 @@ func (e *ACPExecutor) ListSessions(s *ACPSession) ([]SessionInfo, error) {
 						SessionID: finalID,
 						Title:     title,
 						UpdatedAt: updatedAt,
-						File:      path, 
+						File:      path,
 					})
 				}
 			}
@@ -435,7 +447,7 @@ func (e *ACPExecutor) ListSessions(s *ACPSession) ([]SessionInfo, error) {
 
 // LoadSession restaura uma sessão específica (Checkpoint).
 func (e *ACPExecutor) LoadSession(s *ACPSession, acpSessionID string) error {
-	s.ACPSessID = acpSessionID 
+	s.ACPSessID = acpSessionID
 
 	id := e.getNextID()
 	cwd, _ := os.Getwd()
@@ -472,13 +484,13 @@ func (e *ACPExecutor) DeleteSession(filePath string) error {
 	}
 
 	fmt.Printf("[ACP] Deletando Sinfonia: %s\n", filePath)
-	
+
 	err := os.Remove(filePath)
 	if err != nil {
 		return fmt.Errorf("falha ao deletar arquivo: %v", err)
 	}
 
 	runtime.EventsEmit(e.Ctx, "agent:turn_complete", "system")
-	
+
 	return nil
 }

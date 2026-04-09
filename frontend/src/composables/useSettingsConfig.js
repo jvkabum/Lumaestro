@@ -1,5 +1,5 @@
 import { nextTick } from 'vue'
-import { GetConfig, SaveConfig, GetToolsStatus, ResetQdrantDB } from '../../wailsjs/go/core/App'
+import { GetConfig, SaveConfig, GetToolsStatus, ResetQdrantDB, IsExplorationMode, SetExplorationMode, RunVectorDiagnostic } from '../../wailsjs/go/core/App'
 import { EventsOn } from '../../wailsjs/runtime'
 import { useSettingsStore } from '../stores/settings'
 
@@ -32,7 +32,7 @@ export function useSettingsConfig() {
     }
 
     // Inicializa o estado do modo de exploração
-    store.isExplorationMode = await window.go.main.App.IsExplorationMode()
+    store.isExplorationMode = await IsExplorationMode()
   }
 
   const refreshStatus = async () => {
@@ -70,16 +70,25 @@ export function useSettingsConfig() {
       store.config.auto_start_agents = []
     }
     const idx = store.config.auto_start_agents.indexOf(agent)
+    let enabled = false
     if (idx >= 0) {
       store.config.auto_start_agents.splice(idx, 1)
+      enabled = false
     } else {
       store.config.auto_start_agents.push(agent)
+      enabled = true
     }
+
+    // LM Studio usa o mesmo toggle para definir ativação do motor.
+    if (agent === 'lmstudio') {
+      store.config.lmstudio_enabled = enabled
+    }
+
     await SaveConfig(store.config)
   }
 
   const toggleExplorationMode = async () => {
-    const res = await window.go.main.App.SetExplorationMode(store.isExplorationMode)
+    const res = await SetExplorationMode(store.isExplorationMode)
     console.log(res)
   }
 
@@ -101,7 +110,7 @@ export function useSettingsConfig() {
     store.isDiagnosing = true
     store.diagnosticResult = null
     try {
-      const res = await window.go.main.App.RunVectorDiagnostic()
+      const res = await RunVectorDiagnostic()
       store.diagnosticResult = res
     } catch (e) {
       store.diagnosticResult = { success: false, error: String(e) }

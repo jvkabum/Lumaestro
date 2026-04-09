@@ -19,6 +19,13 @@
             >
               <span class="dot claude"></span> Claude
             </button>
+            <button 
+              type="button" 
+              :class="{ active: selectedAgent === 'lmstudio' }" 
+              @click="selectedAgent = 'lmstudio'"
+            >
+              <span class="dot lmstudio"></span> LM Studio
+            </button>
           </div>
         </div>
 
@@ -87,7 +94,7 @@
 </template>
 
 <script setup>
-import { ref, watch, nextTick } from 'vue';
+import { ref, watch, nextTick, onMounted } from 'vue';
 
 const messageText = ref('');
 const selectedAgent = ref('gemini');
@@ -95,12 +102,39 @@ const mode = ref('act');
 const textarea = ref(null);
 const isAutonomous = ref(false);
 const attachedImages = ref([]); // [{ preview, base64, type }]
+const AGENT_STORAGE_KEY = 'lumaestro.chat.agent';
+const MODE_STORAGE_KEY = 'lumaestro.chat.mode';
 
 const props = defineProps({
   isThinking: { type: Boolean, default: false }
 });
 
 const emit = defineEmits(['send']);
+
+const syncLocalState = () => {
+  localStorage.setItem(AGENT_STORAGE_KEY, selectedAgent.value);
+  localStorage.setItem(MODE_STORAGE_KEY, mode.value);
+};
+
+onMounted(async () => {
+  const savedAgent = localStorage.getItem(AGENT_STORAGE_KEY);
+  const savedMode = localStorage.getItem(MODE_STORAGE_KEY);
+
+  if (savedAgent === 'gemini' || savedAgent === 'claude' || savedAgent === 'lmstudio') {
+    selectedAgent.value = savedAgent;
+  }
+  if (savedMode === 'act' || savedMode === 'chat') {
+    mode.value = savedMode;
+  }
+
+  if (window.go?.main?.App?.GetAutonomousMode) {
+    try {
+      isAutonomous.value = await window.go.main.App.GetAutonomousMode();
+    } catch (err) {
+      console.warn('[ChatInput] Falha ao sincronizar modo autônomo:', err);
+    }
+  }
+});
 
 const handlePaste = async (e) => {
   const items = (e.clipboardData || e.originalEvent.clipboardData).items;
@@ -126,7 +160,12 @@ const removeImage = (idx) => {
 
 const toggleAutonomous = async () => {
   if (window.go && window.go.main && window.go.main.App) {
-    await window.go.main.App.SetAutonomousMode(isAutonomous.value);
+    try {
+      await window.go.main.App.SetAutonomousMode(isAutonomous.value);
+    } catch (err) {
+      isAutonomous.value = !isAutonomous.value;
+      console.error('[ChatInput] Falha ao alterar modo autônomo:', err);
+    }
   }
 };
 
@@ -138,6 +177,10 @@ const adjustHeight = () => {
 
 watch(messageText, () => {
   nextTick(adjustHeight);
+});
+
+watch([selectedAgent, mode], () => {
+  syncLocalState();
 });
 
 const handleEnter = (e) => {
@@ -189,12 +232,29 @@ const sendMessage = () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px 14px;
+  flex-wrap: wrap;
   padding-bottom: 10px;
   margin-bottom: 8px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.toolbar-left, .toolbar-right { display: flex; align-items: center; gap: 14px; }
+.toolbar-left, .toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.toolbar-left {
+  flex: 1 1 320px;
+}
+
+.toolbar-right {
+  flex: 1 1 240px;
+  justify-content: flex-end;
+}
 
 .label {
   font-size: 10px;
@@ -206,10 +266,13 @@ const sendMessage = () => {
 
 .agent-switcher {
   display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
   background: rgba(0, 0, 0, 0.3);
   padding: 3px;
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.05);
+  max-width: 100%;
 }
 
 .agent-switcher button {
@@ -223,8 +286,11 @@ const sendMessage = () => {
   cursor: pointer;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   transition: all 0.2s;
+  white-space: nowrap;
+  flex: 1 1 auto;
 }
 
 .agent-switcher button.active {
@@ -236,16 +302,19 @@ const sendMessage = () => {
 .dot { width: 5px; height: 5px; border-radius: 50%; }
 .dot.gemini { background: #60a5fa; box-shadow: 0 0 6px #3b82f6; }
 .dot.claude { background: #34d399; box-shadow: 0 0 6px #10b981; }
+.dot.lmstudio { background: #2dd4bf; box-shadow: 0 0 6px #14b8a6; }
 
 /* Safety Toggle (Switch) */
 .safety-toggle {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
   cursor: pointer;
   padding: 4px 8px;
   border-radius: 100px;
   transition: all 0.2s;
+  flex-shrink: 0;
 }
 .safety-toggle:hover { background: rgba(255, 255, 255, 0.03); }
 
@@ -280,7 +349,7 @@ const sendMessage = () => {
 .divider { width: 1px; height: 16px; background: rgba(255, 255, 255, 0.1); }
 
 /* Mode Pills */
-.mode-pills { display: flex; gap: 4px; }
+.mode-pills { display: flex; gap: 4px; flex-wrap: wrap; }
 .mode-pills button {
   background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.05);
@@ -292,6 +361,7 @@ const sendMessage = () => {
   text-transform: uppercase;
   cursor: pointer;
   transition: all 0.2s;
+  white-space: nowrap;
 }
 .mode-pills button.active {
   background: rgba(59, 130, 246, 0.1);
@@ -366,6 +436,7 @@ const sendMessage = () => {
 
 textarea {
   flex: 1;
+  min-width: 0;
   background: transparent;
   border: none;
   font-family: 'Inter', system-ui, sans-serif;
@@ -413,5 +484,64 @@ textarea::placeholder { color: #475569; font-weight: 400; }
 @keyframes popIn {
   from { transform: scale(0.8); opacity: 0; }
   to { transform: scale(1); opacity: 1; }
+}
+
+@media (max-width: 900px) {
+  .toolbar-right {
+    justify-content: flex-start;
+  }
+
+  .agent-switcher {
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .chat-input-wrapper {
+    padding: 10px;
+    border-radius: 18px;
+  }
+
+  .input-toolbar {
+    align-items: stretch;
+  }
+
+  .toolbar-left,
+  .toolbar-right {
+    width: 100%;
+    flex: 1 1 100%;
+    justify-content: flex-start;
+  }
+
+  .agent-switcher button {
+    flex: 1 1 92px;
+    padding: 7px 10px;
+    font-size: 10px;
+  }
+
+  .safety-toggle {
+    padding: 6px 10px;
+  }
+
+  .divider {
+    display: none;
+  }
+
+  .mode-pills {
+    flex: 1 1 auto;
+  }
+
+  .mode-pills button {
+    flex: 1 1 72px;
+    padding: 6px 10px;
+  }
+
+  .textarea-section {
+    gap: 8px;
+  }
+
+  textarea {
+    font-size: 14px;
+  }
 }
 </style>

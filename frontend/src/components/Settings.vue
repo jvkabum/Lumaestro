@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted } from 'vue'
+import { onMounted, watch } from 'vue'
 import { useSettingsStore } from '../stores/settings'
 import { useSettingsConfig } from '../composables/useSettingsConfig'
 import { useSettingsTools } from '../composables/useSettingsTools'
@@ -22,11 +22,156 @@ const { addMCPServer, listMCPServers } = useSettingsMCP()
 const { handleAddAccount, handleLoginAccount, handleSwitchAccount } = useSettingsAccounts()
 const { handleAddProject, handleSelectDirectory } = useSettingsProjects()
 
+// ── LM Studio ──
+const pickDefaultEmbeddingModel = (models) => {
+  if (!Array.isArray(models) || models.length === 0) return ''
+  const preferred = models.find((m) => /(embed|embedding|nomic|bge|e5|gte)/i.test(m))
+  return preferred || ''
+}
+
+const detectEmbeddingDimension = async () => {
+  if (store.config.embeddings_provider !== 'lmstudio') return
+  const model = (store.config.embeddings_model || store.config.lmstudio_model || '').trim()
+  if (!model) return
+
+  try {
+    const dim = await window.go.core.App.DetectLMStudioEmbeddingDimension(model)
+    if (Number(dim) > 0) {
+      store.config.embedding_dimension = Number(dim)
+    } else {
+      alert(`O modelo "${model}" nao respondeu no endpoint de embeddings do LM Studio. Use um modelo de embedding (ex: nomic-embed-text).`)
+    }
+  } catch (e) {
+    alert('Falha ao detectar dimensao do embedding: ' + e)
+  }
+}
+
+const loadLMModels = async () => {
+  store.lmLoadingModels = true
+  store.lmModels = []
+  try {
+    const models = await window.go.core.App.ListLMStudioModels()
+    store.lmModels = models || []
+    if (store.lmModels.length > 0 && !store.config.lmstudio_model) {
+      store.config.lmstudio_model = store.lmModels[0]
+    }
+
+    if (store.config.embeddings_provider === 'lmstudio' && !store.config.embeddings_model) {
+      const embModel = pickDefaultEmbeddingModel(store.lmModels)
+      if (embModel) {
+        store.config.embeddings_model = embModel
+      }
+    }
+
+    if (store.config.rag_provider === 'lmstudio' && !store.config.rag_model) {
+      store.config.rag_model = store.config.lmstudio_model || store.lmModels[0] || ''
+    }
+
+    await detectEmbeddingDimension()
+  } catch (e) {
+    alert('Erro ao conectar ao LM Studio: ' + e)
+  } finally {
+    store.lmLoadingModels = false
+  }
+}
+
+const testLMStudio = async () => {
+  store.lmTesting = true
+  store.lmTestResult = null
+  try {
+    const url = store.config.lmstudio_url || 'http://localhost:1234'
+    const model = store.config.lmstudio_model || ''
+    const result = await window.go.core.App.TestLMStudioModel(url, model)
+    store.lmTestResult = result
+  } catch (e) {
+    store.lmTestResult = { success: false, error: String(e) }
+  } finally {
+    store.lmTesting = false
+  }
+}
+
+const providerLabel = (provider) => {
+  if (provider === 'lmstudio') return 'LM Studio'
+  if (provider === 'claude') return 'Claude'
+  return 'Gemini'
+}
+
+const isProviderActive = (provider) => {
+  return (store.config.active_model_providers || []).includes(provider)
+}
+
+const toggleProvider = (provider) => {
+  if (!store.config.active_model_providers) {
+    store.config.active_model_providers = []
+  }
+
+  const list = store.config.active_model_providers
+  const idx = list.indexOf(provider)
+
+  if (idx >= 0) {
+    if (list.length === 1) return
+    list.splice(idx, 1)
+    if (!list.includes(store.config.primary_provider)) {
+      store.config.primary_provider = list[0]
+    }
+    return
+  }
+
+  list.push(provider)
+}
+
+const setPrimaryProvider = (provider) => {
+  store.config.primary_provider = provider
+  if (!isProviderActive(provider)) {
+    toggleProvider(provider)
+  }
+}
+
+// Atualiza a dimensão padrão ao trocar o provedor de embeddings
+const onEmbeddingsProviderChange = () => {
+  if (store.config.embeddings_provider === 'gemini') {
+    store.config.embedding_dimension = 3072
+    store.config.embeddings_model = ''
+  } else if (store.config.embeddings_provider === 'lmstudio') {
+    if (store.lmModels.length === 0) {
+      loadLMModels()
+    } else {
+      if (!store.config.embeddings_model) {
+        const embModel = pickDefaultEmbeddingModel(store.lmModels)
+        if (embModel) store.config.embeddings_model = embModel
+      }
+      detectEmbeddingDimension()
+    }
+  }
+}
+
+// Carrega modelos ao trocar para LM Studio no motor de RAG
+const onRAGProviderChange = () => {
+  if (store.config.rag_provider === 'lmstudio') {
+    if (store.lmModels.length === 0) {
+      loadLMModels()
+    } else if (!store.config.rag_model) {
+      store.config.rag_model = store.config.lmstudio_model || store.lmModels[0] || ''
+    }
+  }
+}
+
 // ── Lifecycle ──
 onMounted(() => {
   loadConfig()
   refreshStatus()
   initInstallerLogs()
+})
+
+// Quando abrir a aba MODELOS, carrega automaticamente os modelos do LM Studio
+// se qualquer um dos provedores já estiver configurado como lmstudio
+watch(() => store.activeTab, (tab) => {
+  if (tab === 'modelos' && store.lmModels.length === 0) {
+    const cfg = store.config
+    if (cfg.embeddings_provider === 'lmstudio' || cfg.rag_provider === 'lmstudio') {
+      loadLMModels()
+    }
+  }
 })
 </script>
 
@@ -39,7 +184,7 @@ onMounted(() => {
     </div>
 
     <div class="tabs-nav-glass">
-      <button v-for="tab in ['geral', 'qdrant', 'chaves', 'motores', 'contas', 'seguranca', 'mcp', 'repositórios']" 
+      <button v-for="tab in ['geral', 'qdrant', 'chaves', 'motores', 'modelos', 'contas', 'seguranca', 'mcp', 'repositórios']" 
               :key="tab"
               @click="store.activeTab = tab" 
               :class="{ 'active': store.activeTab === tab }" 
@@ -240,26 +385,31 @@ onMounted(() => {
           Estação de controle dos núcleos de inteligência. Acompanhe a disponibilidade binária e inicie os daemons em background.
         </p>
 
+
         <div class="engine-cards-stack">
-           <div v-for="tool in ['gemini', 'claude']" :key="tool" class="profile-card engine-showcase-card" :class="tool">
+           <div v-for="tool in ['gemini', 'claude', 'lmstudio']" :key="tool" class="profile-card engine-showcase-card" :class="tool">
               <div class="engine-glow-backdrop"></div>
               
               <div style="position: relative; z-index: 2; height: 100%; display: flex; flex-direction: column;">
                 <div style="display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 1.5rem;">
                    <div style="display: flex; align-items: center; gap: 1rem;">
-                      <div class="avatar-glow maestro-engine-icon" :style="tool === 'gemini' ? 'background: linear-gradient(135deg, #3b82f6, #8b5cf6)' : 'background: linear-gradient(135deg, #f97316, #ea580c)'">
-                         {{ tool === 'gemini' ? '⚡' : '🦾' }}
+                      <div class="avatar-glow maestro-engine-icon" :style="tool === 'gemini' ? 'background: linear-gradient(135deg, #3b82f6, #8b5cf6)' : tool === 'claude' ? 'background: linear-gradient(135deg, #f97316, #ea580c)' : 'background: linear-gradient(135deg, #10b981, #059669)'">
+                         {{ tool === 'gemini' ? '⚡' : tool === 'claude' ? '🦾' : '🤖' }}
                       </div>
                       <div>
-                        <h4 style="margin: 0; font-weight: 900; color: #fff; font-size: 1.3rem; letter-spacing: 2px;">{{ tool.toUpperCase() }}</h4>
-                        <div class="engine-status-badge" :style="store.status.tools[tool] ? '' : 'border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.05);'">
+                        <h4 style="margin: 0; font-weight: 900; color: #fff; font-size: 1.3rem; letter-spacing: 2px;">{{ tool === 'lmstudio' ? 'LM STUDIO' : tool.toUpperCase() }}</h4>
+                        <div v-if="tool !== 'lmstudio'" class="engine-status-badge" :style="store.status.tools[tool] ? '' : 'border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.05);'">
                           <span class="status-dot" :style="store.status.tools[tool] ? '' : 'background: #ef4444; box-shadow: none;'"></span> 
                           {{ store.status.tools[tool] ? 'SISTEMA PRONTO' : 'NÃO INSTALADO' }}
+                        </div>
+                        <div v-else class="engine-status-badge" :style="(store.config.lmstudio_enabled || isAutoStart('lmstudio')) && store.config.lmstudio_url ? 'border-color: rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.05);' : 'border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.05);'">
+                          <span class="status-dot" :style="(store.config.lmstudio_enabled || isAutoStart('lmstudio')) && store.config.lmstudio_url ? 'background: #10b981;' : 'background: #ef4444; box-shadow: none;'"></span> 
+                          {{ (store.config.lmstudio_enabled || isAutoStart('lmstudio')) && store.config.lmstudio_url ? 'CONFIGURADO ✓' : 'DESABILITADO' }}
                         </div>
                       </div>
                    </div>
                    
-                   <!-- Auto-Start Switch Claro e Imersivo -->
+                   <!-- Auto-Start Switch -->
                    <div class="auto-boot-container" @click="toggleAutoStart(tool)" title="Inicia o motor automaticamente assim que você abre o Lumaestro" style="flex-shrink: 0;">
                      <div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;">
                        <span style="font-size: 0.65rem; color: var(--p-text-dim); font-weight: 900; letter-spacing: 1px; white-space: nowrap;">AUTO-BOOT</span>
@@ -267,26 +417,220 @@ onMounted(() => {
                          <div class="maestro-switch-thumb"></div>
                        </div>
                      </div>
-                     <span style="font-size: 0.55rem; color: #3b82f6; font-weight: bold; opacity: 0.9; align-self: flex-end; white-space: nowrap; margin-top: 4px;" v-if="isAutoStart(tool)">LIGA SOZINHO ⚡</span>
-                     <span style="font-size: 0.55rem; color: #64748b; font-weight: bold; opacity: 0.8; align-self: flex-end; white-space: nowrap; margin-top: 4px;" v-else>PARTIDA MANUAL ✋</span>
+                     <span v-if="isAutoStart(tool)" style="font-size: 0.55rem; color: #3b82f6; font-weight: bold; opacity: 0.9; align-self: flex-end; white-space: nowrap; margin-top: 4px;">LIGA SOZINHO ⚡</span>
+                     <span v-else style="font-size: 0.55rem; color: #64748b; font-weight: bold; opacity: 0.8; align-self: flex-end; white-space: nowrap; margin-top: 4px;">PARTIDA MANUAL ✋</span>
                    </div>
                 </div>
                 
                 <p style="color: #cbd5e1; font-size: 0.85rem; margin-bottom: 2.5rem; line-height: 1.6; font-weight: 300; flex-grow: 1;">
-                   {{ tool === 'gemini' ? 'Motor de Inteligência Central. Responsável pela execução de rotinas autônomas e retenção de contexto contínuo (ACP) em background.' : 'Motor Analítico Avançado. Infraestrutura secundária focada em modelagem pesada, testes lógicos e geração de códigos complexos.' }}
+                   <template v-if="tool === 'gemini'">
+                     Motor de Inteligência Central. Responsável pela execução de rotinas autônomas e retenção de contexto contínuo (ACP) em background.
+                   </template>
+                   <template v-else-if="tool === 'claude'">
+                     Motor Analítico Avançado. Infraestrutura secundária focada em modelagem pesada, testes lógicos e geração de códigos complexos.
+                   </template>
+                   <template v-else>
+                     Motor Local OpenAI-compatível. Execute modelos privados sem custo de API. Conecte ao LM Studio para usar Llama, Mistral e outras LLMs.
+                   </template>
                 </p>
+
+                <!-- LM Studio Specific Config -->
+                <div v-if="tool === 'lmstudio'" style="display: flex; flex-direction: column; gap: 1rem; margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                  <div style="display: flex; gap: 8px; align-items: center;">
+                    <input v-model="store.config.lmstudio_url" type="text" class="maestro-input" placeholder="http://localhost:1234" style="flex: 1; padding: 8px 12px; font-size: 0.8rem;" />
+                    <button @click="loadLMModels" :disabled="store.lmLoadingModels" style="background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.3); color: #10b981; border-radius: 8px; padding: 6px 14px; font-size: 0.7rem; cursor: pointer; white-space: nowrap;">
+                      {{ store.lmLoadingModels ? '⏳' : '🔄' }} MODELOS
+                    </button>
+                  </div>
+                  <select v-if="store.lmModels.length > 0" v-model="store.config.lmstudio_model" class="maestro-input" style="padding: 8px 12px; font-size: 0.8rem;">
+                    <option value="">-- Padrão do LM Studio --</option>
+                    <option v-for="m in store.lmModels" :key="m" :value="m">{{ m }}</option>
+                  </select>
+                  <input v-else v-model="store.config.lmstudio_model" type="text" class="maestro-input" placeholder="ID do modelo" style="padding: 8px 12px; font-size: 0.8rem;" />
+                </div>
 
                 <div style="display: flex; gap: 12px; margin-top: auto;">
                    <button @click="install(tool)" class="unit-btn-solid" style="flex: 1.5;">
-                     SINCRONIZAR
+                     {{ tool === 'lmstudio' ? 'SALVAR CONFIG' : 'SINCRONIZAR' }}
                    </button>
-                   <button v-if="store.status.tools[tool]" @click="setup(tool)" class="unit-btn-glow" :style="getAuthStyle(tool)" style="flex: 1;">
+                   <button v-if="tool !== 'lmstudio' && store.status.tools[tool]" @click="setup(tool)" class="unit-btn-glow" :style="getAuthStyle(tool)" style="flex: 1;">
                       {{ getAuthLabel(tool) }}
                    </button>
+                   <button v-if="tool === 'lmstudio'" @click="testLMStudio" :disabled="store.lmTesting" style="background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.3); color: #10b981; border-radius: 8px; padding: 8px 16px; font-size: 0.75rem; font-weight: 900; cursor: pointer; flex: 1;">
+                      {{ store.lmTesting ? '⏳ TESTANDO' : '⚡ TESTAR' }}
+                   </button>
+                </div>
+
+                <!-- Test Result Feedback -->
+                <div v-if="tool === 'lmstudio' && store.lmTestResult" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.05); font-size: 0.75rem;">
+                  <div v-if="store.lmTestResult.success" style="color: #4ade80;">
+                    ✅ OK ({{ store.lmTestResult.latency_ms }}ms) — {{ store.lmTestResult.capabilities.join(', ') }}
+                  </div>
+                  <div v-else style="color: #ef4444;">
+                    ❌ {{ store.lmTestResult.error || 'Falha ao conectar' }}
+                  </div>
                 </div>
               </div>
            </div>
         </div>
+      </section>
+
+      <!-- ABA MODELOS (POOL ATIVO) -->
+      <section v-if="store.activeTab === 'modelos'" class="glass-panel animate-slide-up">
+        <h2 class="section-title">Pool Ativo de Modelos</h2>
+        <p style="color: var(--p-text-dim); margin-bottom: 2rem; font-size: 0.9rem;">
+          Configure quais provedores e modelos o sistema usa para chat, embeddings e RAG semântico.
+        </p>
+
+        <!-- BLEND DE PROVEDORES PARA CHAT -->
+        <h3 style="font-size: 0.85rem; font-weight: 800; letter-spacing: 1px; color: #94a3b8; margin-bottom: 1rem; text-transform: uppercase;">Chat / Orquestrador</h3>
+
+        <div class="sec-card" style="margin-bottom: 1.5rem; padding: 1.2rem 1.6rem;">
+          <div class="sec-info">
+            <h5 style="margin: 0; font-weight: 800; font-size: 0.95rem; color: #fff;">Blend de provedores</h5>
+            <p style="margin: 6px 0 0; font-size: 0.78rem; color: var(--p-text-dim);">Quando ativo, o orquestrador respeita o pool e roteia pelo provedor mais adequado disponível.</p>
+          </div>
+          <label class="hybrid-toggle-maestro">
+            <input type="checkbox" v-model="store.config.blend_active_models" />
+            <span class="m-slider-sec"></span>
+          </label>
+        </div>
+
+        <div class="premium-form-group" style="margin-bottom: 1.5rem;">
+          <label style="margin-bottom: 10px; display: block;">Provedores ativos para chat</label>
+          <div style="display: flex; flex-wrap: wrap; gap: 0.75rem;">
+            <button
+              v-for="p in ['gemini', 'claude', 'lmstudio']"
+              :key="p"
+              type="button"
+              @click="toggleProvider(p)"
+              :style="isProviderActive(p)
+                ? 'padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(16,185,129,0.4); background: rgba(16,185,129,0.12); color: #d1fae5; cursor: pointer; font-weight: 700;'
+                : 'padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(148,163,184,0.25); background: rgba(15,23,42,0.35); color: #cbd5e1; cursor: pointer; font-weight: 700;'"
+            >
+              {{ providerLabel(p) }} {{ isProviderActive(p) ? '✓' : '' }}
+            </button>
+          </div>
+          <small style="display: block; margin-top: 0.6rem; color: var(--p-text-dim); font-size: 0.72rem;">
+            Pelo menos um provedor precisa ficar ativo.
+          </small>
+        </div>
+
+        <div class="premium-form-group" style="margin-bottom: 2rem;">
+          <label>Provedor primário (chat padrão)</label>
+          <select v-model="store.config.primary_provider" class="maestro-input" @change="setPrimaryProvider(store.config.primary_provider)">
+            <option value="gemini">Gemini</option>
+            <option value="claude">Claude</option>
+            <option value="lmstudio">LM Studio</option>
+          </select>
+        </div>
+
+        <div style="height: 1px; background: rgba(148,163,184,0.12); margin: 2rem 0;"></div>
+
+        <!-- MOTOR DE EMBEDDINGS -->
+        <h3 style="font-size: 0.85rem; font-weight: 800; letter-spacing: 1px; color: #94a3b8; margin-bottom: 1rem; text-transform: uppercase;">🔬 Motor de Embeddings (Qdrant / Sync 3D)</h3>
+        <p style="color: var(--p-text-dim); margin-bottom: 1.5rem; font-size: 0.82rem; line-height: 1.5;">
+          Define qual motor gera os vetores para busca semântica. Necessário para o Sync Obsidian 3D funcionar.<br/>
+          <strong style="color: #fbbf24;">⚠️ Alterar o provedor muda a dimensão dos vetores — será necessário resetar o banco Qdrant.</strong>
+        </p>
+
+        <div class="premium-form-group" style="margin-bottom: 1.2rem;">
+          <label>Provedor de embeddings</label>
+          <select v-model="store.config.embeddings_provider" class="maestro-input" @change="onEmbeddingsProviderChange">
+            <option value="gemini">Gemini (gemini-embedding-2-preview · 3072 dim)</option>
+            <option value="lmstudio">LM Studio (modelo local)</option>
+          </select>
+        </div>
+
+        <div v-if="store.config.embeddings_provider === 'lmstudio'" class="premium-form-group" style="margin-bottom: 1.2rem;">
+          <label>Modelo de embeddings no LM Studio</label>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <input
+              v-model="store.config.embeddings_model"
+              placeholder="Ex: nomic-embed-text, text-embedding-nomic-embed-text-v1.5"
+              class="maestro-input"
+              @change="detectEmbeddingDimension"
+              style="flex: 1;"
+            />
+            <select v-if="store.lmModels.length > 0" v-model="store.config.embeddings_model" class="maestro-input" style="max-width: 220px;" @change="detectEmbeddingDimension">
+              <option value="">-- selecionar do LM Studio --</option>
+              <option v-for="m in store.lmModels" :key="m" :value="m">{{ m }}</option>
+            </select>
+          </div>
+          <small style="color: var(--p-text-dim); font-size: 0.72rem; display: block; margin-top: 0.4rem;">
+            Carregue um modelo de embeddings no LM Studio (ex: nomic-embed-text). Clique em "🔄 MODELOS" na aba Motores para atualizar a lista.
+          </small>
+        </div>
+
+        <div class="premium-form-group" style="margin-bottom: 2rem;">
+          <label>Dimensão dos vetores</label>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <input
+              v-model.number="store.config.embedding_dimension"
+              type="number"
+              class="maestro-input"
+              style="max-width: 140px;"
+              placeholder="3072"
+            />
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <button type="button" @click="store.config.embedding_dimension = 3072" style="padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(59,130,246,0.4); background: rgba(59,130,246,0.08); color: #93c5fd; cursor: pointer; font-size: 0.75rem; font-weight: 700;">3072 Gemini</button>
+              <button type="button" @click="store.config.embedding_dimension = 768" style="padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(168,85,247,0.4); background: rgba(168,85,247,0.08); color: #d8b4fe; cursor: pointer; font-size: 0.75rem; font-weight: 700;">768 nomic</button>
+              <button type="button" @click="store.config.embedding_dimension = 1536" style="padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(234,179,8,0.4); background: rgba(234,179,8,0.08); color: #fde68a; cursor: pointer; font-size: 0.75rem; font-weight: 700;">1536 ada-002</button>
+            </div>
+          </div>
+          <small style="color: var(--p-text-dim); font-size: 0.72rem; display: block; margin-top: 0.4rem;">
+            Precisa coincidir exatamente com o modelo escolhido.
+          </small>
+        </div>
+
+        <div style="height: 1px; background: rgba(148,163,184,0.12); margin: 2rem 0;"></div>
+
+        <!-- MOTOR DE RAG / ONTOLOGIA -->
+        <h3 style="font-size: 0.85rem; font-weight: 800; letter-spacing: 1px; color: #94a3b8; margin-bottom: 1rem; text-transform: uppercase;">🧠 Motor de RAG / Ontologia (extração de triplas)</h3>
+        <p style="color: var(--p-text-dim); margin-bottom: 1.5rem; font-size: 0.82rem; line-height: 1.5;">
+          Define qual motor processa prompts de análise semântica (extração de fatos, grafo de conhecimento, conflitos).<br/>
+          Pode ser diferente do motor de embeddings.
+        </p>
+
+        <div class="premium-form-group" style="margin-bottom: 1.2rem;">
+          <label>Provedor de RAG/Ontologia</label>
+          <select v-model="store.config.rag_provider" class="maestro-input" @change="onRAGProviderChange">
+            <option value="gemini">Gemini (cascata resiliente de modelos)</option>
+            <option value="lmstudio">LM Studio (modelo local)</option>
+            <option value="claude">Claude (melhor para análise de código)</option>
+          </select>
+        </div>
+
+        <div v-if="store.config.rag_provider === 'lmstudio'" class="premium-form-group" style="margin-bottom: 2rem;">
+          <label>Modelo de chat para RAG no LM Studio</label>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <input
+              v-model="store.config.rag_model"
+              placeholder="Ex: google/gemma-4-26b-a4b, llama-3.2-3b-instruct"
+              class="maestro-input"
+              style="flex: 1;"
+            />
+            <select v-if="store.lmModels.length > 0" v-model="store.config.rag_model" class="maestro-input" style="max-width: 220px;">
+              <option value="">-- selecionar do LM Studio --</option>
+              <option v-for="m in store.lmModels" :key="m" :value="m">{{ m }}</option>
+            </select>
+          </div>
+          <small style="color: var(--p-text-dim); font-size: 0.72rem; display: block; margin-top: 0.4rem;">
+            Deixe vazio para usar o modelo padrão configurado na aba Motores.
+          </small>
+        </div>
+
+        <div v-if="store.config.rag_provider === 'claude'" class="premium-form-group" style="margin-bottom: 2rem;">
+          <label>Modelo Claude para RAG</label>
+          <select v-model="store.config.rag_model" class="maestro-input">
+            <option value="">claude-3-5-sonnet (padrão)</option>
+            <option value="claude-3-5-sonnet-latest">claude-3-5-sonnet-latest</option>
+            <option value="claude-3-5-haiku-latest">claude-3-5-haiku-latest (mais rápido)</option>
+            <option value="claude-opus-4-5">claude-opus-4-5</option>
+          </select>
+        </div>
+
+        <button @click="save" class="btn-glow-blue" style="width: 100%;">SALVAR CONFIGURAÇÃO DE MODELOS</button>
       </section>
 
       <!-- ABA CONTAS GEMINI (OAUTH) -->
@@ -474,7 +818,6 @@ onMounted(() => {
       </section>
     </div>
 
-    <!-- Terminal de Logs (Restored Logic) -->
     <footer class="maestro-terminal-v2" v-show="store.installStatus !== '' || store.installLogs.length > 0">
       <div class="t-bar">
          <span class="t-title">SYSTEM_ORCHESTRATOR_OUTPUT</span>

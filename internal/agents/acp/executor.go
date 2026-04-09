@@ -3,10 +3,12 @@ package acp
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"time"
 
 	"Lumaestro/internal/utils"
+
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -24,6 +26,27 @@ func NewACPExecutor() *ACPExecutor {
 		NetLog:          utils.NewNetworkLogger(5 * time.Second),
 		turnChannels:    make(map[string]chan string),
 	}
+}
+
+func isPotentiallyDestructiveCommand(details string) bool {
+	d := strings.ToLower(strings.TrimSpace(details))
+	if d == "" {
+		return false
+	}
+
+	markers := []string{
+		" rm ", " rm -", "rm -rf", "del /f", "del /s", "rmdir /s", "rd /s", "format ",
+		"mkfs", "diskpart", "shutdown ", "reboot", "poweroff", "taskkill /f", "kill -9",
+		"reg delete", "drop database", "truncate table", "remove-item -recurse", "remove-item -force",
+	}
+
+	for _, m := range markers {
+		if strings.Contains(d, m) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // waitForResponse aguarda a resposta de um ID específico por um tempo determinado.
@@ -75,6 +98,26 @@ func (e *ACPExecutor) SendRPC(s *ACPSession, msg JSONRPCMessage) error {
 
 // RequestReview emite um evento para o Wails e aguarda a resposta do usuário.
 func (e *ACPExecutor) RequestReview(reviewID string, action string, details string) bool {
+	if e.AutonomousMode && strings.EqualFold(strings.TrimSpace(action), "EXECUTAR COMANDO") {
+		if !isPotentiallyDestructiveCommand(details) {
+			if e.Ctx != nil {
+				runtime.EventsEmit(e.Ctx, "agent:status", map[string]string{
+					"agent":  "system",
+					"action": "Modo autônomo: comando autoaprovado",
+					"kind":   "status",
+				})
+			}
+			return true
+		}
+		if e.Ctx != nil {
+			runtime.EventsEmit(e.Ctx, "agent:status", map[string]string{
+				"agent":  "system",
+				"action": "Modo autônomo: comando potencialmente destrutivo requer aprovação",
+				"kind":   "warning",
+			})
+		}
+	}
+
 	ch := make(chan bool)
 
 	e.reviewMu.Lock()

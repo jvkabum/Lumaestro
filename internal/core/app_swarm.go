@@ -4,6 +4,7 @@ import (
 	"Lumaestro/internal/db"
 	"Lumaestro/internal/orchestration"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -18,6 +19,20 @@ func (a *App) startOrchestration() {
 
 func (a *App) handleAgentWakeUp(agent db.Agent, runID uuid.UUID) {
 	sessionID := "acp-session-" + agent.ID.String()
+	swarmProvider := "gemini"
+	if a.config != nil {
+		active := a.config.GetActiveProviders()
+		primary := strings.ToLower(strings.TrimSpace(a.config.PrimaryProvider))
+		for _, p := range active {
+			if p == primary {
+				swarmProvider = p
+				break
+			}
+		}
+		if swarmProvider == "gemini" && len(active) > 0 && primary != "gemini" {
+			swarmProvider = active[0]
+		}
+	}
 
 	// 1. Buscar Ocupação Atual ou Nova Tarefa
 	var issue db.Issue
@@ -44,7 +59,7 @@ func (a *App) handleAgentWakeUp(agent db.Agent, runID uuid.UUID) {
 	}
 
 	// 2. Iniciar ou Reutilizar Sessão ACP vinculada à Identidade
-	err = a.executor.StartSession(a.ctx, "gemini", sessionID, "LATEST", agent.ID, &issue.ID)
+	err = a.executor.StartSession(a.ctx, swarmProvider, sessionID, "LATEST", agent.ID, &issue.ID)
 	if err != nil {
 		orchestration.FinalizeHeartbeat(agent.ID, runID, false, "Erro ACP Swarm: "+err.Error())
 		return
