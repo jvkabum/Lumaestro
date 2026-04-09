@@ -270,6 +270,10 @@ export function SendTerminalData(arg1, arg2) {
   return window['go']['core']['App']['SendTerminalData'](arg1, arg2);
 }
 
+export function SetAgentModel(arg1, arg2) {
+  return window['go']['core']['App']['SetAgentModel'](arg1, arg2);
+}
+
 export function SetAutonomousMode(arg1) {
   return window['go']['core']['App']['SetAutonomousMode'](arg1);
 }

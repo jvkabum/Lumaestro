@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"Lumaestro/internal/config"
 )
 
 func (a *App) emitAgentStatus(agent string, action string, kind string) {

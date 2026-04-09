@@ -225,6 +225,21 @@ onMounted(async () => {
           <div class="orchestrator-bottom-terminal" v-show="isTerminalDockOpen">
             <AgentTerminal :isOpen="isTerminalDockOpen" @close="isTerminalDockOpen = false" />
           </div>
+
+          <!-- Puxador para reabrir o terminal quando escondido -->
+          <div 
+            v-if="!isTerminalDockOpen" 
+            class="terminal-expand-handle glass"
+            @click="isTerminalDockOpen = true"
+            title="Mostrar Terminal de Atividade"
+          >
+            <span class="handle-icon">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3">
+                <polyline points="18 15 12 9 6 15"></polyline>
+              </svg>
+            </span>
+            <span class="handle-text">TERMINAL</span>
+          </div>
         </div>
 
         <!-- Resize Handle (arrastável) -->
@@ -408,6 +423,44 @@ nav button.active {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
+  transition: all 0.3s ease;
+}
+
+.terminal-expand-handle {
+  height: 28px;
+  background: rgba(13, 17, 23, 0.8) !important;
+  border-top: 1px solid rgba(59, 130, 246, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+  z-index: 100;
+}
+
+.terminal-expand-handle:hover {
+  background: rgba(59, 130, 246, 0.1) !important;
+  height: 32px;
+}
+
+.handle-icon {
+  color: #3b82f6;
+  display: flex;
+  animation: bounce-up 2s infinite;
+}
+
+.handle-text {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  color: #64748b;
+}
+
+@keyframes bounce-up {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
 }
 
 .graph-area {

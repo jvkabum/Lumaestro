@@ -324,7 +324,25 @@
   text-transform: uppercase;
   color: var(--primary);
   margin: 0;
+  user-select: none;
 }
+
+.minimize-btn {
+  background: transparent;
+  border: none;
+  color: var(--primary);
+  opacity: 0.6;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  margin-left: 8px;
+}
+
+.minimize-btn:hover { opacity: 1; transform: scale(1.1); }
+.minimize-btn.rotated { transform: rotate(-180deg); }
 
 .pulse {
   width: 6px;
@@ -798,6 +816,29 @@
   stroke-opacity: 1 !important;
   stroke-dasharray: 8 4 !important;
   animation: dashFlow 0.5s linear infinite !important;
-  filter: drop-shadow(0 0 5px #fcd34d);
-  transition: stroke 0.3s, stroke-width 0.3s;
+}
+
+/* ↕️ Transição de Colapso (Minimize) */
+.collapse-enter-active,
+.collapse-leave-active {
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  max-height: 800px;
+  overflow: hidden;
+  opacity: 1;
+}
+
+.collapse-enter-from,
+.collapse-leave-to {
+  max-height: 0;
+  opacity: 0;
+  margin-top: 0;
+  margin-bottom: 0;
+  transform: translateY(-10px);
+}
+
+.ui-content-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 1rem;
 }

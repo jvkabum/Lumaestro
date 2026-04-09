@@ -140,6 +140,8 @@ export function SendSteeringHint(arg1:string,arg2:string):Promise<string>;
 
 export function SendTerminalData(arg1:string,arg2:string):Promise<void>;
 
+export function SetAgentModel(arg1:string,arg2:string):Promise<void>;
+
 export function SetAutonomousMode(arg1:boolean):Promise<string>;
 
 export function SetExplorationMode(arg1:boolean):Promise<string>;

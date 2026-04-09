@@ -119,6 +119,7 @@ export namespace config {
 	    embedding_dimension: number;
 	    rag_provider: string;
 	    rag_model: string;
+	    gemini_model: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Config(source);
@@ -157,6 +158,7 @@ export namespace config {
 	        this.embedding_dimension = source["embedding_dimension"];
 	        this.rag_provider = source["rag_provider"];
 	        this.rag_model = source["rag_model"];
+	        this.gemini_model = source["gemini_model"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

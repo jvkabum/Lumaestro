@@ -13,6 +13,7 @@ import { useGraphXRay } from '../composables/useGraphXRay'
 // ── Stores ──
 const store = useGraphStore()
 const orchestrator = useOrchestratorStore()
+const isUiMinimized = ref(false)
 
 // ── Composables ──
 const { initGraph } = useGraphSetup()
@@ -153,27 +154,34 @@ watch(() => props.graphLogs, () => {
     
     <!-- Controles & Console de Logs (Painel de Pensamento Vidrado) -->
     <div class="graph-ui glass">
-      <div class="ui-header">
+      <div class="ui-header" @click="isUiMinimized = !isUiMinimized" style="cursor: pointer;">
         <span class="pulse" :class="{ 'ai-active': orchestrator.isNavigating }"></span>
         <h3>Conhecimento Obsidian 3D</h3>
         <span v-if="orchestrator.isNavigating" class="ai-status-label animate-pulse">IA RACIOCINANDO...</span>
+        <button class="minimize-btn" :class="{ rotated: isUiMinimized }">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
       </div>
       
-      <div class="ui-actions">
-        <div class="sync-controls">
-          <button @click="handleFastSync" class="action-btn main-sync" :class="{'scanning-btn': store.scanning}" title="Sincronização Rápida">
-            <span v-if="!store.scanning">🚀</span><span v-else class="spin">⏳</span>
-            <span>SINCRONIZAR</span>
-          </button>
-          <button @click="handleFullSync" class="action-btn icon-only-btn" :class="{'scanning-btn': store.scanning}" title="Sincronização Total">
-            <span>⚙️</span>
-          </button>
-        </div>
-        <div class="stat-item">
-          <span class="val">{{ store.graphHealth.active_nodes || nodes.length }}</span>
-          <span class="lab">NOTAS</span>
-        </div>
-      </div>
+      <Transition name="collapse">
+        <div v-if="!isUiMinimized" class="ui-content-wrapper">
+          <div class="ui-actions">
+            <div class="sync-controls">
+              <button @click="handleFastSync" class="action-btn main-sync" :class="{'scanning-btn': store.scanning}" title="Sincronização Rápida">
+                <span v-if="!store.scanning">🚀</span><span v-else class="spin">⏳</span>
+                <span>SINCRONIZAR</span>
+              </button>
+              <button @click="handleFullSync" class="action-btn icon-only-btn" :class="{'scanning-btn': store.scanning}" title="Sincronização Total">
+                <span>⚙️</span>
+              </button>
+            </div>
+            <div class="stat-item">
+              <span class="val">{{ store.graphHealth.active_nodes || nodes.length }}</span>
+              <span class="lab">NOTAS</span>
+            </div>
+          </div>
 
       <!-- 🩻 CONTROLES X-RAY & RECON -->
       <div class="xray-panel glass">
@@ -221,6 +229,8 @@ watch(() => props.graphLogs, () => {
           <span class="log-text">{{ log }}</span>
         </div>
       </div>
+        </div> <!-- Fim da ui-content-wrapper -->
+      </Transition>
     </div> <!-- Fim da graph-ui -->
 
     <!-- POP-UP DE VALIDAÇÃO (AGENTE DA VERDADE) -->
