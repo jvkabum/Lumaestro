@@ -387,12 +387,16 @@ func (h *ACPRpcHandler) HandleResponse(id interface{}, result json.RawMessage, r
 		return
 	}
 
-	if rpcErr != nil {
+		if rpcErr != nil {
 		if strings.Contains(rpcErr.Message, "Model stream ended with empty response") {
 			h.Executor.LogChan <- ExecutionLog{Source: "SYSTEM", Content: "O Gemini decidiu não responder agora."}
-			runtime.EventsEmit(h.Executor.Ctx, "agent:turn_complete", h.Session.AgentName)
 		} else {
 			h.Executor.LogChan <- ExecutionLog{Source: "ERROR", Content: fmt.Sprintf("❌ Erro ACP: %s", rpcErr.Message)}
+		}
+
+		// 🔓 LIBERAÇÃO DE ERRO: Garante que a UI destrave se houver erro no motor
+		if !strings.Contains(h.Session.ID, "-background-") {
+			runtime.EventsEmit(h.Executor.Ctx, "agent:turn_complete", h.Session.AgentName)
 		}
 
 		h.Executor.turnMu.Lock()
