@@ -211,33 +211,12 @@ const handleSessionEnded = (agent) => {
 
         <ChatLog :messages="messages" :is-thinking="isThinking" />
 
-        <Transition name="status-fade">
-          <div v-if="isThinking" class="processing-beacon glass" :class="`kind-${currentStatusKind || 'status'}`">
-            <div class="processing-core">
-              <span class="processing-orb"></span>
-              <span class="processing-ring ring-one"></span>
-              <span class="processing-ring ring-two"></span>
-            </div>
-            <div class="processing-copy">
-              <div class="processing-title">{{ activeEngineLabel }} EM PROCESSAMENTO</div>
-              <div class="processing-stage">{{ processingStage }}</div>
-              <div class="processing-meta">
-                <span class="processing-kind-chip">{{ processingKindLabel }}</span>
-                <span class="processing-dots"><i></i><i></i><i></i></span>
-                <span>{{ processingElapsedLabel }}</span>
-              </div>
-            </div>
-          </div>
-        </Transition>
 
-        <!-- 📡 Pulso de Atividade: Mostra o que a IA está fazendo AGORA (Anti-Travamento) -->
+        <!-- 📡 Status compacto inline (não rouba espaço) -->
         <Transition name="status-fade">
-          <div v-if="orchestrator.currentStatus && orchestrator.currentStatus.action" class="activity-status-bar glass">
-            <div class="activity-pulse"></div>
-            <div class="activity-info">
-              <span v-if="orchestrator.currentStatus.tool" class="activity-tool">{{ orchestrator.currentStatus.tool.replace('_', ' ').toUpperCase() }}</span>
-              <span class="activity-text">{{ orchestrator.currentStatus.action }}</span>
-            </div>
+          <div v-if="isThinking || (orchestrator.currentStatus && orchestrator.currentStatus.action)" class="compact-status-line">
+            <span class="compact-dot" :class="`kind-${currentStatusKind || 'status'}`"></span>
+            <span class="compact-text">{{ orchestrator.currentStatus?.action || processingStage }}</span>
           </div>
         </Transition>
 
@@ -411,135 +390,41 @@ const handleSessionEnded = (agent) => {
   border: 1px solid rgba(96, 165, 250, 0.18);
   box-shadow: 0 10px 30px rgba(2, 6, 23, 0.28);
 }
-
-.processing-beacon.kind-tool {
-  border-color: rgba(125, 211, 252, 0.24);
+/* 📡 Status Compacto Inline */
+.compact-status-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 20px;
+  font-size: 12px;
+  color: #8b949e;
+  font-weight: 600;
 }
 
-.processing-beacon.kind-command {
-  border-color: rgba(134, 239, 172, 0.24);
-}
-
-.processing-beacon.kind-memory {
-  border-color: rgba(252, 211, 77, 0.24);
-}
-
-.processing-beacon.kind-error {
-  border-color: rgba(252, 165, 165, 0.28);
-}
-
-.processing-core {
-  position: relative;
-  width: 34px;
-  height: 34px;
+.compact-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #3b82f6;
   flex-shrink: 0;
+  animation: compact-pulse 1.5s ease-in-out infinite;
 }
 
-.processing-orb {
-  position: absolute;
-  inset: 9px;
-  border-radius: 999px;
-  background: radial-gradient(circle, #93c5fd 0%, #3b82f6 55%, #1d4ed8 100%);
-  box-shadow: 0 0 22px rgba(59, 130, 246, 0.55);
-  animation: processing-orb-pulse 1.8s infinite ease-in-out;
+.compact-dot.kind-tool { background: #06b6d4; }
+.compact-dot.kind-command { background: #22c55e; }
+.compact-dot.kind-memory { background: #eab308; }
+.compact-dot.kind-error { background: #ef4444; }
+.compact-dot.kind-think { background: #a78bfa; }
+
+.compact-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.processing-ring {
-  position: absolute;
-  inset: 0;
-  border-radius: 999px;
-  border: 1px solid rgba(96, 165, 250, 0.28);
-  animation: processing-ring-expand 2.4s infinite ease-out;
-}
-
-.processing-ring.ring-two {
-  animation-delay: 1.2s;
-}
-
-.processing-copy {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.processing-title {
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 1.1px;
-  color: #7dd3fc;
-}
-
-.processing-stage {
-  font-size: 13px;
-  font-weight: 700;
-  color: #e2e8f0;
-}
-
-.processing-meta {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: #94a3b8;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.processing-kind-chip {
-  border-radius: 999px;
-  padding: 3px 7px;
-  font-size: 9px;
-  font-weight: 900;
-  letter-spacing: 0.8px;
-  color: #bfdbfe;
-  background: rgba(59, 130, 246, 0.14);
-  border: 1px solid rgba(96, 165, 250, 0.2);
-}
-
-.processing-beacon.kind-tool .processing-kind-chip {
-  color: #bae6fd;
-  background: rgba(14, 116, 144, 0.26);
-  border-color: rgba(125, 211, 252, 0.22);
-}
-
-.processing-beacon.kind-command .processing-kind-chip {
-  color: #bbf7d0;
-  background: rgba(21, 128, 61, 0.22);
-  border-color: rgba(134, 239, 172, 0.24);
-}
-
-.processing-beacon.kind-memory .processing-kind-chip {
-  color: #fde68a;
-  background: rgba(161, 98, 7, 0.22);
-  border-color: rgba(252, 211, 77, 0.24);
-}
-
-.processing-beacon.kind-error .processing-kind-chip {
-  color: #fecaca;
-  background: rgba(153, 27, 27, 0.22);
-  border-color: rgba(252, 165, 165, 0.24);
-}
-
-.processing-dots {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.processing-dots i {
-  width: 5px;
-  height: 5px;
-  border-radius: 999px;
-  background: #60a5fa;
-  animation: processing-dot-bounce 1.1s infinite ease-in-out;
-}
-
-.processing-dots i:nth-child(2) {
-  animation-delay: 0.15s;
-}
-
-.processing-dots i:nth-child(3) {
-  animation-delay: 0.3s;
+@keyframes compact-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.7); }
 }
 
 /* --- Loading Overlay & Splah Screen --- */
