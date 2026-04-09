@@ -50,6 +50,7 @@ BRIDGE GUIDE  FLOW  STACK       BRAIN  ENGINE
 | Documento | Descrição | Links Relacionados |
 |---|---|---|
 | [RAG_FLOW.md](./RAG_FLOW.md) | Crawler → Embeddings → Qdrant → Chat | [NEURAL_BRAIN](./NEURAL_BRAIN.md), [DOCUMENTATION](./DOCUMENTATION.md) |
+| [MODEL_PROVIDER_MATRIX.md](./MODEL_PROVIDER_MATRIX.md) | Matriz de dependências Gemini e plano de troca por Claude/LM Studio | [RAG_FLOW](./RAG_FLOW.md), [LIGHTNING_ENGINE](./LIGHTNING_ENGINE.md) |
 | [LIGHTNING_ENGINE.md](./LIGHTNING_ENGINE.md) | DuckDB, APO Beam Search, RLHF, Custos | [RAG_FLOW](./RAG_FLOW.md), [AGENTS_GUIDE](./AGENTS_GUIDE.md) |
 | [GEMINI.md](./GEMINI.md) | Configuração de comunicação e idioma | [AGENTS_GUIDE](./AGENTS_GUIDE.md) |
 

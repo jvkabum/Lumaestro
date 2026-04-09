@@ -178,11 +178,13 @@ func (a *App) initServices() error {
 	a.emitBoot("embeddings", "🧪", "Inicializando motor de Embeddings (Gemini)...")
 	emb, err := provider.NewEmbeddingService(a.ctx, cfg.GetActiveGeminiKey())
 	if err != nil {
-		a.emitBoot("error", "🔴", "Embeddings falhou: "+err.Error())
-		return err
+		a.emitBoot("embeddings", "⚠️", "Embeddings indisponível no momento (modo degradado): "+err.Error())
+		a.embedder = nil
+		a.ontology = nil
+	} else {
+		a.embedder = emb
+		a.ontology = provider.NewOntologyService(a.ctx, a.embedder)
 	}
-	a.embedder = emb
-	a.ontology = provider.NewOntologyService(a.ctx, a.embedder)
 
 	a.emitBoot("neon", "🧠", "Ativando Córtex Neural — Esquecimento Natural (Decay)...")
 	a.ranker = neural.NewRanker()
@@ -190,7 +192,11 @@ func (a *App) initServices() error {
 
 	search := rag.NewSearchService(a.qdrant, a.ranker)
 	a.navigator = rag.NewGraphNavigator(a.qdrant, a.ranker)
-	a.weaver = rag.NewKnowledgeWeaver(a.ontology, a.qdrant, a.embedder)
+	if a.embedder != nil && a.ontology != nil {
+		a.weaver = rag.NewKnowledgeWeaver(a.ontology, a.qdrant, a.embedder)
+	} else {
+		a.weaver = nil
+	}
 
 	a.emitBoot("chat", "🎭", "Orquestrando serviços de Chat e RAG...")
 	a.chat = rag.NewChatService(a.legacyExec, a.orchestrator, search, a.navigator, a.embedder, a.installer)
@@ -200,7 +206,12 @@ func (a *App) initServices() error {
 	a.Validator = rag.NewAgentValidator(a.LStore, a.GEngine)
 	a.Recon = rag.NewAgentRecon(a.LStore, a.GEngine, a.qdrant)
 
-	a.crawler = obsidian.NewCrawler(cfg.ObsidianVaultPath, a.embedder, a.qdrant, a.ontology)
+	if a.embedder != nil && a.ontology != nil {
+		a.crawler = obsidian.NewCrawler(cfg.ObsidianVaultPath, a.embedder, a.qdrant, a.ontology)
+	} else {
+		a.crawler = nil
+		a.emitBoot("crawler", "⚠️", "Crawler pausado: é necessário um provedor de embeddings ativo (atualmente Gemini API).")
+	}
 
 	if a.LStore != nil {
 		nodes, edges, err := a.LStore.GetFullGraph()
@@ -222,6 +233,9 @@ func (a *App) initServices() error {
 		a.LReflector = lightning.NewReflector(a.LStore, cfg.ObsidianVaultPath)
 		a.LOptimizer = lightning.NewOptimizer(a.LStore, a.executor.RewardEngine)
 		a.LRouter = lightning.NewLLMRouter()
+		if cfg.BlendActiveModels {
+			a.LRouter.Providers = cfg.GetActiveProviders()
+		}
 	}
 
 	a.emitBoot("ready", "✅", "Maestro pronto para decolagem.")
@@ -302,7 +316,7 @@ func (a *App) listenForTerminalOutput() {
 
 // CheckConnection verifica se os sistemas de suporte vitais estão online.
 func (a *App) CheckConnection() bool {
-	return a.qdrant != nil && a.config != nil && a.crawler != nil
+	return a.config != nil
 }
 
 // DeleteSession remove o arquivo físico de uma Sinfonia (Sessão).

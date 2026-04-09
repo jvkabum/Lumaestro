@@ -34,6 +34,11 @@ export const useSettingsStore = defineStore('settings', () => {
     lmstudio_url: 'http://localhost:1234',
     lmstudio_model: '',
     lmstudio_enabled: false,
+
+    // Pool de motores ativos (blend entre provedores)
+    blend_active_models: true,
+    active_model_providers: ['gemini', 'claude', 'lmstudio'],
+    primary_provider: 'gemini',
   })
 
   // ── Status de Ferramentas ──

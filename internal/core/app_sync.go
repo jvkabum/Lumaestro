@@ -15,6 +15,23 @@ import (
 func (a *App) ScanVault() string {
 	fmt.Println("[BACKEND] ScanVault disparado assincronamente...")
 
+	// Tenta auto-recuperar os motores antes de iniciar o job assíncrono.
+	if a.crawler == nil || a.ctx == nil {
+		_ = a.initServices()
+	}
+
+	if a.ctx == nil {
+		return "⚠️ Sincronização indisponível: contexto do app ainda não inicializado."
+	}
+
+	if a.crawler == nil {
+		runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+			"source":  "SYSTEM",
+			"content": "⚠️ Sync Obsidian 3D bloqueado: sem motor de embeddings ativo. Configure Gemini API Key (aba CHAVES) para habilitar indexação vetorial.",
+		})
+		return "⚠️ Sync Obsidian 3D bloqueado: sem motor de embeddings ativo. Configure Gemini API Key para liberar indexação vetorial."
+	}
+
 	// 🕵️⚡ RAG em Segundo Plano: Previne travamento total da UI e do Chat
 	go func() {
 		// 1. Verificação Crítica de Motor e Contexto
@@ -73,7 +90,10 @@ func (a *App) ScanVault() string {
 // FullSync limpa o cache e inicia uma indexação completa atômica.
 func (a *App) FullSync() string {
 	if a.crawler == nil {
-		return "⚠️ Motor de indexação indisponível."
+		_ = a.initServices()
+	}
+	if a.crawler == nil {
+		return "⚠️ Motor de indexação indisponível: sem provedor de embeddings ativo."
 	}
 	fmt.Println("[BACKEND] 🔄 Solicitado FullSync Atômico. Limpando cache...")
 	a.crawler.PurgeCache()

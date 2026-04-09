@@ -111,6 +111,9 @@ export namespace config {
 	    lmstudio_url: string;
 	    lmstudio_model: string;
 	    lmstudio_enabled: boolean;
+	    blend_active_models: boolean;
+	    active_model_providers: string[];
+	    primary_provider: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Config(source);
@@ -141,6 +144,9 @@ export namespace config {
 	        this.lmstudio_url = source["lmstudio_url"];
 	        this.lmstudio_model = source["lmstudio_model"];
 	        this.lmstudio_enabled = source["lmstudio_enabled"];
+	        this.blend_active_models = source["blend_active_models"];
+	        this.active_model_providers = source["active_model_providers"];
+	        this.primary_provider = source["primary_provider"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

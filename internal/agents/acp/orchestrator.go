@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+
+	"Lumaestro/internal/config"
 )
 
 // Orchestrator é o cérebro central que decide qual agente usar e mantém a memória.
@@ -30,12 +32,54 @@ func NewOrchestrator(executor *ACPExecutor) *Orchestrator {
 func (o *Orchestrator) SelectAgent(goal string) (string, AgentProfile) {
 	g := strings.ToLower(goal)
 
+	cfg, _ := config.Load()
+	activeProviders := []string{"gemini", "claude", "lmstudio"}
+	primaryProvider := "gemini"
+	blendEnabled := true
+	if cfg != nil {
+		activeProviders = cfg.GetActiveProviders()
+		if strings.TrimSpace(cfg.PrimaryProvider) != "" {
+			primaryProvider = strings.ToLower(strings.TrimSpace(cfg.PrimaryProvider))
+		}
+		blendEnabled = cfg.BlendActiveModels
+	}
+
+	isActive := func(provider string) bool {
+		for _, p := range activeProviders {
+			if p == provider {
+				return true
+			}
+		}
+		return false
+	}
+
+	choose := func(candidates ...string) string {
+		if !blendEnabled {
+			if isActive(primaryProvider) {
+				return primaryProvider
+			}
+		}
+
+		for _, c := range candidates {
+			if isActive(c) {
+				return c
+			}
+		}
+		if isActive(primaryProvider) {
+			return primaryProvider
+		}
+		if len(activeProviders) > 0 {
+			return activeProviders[0]
+		}
+		return "gemini"
+	}
+
 	// ⚡ Preferência Local (LM Studio)
 	// Se o usuário quer privacidade ou execução offline, prioriza LM Studio.
 	localTerms := []string{"privado", "privada", "local", "offline", "sem internet", "lm studio", "llama", "mistral"}
 	for _, term := range localTerms {
 		if strings.Contains(g, term) {
-			return "lmstudio", ProfilePlanner // Retorna LM Studio para consultas privadas
+			return choose("lmstudio", "claude", "gemini"), ProfilePlanner
 		}
 	}
 
@@ -47,7 +91,7 @@ func (o *Orchestrator) SelectAgent(goal string) (string, AgentProfile) {
 	}
 	for _, term := range docTerms {
 		if strings.Contains(g, term) {
-			return "gemini", ProfileDocMaster
+			return choose("gemini", "claude", "lmstudio"), ProfileDocMaster
 		}
 	}
 
@@ -55,12 +99,12 @@ func (o *Orchestrator) SelectAgent(goal string) (string, AgentProfile) {
 	technicalTerms := []string{"code", "código", "arquivo", "file", "git", "build", "compilar", "erro", "fix"}
 	for _, term := range technicalTerms {
 		if strings.Contains(g, term) {
-			return "claude", ProfileCoder
+			return choose("claude", "gemini", "lmstudio"), ProfileCoder
 		}
 	}
 
 	// Default: Planner (Gemini) - Excelente para ideias e navegação de conhecimento
-	return "gemini", ProfilePlanner
+	return choose("gemini", "claude", "lmstudio"), ProfilePlanner
 }
 
 // Execute orquestra o fluxo: Seleção -> Prompt -> Execução -> Cache

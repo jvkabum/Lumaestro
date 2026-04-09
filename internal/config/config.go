@@ -64,6 +64,54 @@ type Config struct {
 	LMStudioURL     string `json:"lmstudio_url"`     // URL base do servidor LM Studio (ex: http://localhost:1234)
 	LMStudioModel   string `json:"lmstudio_model"`   // ID do modelo carregado no LM Studio
 	LMStudioEnabled bool   `json:"lmstudio_enabled"` // Habilita o LM Studio como motor de IA
+
+	// 🎛️ Pool de Motores Ativos (Blend entre Gemini/Claude/LM Studio)
+	BlendActiveModels    bool     `json:"blend_active_models"`
+	ActiveModelProviders []string `json:"active_model_providers"`
+	PrimaryProvider      string   `json:"primary_provider"`
+}
+
+// NormalizeProviders garante defaults seguros para o pool de provedores.
+func (c *Config) NormalizeProviders() {
+	if c == nil {
+		return
+	}
+
+	if len(c.ActiveModelProviders) == 0 {
+		c.ActiveModelProviders = []string{"gemini", "claude", "lmstudio"}
+	}
+
+	if strings.TrimSpace(c.PrimaryProvider) == "" {
+		c.PrimaryProvider = "gemini"
+	}
+}
+
+// GetActiveProviders retorna a lista de provedores ativos normalizada e sem duplicatas.
+func (c *Config) GetActiveProviders() []string {
+	c.NormalizeProviders()
+
+	allowed := map[string]bool{
+		"gemini":   true,
+		"claude":   true,
+		"lmstudio": true,
+	}
+	seen := map[string]bool{}
+	providers := make([]string, 0, len(c.ActiveModelProviders))
+
+	for _, p := range c.ActiveModelProviders {
+		k := strings.ToLower(strings.TrimSpace(p))
+		if !allowed[k] || seen[k] {
+			continue
+		}
+		seen[k] = true
+		providers = append(providers, k)
+	}
+
+	if len(providers) == 0 {
+		providers = []string{"gemini"}
+	}
+
+	return providers
 }
 
 // GetGeminiKeys retorna a lista de chaves API do Gemini (split por vírgula).
@@ -121,6 +169,7 @@ func getConfigPath() string {
 
 // Save armazena as configurações em um arquivo JSON.
 func Save(cfg Config) error {
+	cfg.NormalizeProviders()
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return err
@@ -163,5 +212,6 @@ func Load() (*Config, error) {
 		fmt.Printf("[Config] ERRO CRITICO Parse JSON: %v\n", err)
 		return nil, err
 	}
+	cfg.NormalizeProviders()
 	return &cfg, nil
 }

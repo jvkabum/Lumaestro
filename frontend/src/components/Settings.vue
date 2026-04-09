@@ -54,6 +54,43 @@ const testLMStudio = async () => {
   }
 }
 
+const providerLabel = (provider) => {
+  if (provider === 'lmstudio') return 'LM Studio'
+  if (provider === 'claude') return 'Claude'
+  return 'Gemini'
+}
+
+const isProviderActive = (provider) => {
+  return (store.config.active_model_providers || []).includes(provider)
+}
+
+const toggleProvider = (provider) => {
+  if (!store.config.active_model_providers) {
+    store.config.active_model_providers = []
+  }
+
+  const list = store.config.active_model_providers
+  const idx = list.indexOf(provider)
+
+  if (idx >= 0) {
+    if (list.length === 1) return
+    list.splice(idx, 1)
+    if (!list.includes(store.config.primary_provider)) {
+      store.config.primary_provider = list[0]
+    }
+    return
+  }
+
+  list.push(provider)
+}
+
+const setPrimaryProvider = (provider) => {
+  store.config.primary_provider = provider
+  if (!isProviderActive(provider)) {
+    toggleProvider(provider)
+  }
+}
+
 // ── Lifecycle ──
 onMounted(() => {
   loadConfig()
@@ -71,7 +108,7 @@ onMounted(() => {
     </div>
 
     <div class="tabs-nav-glass">
-      <button v-for="tab in ['geral', 'qdrant', 'chaves', 'motores', 'contas', 'seguranca', 'mcp', 'repositórios']" 
+      <button v-for="tab in ['geral', 'qdrant', 'chaves', 'motores', 'modelos', 'contas', 'seguranca', 'mcp', 'repositórios']" 
               :key="tab"
               @click="store.activeTab = tab" 
               :class="{ 'active': store.activeTab === tab }" 
@@ -360,6 +397,56 @@ onMounted(() => {
               </div>
            </div>
         </div>
+      </section>
+
+      <!-- ABA MODELOS (POOL ATIVO) -->
+      <section v-if="store.activeTab === 'modelos'" class="glass-panel animate-slide-up">
+        <h2 class="section-title">Pool Ativo de Modelos</h2>
+        <p style="color: var(--p-text-dim); margin-bottom: 2rem; font-size: 0.9rem;">
+          Misture provedores ativos para que o sistema não dependa apenas do Gemini na inicialização.
+        </p>
+
+        <div class="sec-card" style="margin-bottom: 1.5rem; padding: 1.2rem 1.6rem;">
+          <div class="sec-info">
+            <h5 style="margin: 0; font-weight: 800; font-size: 0.95rem; color: #fff;">Blend de provedores</h5>
+            <p style="margin: 6px 0 0; font-size: 0.78rem; color: var(--p-text-dim);">Quando ativo, o orquestrador respeita o pool e roteia pelo provedor mais adequado disponível.</p>
+          </div>
+          <label class="hybrid-toggle-maestro">
+            <input type="checkbox" v-model="store.config.blend_active_models" />
+            <span class="m-slider-sec"></span>
+          </label>
+        </div>
+
+        <div class="premium-form-group" style="margin-bottom: 1.5rem;">
+          <label style="margin-bottom: 10px; display: block;">Provedores ativos</label>
+          <div style="display: flex; flex-wrap: wrap; gap: 0.75rem;">
+            <button
+              v-for="provider in ['gemini', 'claude', 'lmstudio']"
+              :key="provider"
+              type="button"
+              @click="toggleProvider(provider)"
+              :style="isProviderActive(provider)
+                ? 'padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(16,185,129,0.4); background: rgba(16,185,129,0.12); color: #d1fae5; cursor: pointer; font-weight: 700;'
+                : 'padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(148,163,184,0.25); background: rgba(15,23,42,0.35); color: #cbd5e1; cursor: pointer; font-weight: 700;'"
+            >
+              {{ providerLabel(provider) }} {{ isProviderActive(provider) ? '✓' : '' }}
+            </button>
+          </div>
+          <small style="display: block; margin-top: 0.6rem; color: var(--p-text-dim); font-size: 0.72rem;">
+            Pelo menos um provedor precisa ficar ativo.
+          </small>
+        </div>
+
+        <div class="premium-form-group" style="margin-bottom: 2rem;">
+          <label>Provedor primário</label>
+          <select v-model="store.config.primary_provider" class="maestro-input" @change="setPrimaryProvider(store.config.primary_provider)">
+            <option value="gemini">Gemini</option>
+            <option value="claude">Claude</option>
+            <option value="lmstudio">LM Studio</option>
+          </select>
+        </div>
+
+        <button @click="save" class="btn-glow-blue" style="width: 100%;">SALVAR POOL DE MODELOS</button>
       </section>
 
       <!-- ABA CONTAS GEMINI (OAUTH) -->
