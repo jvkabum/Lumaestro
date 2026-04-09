@@ -257,16 +257,13 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
 
       console.log(`[Store] Turno concluído para ${agent}. Atualizando Sinfonias e Consolidando Memória...`);
       stopSafetyTimeout(); // 🛑 Turno finalizado, para o cronômetro
+      
+      // 🔓 DESTRAVAMENTO ASSÍNCRONO: Libera a interface IMEDIATAMENTE após a resposta da IA.
+      // O pós-processamento de memória (RAG) agora roda em background para não travar a UI.
       isThinking.value = false;
-      if (currentStatus.value && currentStatus.value.action) {
-        pushStatus(`Concluído: ${currentStatus.value.action}`, 'status');
-      } else if (typeof currentStatus.value === 'string' && currentStatus.value) {
-        pushStatus(`Concluído: ${currentStatus.value}`, 'status');
-      }
       currentStatus.value = null; // 🧹 Limpa o status ao terminar
       currentStatusKind.value = 'status';
 
-      // Encerra a digitação da mensagem viva
       if (messages.value.length > 0) {
          const lastMsg = messages.value[messages.value.length - 1];
          if (lastMsg.role === 'assistant') {
@@ -276,20 +273,16 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
       }
       fetchSessions(agent);
 
-      // Consolidação de Conhecimento RAG em tempo real
+      // Consolidação de Conhecimento RAG (Memória) - Roda em background sem AWAIT
       const sessionID = currentACPID.value || 'default';
       const lastMessages = messages.value.slice(-2).map(m => `${m.role}: ${m.text}`).join("\n");
       
       if (lastMessages) {
-        console.log("[Store] Disparando ConsolidateChatKnowledge para sessão:", sessionID);
-        try {
-          await safeCall('main', 'ConsolidateChatKnowledge', sessionID, lastMessages);
-        } finally {
-          // Garante encerramento visual do ciclo após pós-processamento de memória.
-          isThinking.value = false;
-          currentStatus.value = "";
-          currentStatusKind.value = 'status';
-        }
+        console.log("[Store] Disparando ConsolidateChatKnowledge em background para sessão:", sessionID);
+        // Sem 'await' para não bloquear a UI enquanto o motor de IA luta com as cotas da API
+        safeCall('main', 'ConsolidateChatKnowledge', sessionID, lastMessages).catch(err => {
+          console.error("[Store] Erro na consolidação de memória de background:", err);
+        });
       }
     });
 
