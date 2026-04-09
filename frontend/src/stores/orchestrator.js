@@ -36,6 +36,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   const lastTurnCompleteByAgent = ref({});
   const listenersInitialized = ref(false);
   const awaitingTurnByAgent = ref({});
+  const forcedUnlock = ref(false); // 🔓 Trava de segurança: impede re-lock após watchdog/cancel
 
   const pushStatus = (text, kind = 'status') => {
     const line = String(text || '').trim();
@@ -69,15 +70,16 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     
     safetyTimer = setTimeout(() => {
       if (isThinking.value) {
-        console.warn("[Store] Silence Timeout (60s) - A Sinfonia parece travada.");
+        console.warn("[Store] Silence Timeout (90s) - A Sinfonia parece travada. Destravando UI.");
+        forcedUnlock.value = true; // 🔓 Bloqueia qualquer agent:status de re-ligar o spinner
         isThinking.value = false;
         messages.value.push({ 
           role: 'assistant', 
-          text: "⚠️ A Sinfonia está demorando para responder (mais de 60s). Verifique sua conexão ou se o motor local está processando muitas tarefas.", 
+          text: "⚠️ A Sinfonia está demorando para responder (mais de 90s). Verifique sua conexão ou se o motor local está processando muitas tarefas.", 
           mode: 'system' 
         });
       }
-    }, 60000);
+    }, 90000);
   };
 
   const stopSafetyTimeout = () => {
@@ -218,8 +220,9 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
         if (lowered.includes('memória') || lowered.includes('memoria') || lowered.includes('grafo') || lowered.includes('contexto')) kind = 'memory';
       }
       pushStatus(actionStr, kind);
-      // Status de memória é pós-processamento e não deve religar o spinner principal da resposta.
-      if (kind !== 'memory') {
+      // 🔓 Se o watchdog ou o usuário já desbloqueou a UI, NÃO re-ligar o spinner.
+      // Status de memória também não deve religar.
+      if (kind !== 'memory' && !forcedUnlock.value) {
         isThinking.value = true;
       }
     });
@@ -405,6 +408,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
       images: images // Formato [{data, type}]
     });
     
+    forcedUnlock.value = false; // 🔓 Nova mensagem: reseta a trava de segurança
     isThinking.value = true; // Feedback visual imediato
     resetSafetyTimeout(); // Inicia o contador de silêncio
     const key = String(agent || 'unknown').toLowerCase();
@@ -446,6 +450,26 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     }
   };
 
+  // 🛑 FORÇA o desbloqueio da UI (botão PARAR)
+  const forceUnlock = () => {
+    console.warn('[Store] 🛑 FORCE UNLOCK acionado pelo usuário.');
+    forcedUnlock.value = true;
+    isThinking.value = false;
+    stopSafetyTimeout();
+    currentStatus.value = null;
+    currentStatusKind.value = 'status';
+    // Encerra streaming de qualquer mensagem ativa
+    if (messages.value.length > 0) {
+      const lastMsg = messages.value[messages.value.length - 1];
+      if (lastMsg.role === 'assistant' && lastMsg.isStreaming) {
+        lastMsg.isStreaming = false;
+        lastMsg.text += '\n\n🛑 *Interrompido pelo usuário.*';
+        messages.value = [...messages.value];
+      }
+    }
+    pushStatus('🛑 Processamento interrompido pelo usuário', 'error');
+  };
+
   const isSidebarOpen = ref(false);
   const toggleSidebar = async () => {
     isSidebarOpen.value = !isSidebarOpen.value;
@@ -460,7 +484,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   return {
     messages, isThinking, isTerminalMode, isWeaving, activeAgent, runningSessions, pendingReview,
     sessions, currentACPID, isSidebarOpen, currentStatus, isNavigating, currentStatusKind, statusTimeline, statusFilter,
-    initListeners, ask, startSession, sendInput, submitReview, switchAgent, stopSession,
+    initListeners, ask, startSession, sendInput, submitReview, switchAgent, stopSession, forceUnlock,
     fetchSessions, loadSession, newSession, toggleSidebar, clearStatusTimeline
   };
 });

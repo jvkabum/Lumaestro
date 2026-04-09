@@ -77,11 +77,23 @@
         ></textarea>
         
         <div class="actions">
+          <!-- Botão PARAR (aparece quando isThinking é true) -->
           <button 
+            v-if="isThinking"
+            class="stop-btn"
+            @click="orchestrator.forceUnlock()"
+            title="Parar processamento e desbloquear o chat"
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+              <rect x="6" y="6" width="12" height="12" rx="2" />
+            </svg>
+          </button>
+          <button 
+            v-else
             class="send-btn" 
-            :disabled="(!messageText.trim() && attachedImages.length === 0) || isThinking"
+            :disabled="(!messageText.trim() && attachedImages.length === 0)"
             @click="sendMessage"
-            :class="{ ready: (messageText.trim() || attachedImages.length > 0) && !isThinking }"
+            :class="{ ready: (messageText.trim() || attachedImages.length > 0) }"
           >
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5">
               <path d="M7 11L12 6L17 11M12 18V7" stroke-linecap="round" stroke-linejoin="round"/>
@@ -95,6 +107,7 @@
 
 <script setup>
 import { ref, watch, nextTick, onMounted } from 'vue';
+import { useOrchestratorStore } from '../stores/orchestrator';
 
 const messageText = ref('');
 const selectedAgent = ref('gemini');
@@ -110,6 +123,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['send']);
+const orchestrator = useOrchestratorStore();
 
 const syncLocalState = () => {
   localStorage.setItem(AGENT_STORAGE_KEY, selectedAgent.value);
@@ -480,6 +494,37 @@ textarea::placeholder { color: #475569; font-weight: 400; }
 }
 
 .send-btn:disabled { cursor: not-allowed; opacity: 0.5; }
+
+/* Botão PARAR — Estilo Premium com Pulse */
+.stop-btn {
+  width: 38px;
+  height: 38px;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  flex-shrink: 0;
+  margin-bottom: 4px;
+  animation: stop-pulse 1.5s ease-in-out infinite;
+}
+
+.stop-btn:hover {
+  background: rgba(239, 68, 68, 0.3);
+  border-color: #ef4444;
+  color: #fff;
+  transform: scale(1.05);
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
+}
+
+@keyframes stop-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.3); }
+  50% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+}
 
 @keyframes popIn {
   from { transform: scale(0.8); opacity: 0; }
