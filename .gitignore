@@ -41,3 +41,4 @@ tmp/
 # 🧪 Artefatos de Runtime Local
 qdrant_storage/
 debug_stderr.log
+*.exe
