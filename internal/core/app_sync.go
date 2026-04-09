@@ -382,6 +382,11 @@ func summarizeNodeContent(payload map[string]interface{}) string {
 }
 
 func inferNodePurpose(payload map[string]interface{}, summary string) string {
+	// Usa o campo armazenado se disponível (gerado individualmente por conteúdo do arquivo)
+	if w, ok := payload["what-it-does"].(string); ok && strings.TrimSpace(w) != "" {
+		return clampSummary(w, 220)
+	}
+
 	docType, _ := payload["document-type"].(string)
 	fileType, _ := payload["type"].(string)
 

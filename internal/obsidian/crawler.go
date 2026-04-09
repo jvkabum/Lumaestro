@@ -185,17 +185,6 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 		docType := "chunk"
 		if isImage || isPDF { docType = "source" }
 
-		// Emite a Lua
-		runtime.EventsEmit(c.ctx, "graph:node", map[string]interface{}{
-			"id":            nodeID,
-			"name":          nodeName,
-			"document-type": docType,
-			"celestial-type": "moon",
-			"mass":          5.0,
-			"summary":       fmt.Sprintf("Arquivo '%s' detectado e preparado para indexação semântica.", nodeName),
-			"what-it-does":  "Será processado pelo RAG para responder perguntas com contexto real do conteúdo.",
-		})
-
 		// Aresta de Órbita da Lua ao seu Planeta (Pasta)
 		parentDir := filepath.Dir(relPath)
 		var parentID string
@@ -211,20 +200,24 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 			"weight": 3, // Gravidade local
 		})
 
-		// Extrai links [[wiki-links]] (Relacionamentos Cruzados)
+		// Lê conteúdo (md/código) para gerar resumo real e extrair links
+		var fileSummary, fileWhatItDoes string
 		if isMD || isCode {
 			rawContent, readErr := os.ReadFile(path)
 			if readErr == nil {
-				links := extractLinks(string(rawContent))
+				content := string(rawContent)
+				fileSummary, fileWhatItDoes = extractFileSummary(nodeName, ext, content)
+
+				links := extractLinks(content)
 				for _, target := range links {
 					runtime.EventsEmit(c.ctx, "graph:edge", map[string]interface{}{
 						"source": nodeID,
 						"target": strings.ToLower(target),
-						"weight": 1, // Link semântico (mais fraco que órbita)
+						"weight": 1, // Link semântico
 					})
 				}
 
-				// Cache inteligente
+				// Cache inteligente — ignora arquivos não modificados
 				hash := contentHash(rawContent)
 				c.mu.Lock()
 				cachedHash, exists := c.cache[path]
@@ -232,10 +225,37 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 
 				if exists && cachedHash == hash {
 					atomic.AddInt32(&totalCached, 1)
-					return nil 
+					// Emite nó com resumo real mesmo para arquivos em cache
+					runtime.EventsEmit(c.ctx, "graph:node", map[string]interface{}{
+						"id":             nodeID,
+						"name":           nodeName,
+						"document-type":  docType,
+						"celestial-type": "moon",
+						"mass":           5.0,
+						"summary":        fileSummary,
+						"what-it-does":   fileWhatItDoes,
+					})
+					return nil
 				}
 			}
 		}
+
+		if fileSummary == "" {
+			ext2 := strings.ToUpper(strings.TrimPrefix(ext, "."))
+			fileSummary = fmt.Sprintf("Arquivo %s: %s.", ext2, nodeName)
+			fileWhatItDoes = fmt.Sprintf("Mídia '%s' indexada para análise visual e extração de conteúdo.", nodeName)
+		}
+
+		// Emite a Lua com resumo gerado a partir do conteúdo real
+		runtime.EventsEmit(c.ctx, "graph:node", map[string]interface{}{
+			"id":             nodeID,
+			"name":           nodeName,
+			"document-type":  docType,
+			"celestial-type": "moon",
+			"mass":           5.0,
+			"summary":        fileSummary,
+			"what-it-does":   fileWhatItDoes,
+		})
 
 		pendingFiles = append(pendingFiles, crawlTask{path: path, info: info, docType: docType})
 		return nil
@@ -449,15 +469,25 @@ func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.P
 			nodeName := strings.TrimSuffix(info.Name(), ext)
 			nodeID := strings.ToLower(nodeName)
 
-			// Emite a Lua do Projeto
+			// Gera resumo real a partir do conteúdo do arquivo
+			fileSummary, fileWhatItDoes := func() (string, string) {
+				raw, readErr := os.ReadFile(path)
+				if readErr != nil {
+					return fmt.Sprintf("Arquivo '%s' do repositório satélite.", nodeName),
+						"Sem conteúdo legível disponível."
+				}
+				return extractFileSummary(nodeName, ext, string(raw))
+			}()
+
+			// Emite a Lua do Projeto com resumo individual
 			runtime.EventsEmit(c.ctx, "graph:node", map[string]interface{}{
-				"id":            nodeID,
-				"name":          nodeName,
-				"document-type": docType,
+				"id":             nodeID,
+				"name":           nodeName,
+				"document-type":  docType,
 				"celestial-type": "moon",
-				"mass":          4.0,
-				"summary":       fmt.Sprintf("Arquivo '%s' importado para análise semântica.", nodeName),
-				"what-it-does":  "Alimenta o RAG com contexto de documentação/código do repositório satélite.",
+				"mass":           4.0,
+				"summary":        fileSummary,
+				"what-it-does":   fileWhatItDoes,
 			})
 
 			// Aresta de órbita para a pasta
@@ -604,12 +634,37 @@ func (c *Crawler) processFile(ctx context.Context, path string, info os.FileInfo
 		return true, nil
 	}
 
-	// Persistência no Qdrant
+	// Gera resumo individual a partir do conteúdo processado
+	var nodeSummary, nodeWhatItDoes string
+	if isImage || isPDF {
+		if textContent != "" {
+			nodeSummary = clampStr(textContent, 220)
+			ext2 := strings.ToUpper(strings.TrimPrefix(ext, "."))
+			nodeWhatItDoes = fmt.Sprintf("Mídia %s com conteúdo extraído via visão computacional.", ext2)
+		} else {
+			nodeSummary = fmt.Sprintf("Arquivo %s: %s.", strings.ToUpper(strings.TrimPrefix(ext, ".")), nodeName)
+			nodeWhatItDoes = "Arquivo de mídia sem descrição extraída."
+		}
+	} else {
+		nodeSummary, nodeWhatItDoes = extractFileSummary(nodeName, ext, textContent)
+	}
+
+	// Persistência no Qdrant (inclui campos de resumo para SyncAllNodes futuro)
 	c.Qdrant.UpsertPoint("obsidian_knowledge", uint64(time.Now().UnixNano()), vector, map[string]interface{}{
 		"path": path, "name": nodeName, "content": textContent,
 		"triples": triples, "links": links, "type": ext,
 		"document-type": forcedDocType, "status": "active",
-		"observed_at": time.Now().Format(time.RFC3339),
+		"observed_at":   time.Now().Format(time.RFC3339),
+		"summary":       nodeSummary,
+		"what-it-does":  nodeWhatItDoes,
+	})
+
+	// Emite nó atualizado com resumo real (garante que o grafo exibe conteúdo indexado)
+	runtime.EventsEmit(c.ctx, "graph:node", map[string]interface{}{
+		"id":            nodeID,
+		"document-type": forcedDocType,
+		"summary":       nodeSummary,
+		"what-it-does":  nodeWhatItDoes,
 	})
 
 	// Atualiza o cache com o hash do conteúdo
@@ -681,5 +736,295 @@ func firstLines(text string, maxChars int) string {
 		return text
 	}
 	return text[:maxChars] + "..."
+}
+
+// clampStr trunca texto em limit caracteres adicionando "..." se necessário.
+func clampStr(s string, limit int) string {
+	s = strings.TrimSpace(s)
+	if len(s) <= limit {
+		return s
+	}
+	return strings.TrimSpace(s[:limit-3]) + "..."
+}
+
+// extractFileSummary lê o conteúdo real do arquivo e extrai um resumo individual por tipo.
+// Zero chamadas de API — extração puramente baseada no conteúdo do arquivo.
+func extractFileSummary(name, ext, content string) (summary, whatItDoes string) {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return fmt.Sprintf("Arquivo '%s'.", name), "Conteúdo vazio ou não textual."
+	}
+	switch strings.ToLower(ext) {
+	case ".md":
+		return extractMarkdownSummary(name, content)
+	case ".go":
+		return extractGoSummary(name, content)
+	case ".js", ".jsx", ".ts", ".tsx":
+		return extractJSSummary(name, content)
+	case ".py":
+		return extractPySummary(name, content)
+	case ".html":
+		return extractHTMLSummary(name, content)
+	case ".css":
+		return extractCSSSummary(name, content)
+	default:
+		return extractGenericSummary(name, content)
+	}
+}
+
+func extractMarkdownSummary(name, content string) (string, string) {
+	lines := strings.Split(content, "\n")
+	var heading, firstPara string
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "#") && heading == "" {
+			heading = strings.TrimSpace(strings.TrimLeft(line, "#"))
+			continue
+		}
+		if !strings.HasPrefix(line, "#") && firstPara == "" {
+			firstPara = line
+			break
+		}
+	}
+	if heading == "" {
+		heading = name
+	}
+	if firstPara == "" {
+		firstPara = heading
+	}
+	sum := heading
+	if firstPara != heading {
+		sum = heading + ": " + firstPara
+	}
+	return clampStr(sum, 220), clampStr(firstPara, 180)
+}
+
+func extractGoSummary(name, content string) (string, string) {
+	lines := strings.Split(content, "\n")
+	var pkgDoc []string
+	var exports []string
+	var pkgName string
+	inPkgComment := true
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "package ") {
+			parts := strings.Fields(trimmed)
+			if len(parts) >= 2 {
+				pkgName = parts[1]
+			}
+			inPkgComment = false
+			continue
+		}
+		if inPkgComment && strings.HasPrefix(trimmed, "//") {
+			doc := strings.TrimSpace(strings.TrimPrefix(trimmed, "//"))
+			if doc != "" {
+				pkgDoc = append(pkgDoc, doc)
+			}
+			continue
+		}
+		if trimmed == "" {
+			inPkgComment = false
+		}
+		if len(exports) < 5 {
+			for _, kw := range []string{"func ", "type ", "var ", "const "} {
+				if strings.HasPrefix(trimmed, kw) {
+					rest := strings.TrimPrefix(trimmed, kw)
+					parts := strings.Fields(rest)
+					if len(parts) > 0 && len(parts[0]) > 0 && parts[0][0] >= 'A' && parts[0][0] <= 'Z' {
+						id := parts[0]
+						if idx := strings.IndexAny(id, "([{"); idx > 0 {
+							id = id[:idx]
+						}
+						exports = append(exports, id)
+					}
+					break
+				}
+			}
+		}
+	}
+
+	var sum string
+	if len(pkgDoc) > 0 {
+		sum = strings.Join(pkgDoc, " ")
+	} else if pkgName != "" {
+		sum = fmt.Sprintf("Pacote Go '%s'.", pkgName)
+	} else {
+		sum = fmt.Sprintf("Arquivo Go: %s.", name)
+	}
+
+	var what string
+	if len(exports) > 0 {
+		what = fmt.Sprintf("Define: %s.", strings.Join(exports, ", "))
+	} else if pkgName != "" {
+		what = fmt.Sprintf("Implementa lógica do pacote '%s'.", pkgName)
+	} else {
+		what = "Código Go do backend da aplicação."
+	}
+	return clampStr(sum, 220), clampStr(what, 180)
+}
+
+func extractJSSummary(name, content string) (string, string) {
+	lines := strings.Split(content, "\n")
+	var commentLines []string
+	var exports []string
+	inBlock := false
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "/*") {
+			inBlock = true
+			continue
+		}
+		if inBlock {
+			if strings.Contains(trimmed, "*/") {
+				inBlock = false
+				continue
+			}
+			clean := strings.TrimLeft(trimmed, "* ")
+			if clean != "" && !strings.HasPrefix(clean, "@") {
+				commentLines = append(commentLines, clean)
+			}
+			continue
+		}
+		if len(commentLines) == 0 && strings.HasPrefix(trimmed, "// ") {
+			commentLines = append(commentLines, strings.TrimPrefix(trimmed, "// "))
+			continue
+		}
+		if len(exports) < 5 && strings.HasPrefix(trimmed, "export ") {
+			parts := strings.Fields(trimmed)
+			if len(parts) >= 3 {
+				id := parts[2]
+				if idx := strings.IndexAny(id, "({<"); idx > 0 {
+					id = id[:idx]
+				}
+				if id != "" && id != "from" && id != "default" {
+					exports = append(exports, id)
+				}
+			}
+		}
+	}
+
+	var sum string
+	n := min(3, len(commentLines))
+	if n > 0 {
+		sum = strings.Join(commentLines[:n], " ")
+	} else {
+		sum = fmt.Sprintf("Módulo JS/TS: %s.", name)
+	}
+
+	var what string
+	if len(exports) > 0 {
+		what = fmt.Sprintf("Exporta: %s.", strings.Join(exports, ", "))
+	} else {
+		what = fmt.Sprintf("Módulo '%s' — componente ou utilitário da interface.", name)
+	}
+	return clampStr(sum, 220), clampStr(what, 180)
+}
+
+func extractPySummary(name, content string) (string, string) {
+	lines := strings.Split(content, "\n")
+	var docLines []string
+	var defs []string
+	inDoc := false
+	docQuote := ""
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if !inDoc {
+			if strings.HasPrefix(trimmed, `"""`) || strings.HasPrefix(trimmed, `'''`) {
+				docQuote = trimmed[:3]
+				inDoc = true
+				rest := strings.TrimPrefix(trimmed, docQuote)
+				rest = strings.TrimSuffix(rest, docQuote)
+				if rest = strings.TrimSpace(rest); rest != "" {
+					docLines = append(docLines, rest)
+				}
+				if strings.Count(trimmed, docQuote) >= 2 {
+					inDoc = false
+				}
+				continue
+			}
+		} else {
+			if strings.Contains(trimmed, docQuote) {
+				part := strings.Split(trimmed, docQuote)[0]
+				if part = strings.TrimSpace(part); part != "" {
+					docLines = append(docLines, part)
+				}
+				inDoc = false
+				continue
+			}
+			if trimmed != "" {
+				docLines = append(docLines, trimmed)
+			}
+			if len(docLines) >= 3 {
+				inDoc = false
+			}
+			continue
+		}
+		if len(defs) < 5 {
+			for _, kw := range []string{"async def ", "def ", "class "} {
+				if strings.HasPrefix(trimmed, kw) {
+					rest := strings.TrimPrefix(trimmed, kw)
+					parts := strings.Fields(rest)
+					if len(parts) > 0 {
+						id := parts[0]
+						if idx := strings.IndexAny(id, "(:{"); idx > 0 {
+							id = id[:idx]
+						}
+						defs = append(defs, id)
+					}
+					break
+				}
+			}
+		}
+	}
+
+	var sum string
+	if len(docLines) > 0 {
+		sum = strings.Join(docLines, " ")
+	} else {
+		sum = fmt.Sprintf("Módulo Python: %s.", name)
+	}
+
+	var what string
+	if len(defs) > 0 {
+		what = fmt.Sprintf("Define: %s.", strings.Join(defs, ", "))
+	} else {
+		what = fmt.Sprintf("Script Python '%s'.", name)
+	}
+	return clampStr(sum, 220), clampStr(what, 180)
+}
+
+func extractHTMLSummary(name, content string) (string, string) {
+	titleRe := regexp.MustCompile(`(?i)<title[^>]*>([^<]+)</title>`)
+	h1Re := regexp.MustCompile(`(?i)<h1[^>]*>([^<]+)</h1>`)
+	title := name
+	if m := titleRe.FindStringSubmatch(content); len(m) > 1 {
+		title = strings.TrimSpace(m[1])
+	} else if m := h1Re.FindStringSubmatch(content); len(m) > 1 {
+		title = strings.TrimSpace(m[1])
+	}
+	return fmt.Sprintf("Página HTML: %s.", title),
+		fmt.Sprintf("Template de interface que renderiza '%s'.", title)
+}
+
+func extractCSSSummary(name, content string) (string, string) {
+	ruleCount := strings.Count(content, "{")
+	return fmt.Sprintf("Folha de estilos CSS: %s (%d regras).", name, ruleCount),
+		fmt.Sprintf("Define %d regras de estilos visuais para a interface.", ruleCount)
+}
+
+func extractGenericSummary(name, content string) (string, string) {
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" && !strings.HasPrefix(line, "#!") {
+			return clampStr(line, 220), fmt.Sprintf("Arquivo de configuração ou dados: %s.", name)
+		}
+	}
+	return fmt.Sprintf("Arquivo: %s.", name), "Arquivo de suporte do projeto."
 }
 
