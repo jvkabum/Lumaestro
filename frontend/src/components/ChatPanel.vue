@@ -1,13 +1,13 @@
 <script setup>
 import { storeToRefs } from 'pinia'
-import { onMounted, ref, watch } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useOrchestratorStore } from '../stores/orchestrator'
 import ChatInput from './ChatInput.vue'
 import ChatLog from './ChatLog.vue'
-import TerminalView from './TerminalView.vue'
+import PlanView from './PlanView.vue'
 import ReviewBlock from './ReviewBlock.vue'
 import SubagentPanel from './SubagentPanel.vue'
-import PlanView from './PlanView.vue'
+import TerminalView from './TerminalView.vue'
 
 // --- Uso da Store (Pinia) ---
 const orchestrator = useOrchestratorStore()

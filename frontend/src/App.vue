@@ -23,9 +23,9 @@ const isBooting = ref(true)
 const bootError = ref(null)
 
 // Painel redimensionável
-const chatWidth = ref(500)
+const chatWidth = ref(556)
 const isResizing = ref(false)
-const minChatWidth = 500
+const minChatWidth = 556
 const maxChatWidth = 1400
 
 // Terminal Dock Inferior (Estilo VSCode)
