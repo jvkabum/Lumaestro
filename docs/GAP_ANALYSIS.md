@@ -17,7 +17,7 @@
 | 🟡 Gap Médio | 7 |
 | ⚪ Não Aplicável / Baixo | 6 |
 
-**Cobertura real: ~88%**
+**Cobertura real: ~90%**
 
 ---
 
@@ -40,9 +40,9 @@
 | 13 | Model Routing (Fallback) | [model-routing](https://geminicli.com/docs/cli/model-routing/) | `executor.go` rotação de chaves + fallback + auto-retry completo | ✅ Pronto |
 | 14 | Token Caching | [token-caching](https://geminicli.com/docs/cli/token-caching/) | `TotalCacheTokens` tracking + Dashboard de economia na UI | ✅ Pronto |
 | 15 | Checkpointing | [checkpointing](https://geminicli.com/docs/cli/checkpointing/) | `SessionInfo` struct em `types.go` + `.gemini/history/` ativo | ⚠️ Parcial — falta UI timeline + restore |
-| 16 | Plan Mode | [plan-mode](https://geminicli.com/docs/cli/plan-mode/) | Flag `PlanMode` no motor + Bloqueio de escrita no handler + Toggle visual | ✅ Pronto |
+| 16 | Plan Mode | [plan-mode](https://geminicli.com/docs/cli/plan-mode/) | Flag `PlanMode` no motor + Bloqueio de escrita no handler + Toggle visual + `PlanView.vue` com Aprovar/Feedback | ✅ Pronto |
 | 17 | Model Steering 🔬 | [model-steering](https://geminicli.com/docs/cli/model-steering/) | `SteeringChan` + Monitor de sessão + Overlay de input real-time | ✅ Pronto |
-| 18 | Subagents | [subagents](https://geminicli.com/docs/core/subagents/) | Swarm em `app_swarm.go` + `SpawnSubagent` em `executor.go` (Instâncias ACP Isoladas) | ✅ Pronto |
+| 18 | Subagents | [subagents](https://geminicli.com/docs/core/subagents/) | `SpawnSubagent` + Telemetria Hierárquica (`agent:subagent_spawned/stopped`) + `SubagentPanel.vue` | ✅ Pronto |
 | 19 | Remote Subagents | [remote-agents](https://geminicli.com/docs/core/remote-agents/) | Sem implementação | 🟡 |
 | 20 | Hooks (Pre/Post Tool) | [hooks](https://geminicli.com/docs/hooks/) | `hooks.go` implementado com pipeline global de pré/pós execução | ✅ Pronto |
 | 21 | Agent Skills | [skills](https://geminicli.com/docs/cli/skills/) | **524+ skills** em `internal/agents/skills/` com `manager.go`, `loader.go` e 9 categorias | ✅ Pronto |

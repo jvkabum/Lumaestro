@@ -6,6 +6,8 @@ import ChatInput from './ChatInput.vue'
 import ChatLog from './ChatLog.vue'
 import TerminalView from './TerminalView.vue'
 import ReviewBlock from './ReviewBlock.vue'
+import SubagentPanel from './SubagentPanel.vue'
+import PlanView from './PlanView.vue'
 
 // --- Uso da Store (Pinia) ---
 const orchestrator = useOrchestratorStore()
@@ -89,6 +91,12 @@ const handleSessionEnded = (agent) => {
     <!-- Sistema de Revisão de Segurança (ACP Hands) -->
     <ReviewBlock v-if="pendingReview" :review="pendingReview" />
 
+    <!-- 🐝 Monitor de Enxame de Subagentes -->
+    <SubagentPanel />
+
+    <!-- 📋 Overlay de Plano de Execução -->
+    <PlanView />
+
     <header class="panel-header glass">
       <div class="header-left">
         <span class="orchestra-icon">🎻</span>
@@ -118,6 +126,17 @@ const handleSessionEnded = (agent) => {
             <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
             <line x1="8" y1="21" x2="16" y2="21"></line>
             <line x1="12" y1="17" x2="12" y2="21"></line>
+          </svg>
+        </button>
+
+        <!-- 📋 Botão de Visualização de Plano -->
+        <button @click="orchestrator.showPlanOverlay = true" class="action-btn" :class="{ 'btn-active-plan': orchestrator.isPlanMode }" title="Visualizar Plano">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+            <polyline points="10 9 9 9 8 9"></polyline>
           </svg>
         </button>
 
@@ -308,6 +327,7 @@ const handleSessionEnded = (agent) => {
 .action-btn:hover { background: rgba(255, 255, 255, 0.05); color: #fff; }
 .action-btn.btn-active-history { color: #38bdf8; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.2); }
 .action-btn.btn-active { color: #3b82f6; background: rgba(59, 130, 246, 0.1); }
+.action-btn.btn-active-plan { color: #c084fc; background: rgba(168, 85, 247, 0.1); border: 1px solid rgba(168, 85, 247, 0.2); }
 
 .exit-btn-circle {
   background: #ef4444; border: none; color: white; width: 28px; height: 28px;

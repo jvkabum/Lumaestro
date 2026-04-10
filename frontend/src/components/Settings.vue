@@ -224,10 +224,10 @@ watch(() => store.activeTab, (tab) => {
         </div>
 
         <!-- SEÇÃO NEURAL -->
-        <div class="sec-card neural-sec" style="margin-top: 3.5rem; margin-bottom: 4rem; border-color: rgba(139, 92, 246, 0.3); background: rgba(139, 92, 246, 0.05); padding: 2rem 2.5rem; box-shadow: 0 10px 40px rgba(0,0,0,0.2);">
+        <div class="sec-card neural-sec" style="margin-top: 1.5rem; margin-bottom: 2rem; border-color: rgba(139, 92, 246, 0.3); background: rgba(139, 92, 246, 0.05); padding: 1.2rem 1.6rem; box-shadow: 0 10px 40px rgba(0,0,0,0.2);">
            <div class="sec-info">
-              <h5 style="margin: 0; font-weight: 800; font-size: 1rem; color: #fff;">🧠 Modo de Exploração Neural</h5>
-              <p style="margin: 8px 0 0; font-size: 0.8rem; color: var(--p-text-dim); line-height: 1.5;">
+              <h5 style="margin: 0; font-weight: 800; font-size: 0.95rem; color: #fff;">🧠 Modo de Exploração Neural</h5>
+              <p style="margin: 8px 0 0; font-size: 0.78rem; color: var(--p-text-dim); line-height: 1.5;">
                 Ativado: Mostra resultados brutos (similaridade pura).<br/>
                 Desativado: Prioriza notas que você acessa com frequência (Sinapses Fortes).
               </p>
@@ -247,9 +247,9 @@ watch(() => store.activeTab, (tab) => {
 
         <button @click="save" class="btn-glow-blue">SALVAR ALTERAÇÕES GERAIS</button>
 
-        <div class="danger-zone-compact" style="margin-top: 4rem; padding: 2rem; border-top: 1px solid rgba(239, 68, 68, 0.1);">
-           <h3 style="color: #ef4444; font-size: 0.8rem; letter-spacing: 2px; margin-bottom: 1rem;">CUIDADO: ZONA DE PERIGO</h3>
-           <p style="color: var(--p-text-dim); font-size: 0.75rem; margin-bottom: 1.5rem;">Deseja apagar todos os vetores e memórias do banco de dados?</p>
+        <div class="danger-zone-compact" style="margin-top: 2rem; padding: 1.2rem; border-top: 1px solid rgba(239, 68, 68, 0.1);">
+           <h3 style="color: #ef4444; font-size: 0.7rem; letter-spacing: 2px; margin-bottom: 0.6rem;">CUIDADO: ZONA DE PERIGO</h3>
+           <p style="color: var(--p-text-dim); font-size: 0.7rem; margin-bottom: 0.8rem;">Deseja apagar todos os vetores e memórias do banco de dados?</p>
            <button @click="store.showResetModal = true" class="btn-reset-db">EXPURGAR BANCO VETORIAL (RESET)</button>
         </div>
       </section>
@@ -257,7 +257,7 @@ watch(() => store.activeTab, (tab) => {
       <!-- ABA QDRANT (MEMÓRIA VETORIAL) -->
       <section v-if="store.activeTab === 'qdrant'" class="glass-panel animate-slide-up">
         <h2 class="section-title">Memória Vetorial (Qdrant)</h2>
-        <p class="subtitle-maestro" style="color: var(--p-text-dim); margin-bottom: 2rem; font-size: 0.9rem;">
+        <p class="subtitle-maestro" style="color: var(--p-text-dim); margin-bottom: 1.5rem; font-size: 0.9rem;">
           Configure o banco de dados que armazena o conhecimento de longo prazo e as conexões semânticas da IA.
         </p>
         
@@ -325,7 +325,7 @@ watch(() => store.activeTab, (tab) => {
       <!-- ABA CHAVES (INJEÇÃO DE CHAVES DIRETAS) -->
       <section v-if="store.activeTab === 'chaves'" class="glass-panel animate-slide-up">
         <h2 class="section-title">Chaves de API (Conexão Legada)</h2>
-        <p style="color: var(--p-text-dim); margin-bottom: 2rem; font-size: 0.9rem;">
+        <p style="color: var(--p-text-dim); margin-bottom: 1.5rem; font-size: 0.9rem;">
           Gerencie injeções diretas de tokens de acesso para execução em modo bypass em vez do sistema nativo OAuth.
         </p>
         
@@ -348,10 +348,10 @@ watch(() => store.activeTab, (tab) => {
 
 
 
-        <div class="sec-card" style="margin-top: 2rem; margin-bottom: 2.5rem; padding: 1.5rem 2.5rem;">
+        <div class="sec-card" style="margin-top: 1.5rem; margin-bottom: 1.5rem; padding: 1.2rem 1.6rem;">
            <div class="sec-info">
-              <h5 style="margin: 0; font-weight: 800; font-size: 1rem; color: #fff;">Modo Autônomo API</h5>
-              <p style="margin: 8px 0 0; font-size: 0.8rem; color: var(--p-text-dim);">Usar chave legada em vez de Sessões OAuth.</p>
+              <h5 style="margin: 0; font-weight: 800; font-size: 0.95rem; color: #fff;">Modo Autônomo API</h5>
+              <p style="margin: 8px 0 0; font-size: 0.78rem; color: var(--p-text-dim);">Usar chave legada em vez de Sessões OAuth.</p>
            </div>
            <label class="hybrid-toggle-maestro">
               <input type="checkbox" v-model="store.config.use_gemini_api_key" />
@@ -636,16 +636,16 @@ watch(() => store.activeTab, (tab) => {
       <!-- ABA CONTAS GEMINI (OAUTH) -->
       <section v-if="store.activeTab === 'contas'" class="glass-panel animate-slide-up">
         <h2 class="section-title">Identidades Gemini OAuth</h2>
-        <p class="subtitle-maestro" style="color: var(--p-text-dim); margin-bottom: 3rem; font-size: 1rem;">
+        <p class="subtitle-maestro" style="color: var(--p-text-dim); margin-bottom: 1.5rem; font-size: 0.95rem;">
           Gerencie múltiplas sessões isoladas do Google para alternar quotas de API e perfis em tempo real.
         </p>
 
-        <div class="premium-form-group" style="display: flex; gap: 1.5rem; align-items: flex-end; margin-bottom: 4rem;">
+        <div class="premium-form-group" style="display: flex; gap: 1rem; align-items: flex-end; margin-bottom: 2.5rem;">
           <div style="flex: 1;">
             <label>Nome da Nova Identidade</label>
             <input v-model="store.newAccName" placeholder="Ex: Trabalho, Pessoal, Pesquisa..." class="maestro-input" @keyup.enter="handleAddAccount" />
           </div>
-          <button @click="handleAddAccount" class="btn-glow-blue" style="height: 60px; padding: 0 30px; font-size: 0.8rem;">
+          <button @click="handleAddAccount" class="btn-glow-blue" style="height: 52px; padding: 0 24px; font-size: 0.8rem;">
             CRIAR IDENTIDADE 💎
           </button>
         </div>

@@ -273,6 +273,16 @@ func (e *ACPExecutor) SpawnSubagent(parent *ACPSession, agentName string, goal s
 	subSess := e.ActiveSessions[subSessID]
 	e.Mu.Unlock()
 	
+	// 📡 Telemetria: Avisa o Frontend sobre o novo subagente no enxame
+	if e.Ctx != nil {
+		runtime.EventsEmit(e.Ctx, "agent:subagent_spawned", map[string]string{
+			"parentId":  parent.ID,
+			"childId":   subSessID,
+			"agentName": agentName,
+			"goal":      goal,
+		})
+	}
+
 	return subSess, nil
 }
 
@@ -303,6 +313,13 @@ func (e *ACPExecutor) StopSession(sessionID string) error {
 	e.Mu.Lock()
 	delete(e.ActiveSessions, sessionID)
 	e.Mu.Unlock()
+
+	// 📡 Telemetria: Limpa o subagente da visualização
+	if e.Ctx != nil {
+		runtime.EventsEmit(e.Ctx, "agent:subagent_stopped", map[string]string{
+			"sessionId": sessionID,
+		})
+	}
 
 	return nil
 }

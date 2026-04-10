@@ -39,6 +39,8 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   const awaitingTurnByAgent = ref({});
   const forcedUnlock = ref(false); // 🔓 Trava de segurança: impede re-lock após watchdog/cancel
   const isPlanMode = ref(false); // 🔒 Modo de segurança: leitura apenas
+  const showPlanOverlay = ref(false); // 🖼️ Overlay dedicado para visualização de planos
+  const subagents = ref(new Map()); // 🌳 Árvore de subagentes ativos {sessionId: {agentName, goal, status}}
 
   const togglePlanMode = async (agent) => {
     isPlanMode.value = !isPlanMode.value;
@@ -242,6 +244,13 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
       if (kind !== 'memory' && !forcedUnlock.value) {
         isThinking.value = true;
       }
+
+      // 🔄 Sincroniza status para subagentes também
+      if (subagents.value.has(s.agentId || s.sessionId)) {
+        const sub = subagents.value.get(s.agentId || s.sessionId);
+        sub.status = actionRaw;
+        sub.kind = kind;
+      }
     });
 
     // 📡 Listener de Estatísticas (Uso de Tokens/Latência)
@@ -261,6 +270,24 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     EventsOn('weaver:finished', () => {
       console.log("[Store] 🧶 WEAVER finalizada: Sinapses consolidadas.");
       isWeaving.value = false;
+    });
+
+    // 🌳 HIERARQUIA: Monitoramento de Subagentes
+    EventsOn('agent:subagent_spawned', (data) => {
+      console.log("[Store] 🚀 Subagente detectado no enxame:", data);
+      subagents.value.set(data.childId, {
+        parentId: data.parentId,
+        agentName: data.agentName,
+        goal: data.goal,
+        status: 'Iniciando...',
+        kind: 'status'
+      });
+      pushStatus(`🚀 Subagente ${data.agentName} iniciado para: ${data.goal}`, 'status');
+    });
+
+    EventsOn('agent:subagent_stopped', (data) => {
+      console.log("[Store] 🛑 Subagente encerrado:", data.sessionId);
+      subagents.value.delete(data.sessionId);
     });
 
     // 🚀 Sincronização de Sinfonias (Checkpoints): Quando o turno termina, atualizamos a lista lateral e consolidamos a memória
@@ -525,7 +552,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   return {
     messages, isThinking, isTerminalMode, isWeaving, activeAgent, runningSessions, pendingReview, modelStats,
     sessions, currentACPID, isSidebarOpen, currentStatus, isNavigating, currentStatusKind, statusTimeline, statusFilter,
-    isPlanMode, togglePlanMode,
+    isPlanMode, togglePlanMode, subagents, showPlanOverlay,
     initListeners, ask, startSession, sendInput, submitReview, switchAgent, stopSession, forceUnlock,
     fetchSessions, loadSession, newSession, toggleSidebar, clearStatusTimeline, sendSteeringHint
   };
