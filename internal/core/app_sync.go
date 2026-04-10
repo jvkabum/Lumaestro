@@ -204,22 +204,34 @@ func (a *App) PurgeCache() string {
 	return "Cache de indexação limpo com sucesso!"
 }
 
+// TopologyCache representa o snapshot completo do grafo para carregamento instantâneo.
+type TopologyCache struct {
+	Nodes []map[string]interface{} `json:"nodes"`
+	Edges []map[string]interface{} `json:"edges"`
+}
+
 // Sincronização e I/O Desacoplado do Motor Físico
-func (a *App) saveTopologyCache(batch []map[string]interface{}) {
-	data, err := json.Marshal(batch)
+func (a *App) saveTopologyCache(nodes []map[string]interface{}, edges []map[string]interface{}) {
+	cache := TopologyCache{
+		Nodes: nodes,
+		Edges: edges,
+	}
+	data, err := json.Marshal(cache)
 	if err == nil {
 		os.WriteFile(".lumaestro_topology.json", data, 0644)
 	}
 }
 
-func (a *App) loadTopologyCache() []map[string]interface{} {
+func (a *App) loadTopologyCache() *TopologyCache {
 	data, err := os.ReadFile(".lumaestro_topology.json")
 	if err != nil {
 		return nil
 	}
-	var batch []map[string]interface{}
-	json.Unmarshal(data, &batch)
-	return batch
+	var cache TopologyCache
+	if err := json.Unmarshal(data, &cache); err != nil {
+		return nil
+	}
+	return &cache
 }
 
 // SyncAllNodes percorre o banco de dados e emite cada nota para o visualizador 3D.
@@ -229,13 +241,20 @@ func (a *App) SyncAllNodes() {
 	}
 
 	// 1. TENTA TOPOLOGY CACHE (IGNORA O QDRANT INSTANTANEAMENTE SE EXISTIR)
-	cachedBatch := a.loadTopologyCache()
-	if cachedBatch != nil && len(cachedBatch) > 0 {
-		fmt.Printf("[Sync] ⚡ Carregando %d nós instantaneamente via Fast Topology Cache (0 delay de infraestrutura)...\n", len(cachedBatch))
-		runtime.EventsEmit(a.ctx, "graph:nodes:batch", cachedBatch)
+	cache := a.loadTopologyCache()
+	if cache != nil && len(cache.Nodes) > 0 {
+		fmt.Printf("[Sync] ⚡ Carregando %d nós e %d arestas via Fast Topology Cache...\n", len(cache.Nodes), len(cache.Edges))
+		
+		// Emite os nós em lote
+		runtime.EventsEmit(a.ctx, "graph:nodes:batch", cache.Nodes)
+		
+		// Emite as arestas individualmente (mais seguro para o motor D3)
+		for _, edge := range cache.Edges {
+			runtime.EventsEmit(a.ctx, "graph:edge", edge)
+		}
 
 		go func() {
-			time.Sleep(500 * time.Millisecond) // Pequeno respiro para o motor físico
+			time.Sleep(800 * time.Millisecond) // Respiro para o motor físico processar as arestas
 			stats, _ := a.AnalyzeGraphHealth()
 			runtime.EventsEmit(a.ctx, "graph:health:update", stats)
 		}()
@@ -254,8 +273,11 @@ func (a *App) SyncAllNodes() {
 		fmt.Printf("[Sync] Erro ao buscar memórias para sincronização: %v\n", err)
 	}
 
-	var batch []map[string]interface{}
+	var nodesBatch []map[string]interface{}
+	var edgesBatch []map[string]interface{}
 	batchIndex := map[string]struct{}{}
+	edgeIndex := map[string]struct{}{}
+
 	addNode := func(node map[string]interface{}) {
 		id, _ := node["id"].(string)
 		if id == "" {
@@ -265,7 +287,22 @@ func (a *App) SyncAllNodes() {
 			return
 		}
 		batchIndex[id] = struct{}{}
-		batch = append(batch, node)
+		nodesBatch = append(nodesBatch, node)
+	}
+
+	addEdge := func(source, target string, weight int) {
+		if source == "" || target == "" { return }
+		pairID := fmt.Sprintf("%s->%s", source, target)
+		if _, exists := edgeIndex[pairID]; exists { return }
+		edgeIndex[pairID] = struct{}{}
+		
+		edge := map[string]interface{}{
+			"source": source,
+			"target": target,
+			"weight": weight,
+		}
+		edgesBatch = append(edgesBatch, edge)
+		runtime.EventsEmit(a.ctx, "graph:edge", edge)
 	}
 
 	for _, p := range points {
@@ -305,6 +342,26 @@ func (a *App) SyncAllNodes() {
 		}
 
 		addNode(nodeData)
+
+		// 🖇️ Extração de Links Diretos (Obsidian [[Bracket Links]])
+		if linksRaw, ok := p["links"].([]interface{}); ok {
+			for _, target := range linksRaw {
+				if t, ok := target.(string); ok && t != "" {
+					addEdge(nodeID, strings.ToLower(t), 1)
+				}
+			}
+		}
+
+		// 🧠 Extração de Triplas (Relações Explícitas extraídas por IA)
+		if triplesRaw, ok := p["triples"].([]interface{}); ok {
+			for _, t := range triplesRaw {
+				if tm, ok := t.(map[string]interface{}); ok {
+					if obj, ok := tm["object"].(string); ok && obj != "" {
+						addEdge(nodeID, strings.ToLower(obj), 2)
+					}
+				}
+			}
+		}
 	}
 
 	for _, p := range memoryPoints {
@@ -334,20 +391,16 @@ func (a *App) SyncAllNodes() {
 			})
 		}
 		if subject != "" && object != "" {
-			runtime.EventsEmit(a.ctx, "graph:edge", map[string]interface{}{
-				"source": subject,
-				"target": object,
-				"weight": 1,
-			})
+			addEdge(subject, object, 1)
 		}
 	}
 
-	// Grava o Cache novinho em folha
-	a.saveTopologyCache(batch)
+	// Grava o Cache novinho em folha (Nós + Arestas)
+	a.saveTopologyCache(nodesBatch, edgesBatch)
 
-	// Emite o pacote completo de uma só vez para evitar sobrecarga no motor gráfico
-	runtime.EventsEmit(a.ctx, "graph:nodes:batch", batch)
-	fmt.Printf("[Sync] ✅ %d nós sincronizados em lote.\n", len(batch))
+	// Emite o pacote completo de nós de uma só vez
+	runtime.EventsEmit(a.ctx, "graph:nodes:batch", nodesBatch)
+	fmt.Printf("[Sync] ✅ %d nós e %d arestas sincronizados e cacheados.\n", len(nodesBatch), len(edgesBatch))
 
 	// 🐝 Automação: Dispara saúde e tecelagem automaticamente após o Sync
 	go func() {

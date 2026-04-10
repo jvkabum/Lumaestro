@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import * as d3 from 'd3'
 import ForceGraph3D from '3d-force-graph'
 import { useGraphStore } from '../stores/graph'
 import { useGraphData } from './useGraphData'
@@ -57,9 +58,18 @@ export function useGraphSetup() {
     if (!sphereVirtual) sphereVirtual = new THREE.SphereGeometry(8, 6, 6)
     if (!sphereActive) sphereActive = new THREE.SphereGeometry(20, 12, 12)
 
+    // 🛡️ Prevenção de 'Blackout': Garantir dimensões reais antes de instanciar
+    if (containerRef.clientWidth === 0 || containerRef.clientHeight === 0) {
+        console.warn("[NeuralGraph] Container sem dimensões. Tentando redimensionamento forçado.")
+        containerRef.style.width = '100%'
+        containerRef.style.height = '100%'
+    }
+
     const Graph = ForceGraph3D()(containerRef)
       .graphData(getGraphData(nodes, edges))
-      .backgroundColor('#09090b') 
+      .width(containerRef.clientWidth || 800)
+      .height(containerRef.clientHeight || 600)
+      .backgroundColor('#050505') // Levemente mais claro para diagnosticar se o canvas existe
       .showNavInfo(false)
       .nodeLabel(node => {
         const type = node['document-type'] || 'chunk'
@@ -82,7 +92,7 @@ export function useGraphSetup() {
         if (type === 'memory') return '#fcd34d' // Dourado
         return '#3b82f6' // Azul padrão
       })
-      .nodeRelSize(6) // Tamanho de colisão aumentado
+      .nodeRelSize(8) // Tamanho de presença aumentado para evitar aspecto de 'poeira'
       .nodeOpacity(1)
       .nodeThreeObjectExtend(true)
       .linkCurvature(0.25)
@@ -114,23 +124,31 @@ export function useGraphSetup() {
       })
       .onNodeClick(node => focusNode(node))
 
-    // 🚀 CONFIGURAÇÃO DE FÍSICA SOLAR (NUCLEAÇÃO E ÓRBITAS)
+    // 🚀 CONFIGURAÇÃO DE FÍSICA SOLAR (NUCLEAÇÃO E ÓRBITAS EXPANDIDAS)
     Graph.d3Force('charge').strength(node => {
-        // Núcleos (Sóis) repelem mais para abrir espaço, Ideias repelem menos
-        const type = node['document-type'] || 'chunk'
-        return (type === 'chunk' || type === 'system') ? -1000 : -200
+        // Repulsão Dinâmica: Nós maiores (Sóis) repelem muito mais para abrir espaço
+        const importance = (node.pagerank && node.pagerank > 0) ? (node.pagerank * 15) : (node.degree || 0)
+        const baseRepulsion = -1200
+        return baseRepulsion - (importance * 150) // Expansão proporcional à massa
     })
 
     Graph.d3Force('link').distance(link => {
         const sType = link.source['document-type'] || 'chunk'
         const tType = link.target['document-type'] || 'chunk'
         
-        // Órbita Próxima: Ideias conectadas a Notas (30px)
-        if (sType === 'memory' || tType === 'memory') return 30
+        // Órbita Próxima: Ideias conectadas a Notas (80px)
+        if (sType === 'memory' || tType === 'memory') return 80
         
-        // Distância Interestelar: Notas conectadas entre si (150px)
-        return 150
-    }).strength(0.8)
+        // Distância Interestelar Expandida: Notas conectadas entre si (350px)
+        // Aumentado de 150 para 350 para dar 'respiro' ao conhecimento denso
+        return 350
+    }).strength(0.7)
+
+    // Força de Colisão: Impede que as esferas se sobreponham fisicamente
+    Graph.d3Force('collide', d3.forceCollide(node => {
+        const importance = (node.pagerank && node.pagerank > 0) ? (node.pagerank * 15) : (node.degree || 0)
+        return (1 + Math.pow(importance, 0.5) * 4) + 10 // Raio de colisão + margem
+    }))
 
     // Otimização de CPU: Acelera o repouso da simulação
     Graph.d3AlphaDecay(0.04)
@@ -156,19 +174,73 @@ export function useGraphSetup() {
       const displayColor = node.status === 'conflict' ? colors.conflict : (node.status === 'legacy' ? colors.legacy : (colors[type] || colors.chunk))
       const nodeColor = isActive ? colors.active : (isVirtual ? colors.virtual : displayColor)
       
+      // 📐 ESCALA DINÂMICA (NUCLEAÇÃO): Cresce conforme a importância (PageRank ou Grau)
+      // Se tiver PageRank (backend ativo), usa ele. Caso contrário, usa grau de conexões local.
+      const importance = (node.pagerank && node.pagerank > 0) ? (node.pagerank * 15) : (node.degree || 0)
+      const baseScale = 1 + Math.pow(importance, 0.5) * 0.4
+      const finalScale = isActive ? baseScale * 1.5 : baseScale
+
       // Otimização: Reuso de Geometria
       const geometry = isActive ? sphereActive : (isVirtual ? sphereVirtual : sphereLowRes)
+      const material = new THREE.MeshLambertMaterial({ 
+        color: nodeColor, 
+        transparent: true,
+        opacity: isVirtual ? 0.4 : 0.9,
+        emissive: nodeColor,
+        emissiveIntensity: isActive ? 1.5 : (importance > 5 ? 0.5 : 0.1)
+      })
       
-      // Otimização: Reuso de Material (Pool por cor/opacidade/emissão)
-      const opacity = type === 'legacy' ? 0.3 : (isVirtual ? 0.2 : 0.9)
-      const intensity = isActive ? 1.2 : (isVirtual ? 0 : 0.5)
-      const material = getCachedMaterial(nodeColor, opacity, intensity)
-      
-      return new THREE.Mesh(geometry, material)
+      const obj = new THREE.Mesh(geometry, material)
+      obj.scale.set(finalScale, finalScale, finalScale)
+      return obj
     })
 
     // Salva a instância na store
     store.graphInstance = Graph
+
+    // 💫 ESTÉTICA PREMIUM: Rotação e Controles
+    Graph.controls().autoRotate = true
+    Graph.controls().autoRotateSpeed = 0.5
+    Graph.controls().enableDamping = true
+    Graph.controls().dampingFactor = 0.1
+
+    // Log de Integridade de Cena
+    setTimeout(() => {
+        console.log(`[NeuralGraph] Objetos na Cena: ${Graph.scene().children.length}`)
+    }, 2000)
+
+    // 📐 Monitor de Redimensionamento Reativo (Robustez para Wails/Flex)
+    const resizeObserver = new ResizeObserver(() => {
+        if (containerRef.clientWidth > 0 && containerRef.clientHeight > 0) {
+            Graph.width(containerRef.clientWidth)
+            Graph.height(containerRef.clientHeight)
+            console.log(`[NeuralGraph] Resized: ${containerRef.clientWidth}x${containerRef.clientHeight}`)
+        }
+    })
+    resizeObserver.observe(containerRef)
+
+    // 🎯 AUTO-ZOOM INTELIGENTE (REATIVO AO CRESCIMENTO)
+    let lastNodeCount = 0
+    let firstZoomDone = false
+
+    Graph.onEngineTick(() => {
+        const currentCount = Graph.graphData().nodes.length
+        if (currentCount > 0 && (currentCount > lastNodeCount + 50 || (!firstZoomDone && currentCount > 0))) {
+            console.log(`[NeuralGraph] Crescimento detectado (${currentCount} nós). Re-enquadrando visao...`)
+            Graph.zoomToFit(1200, 300) // Padding aumentado de 150 para 300 para visão mais ampla
+            lastNodeCount = currentCount
+            firstZoomDone = true
+        }
+    })
+
+    // Fallback de Zoom (caso a simulação demore muito para estabilizar)
+    setTimeout(() => {
+        if (!firstZoomDone && Graph.graphData().nodes.length > 0) {
+            Graph.zoomToFit(800, 150)
+            firstZoomDone = true
+        }
+    }, 5000)
+
     return Graph
   }
 
@@ -180,7 +252,7 @@ export function useGraphSetup() {
     if (!Graph || !node) return
 
     // ── Zoom no nó ──
-    const distance = 80
+    const distance = 250 // Aumentado de 80 para 250 para evitar zoom 'colado' no nó
     const distRatio = 1 + distance / Math.hypot(node.x || 1, node.y || 1, node.z || 1)
     
     Graph.cameraPosition(

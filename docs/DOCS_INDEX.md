@@ -36,6 +36,7 @@ BRIDGE GUIDE  FLOW  STACK       BRAIN  ENGINE
 | [LUMAESTRO_CORE.md](./LUMAESTRO_CORE.md) | Fundamentos técnicos do orquestrador | [DOCUMENTATION](./DOCUMENTATION.md), [RAG_FLOW](./RAG_FLOW.md) |
 | [WAILS_BRIDGE.md](./WAILS_BRIDGE.md) | Ponte Go ↔ Vue.js (Bindings & Eventos) | [DOCUMENTATION](./DOCUMENTATION.md), [FRONTEND_STACK](./FRONTEND_STACK.md) |
 | [AGENTS_GUIDE.md](./AGENTS_GUIDE.md) | Arquitetura ACP e controle de agentes | [LIGHTNING_ENGINE](./LIGHTNING_ENGINE.md), [WAILS_BRIDGE](./WAILS_BRIDGE.md) |
+| [MULTI_AGENT_SYSTEM.md](./MULTI_AGENT_SYSTEM.md) | Sistema de Enxame (Swarm), Handoff e Budget | [AGENTS_GUIDE](./AGENTS_GUIDE.md), [LIGHTNING_ENGINE](./LIGHTNING_ENGINE.md) |
 
 ## 🎨 Frontend & Visualização
 

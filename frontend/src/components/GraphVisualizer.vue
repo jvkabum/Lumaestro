@@ -41,7 +41,8 @@ let cleanupKeyboard = null
 let cleanupEvents = null
 
 // ── Lifecycle ──
-onMounted(() => {
+onMounted(async () => {
+  await nextTick()
   // 1. Inicializar o grafo 3D
   initGraph(containerRef.value, props.nodes, props.edges, props.activeNode)
 
@@ -69,9 +70,9 @@ onUnmounted(() => {
 
 // ── Watchers (Sincronização Reativa) ──
 
-// W1: Quando nodes/edges mudam via props, atualiza o grafo
 watch(() => [props.nodes, props.edges], () => {
   if (store.graphInstance) {
+    console.log(`[NeuralGraph] Dados Recebidos: ${props.nodes.length} nós, ${props.edges.length} arestas.`)
     store.graphInstance.graphData(getGraphData(props.nodes, props.edges))
   }
 }, { deep: true })
@@ -216,7 +217,10 @@ watch(() => props.graphLogs, () => {
             <span class="value">{{ store.graphHealth.conflicts }}</span>
           </div>
         </div>
-        <button @click="store.checkHealth" class="health-btn" title="Analisar Integridade">🛡️ CHECK</button>
+        <div class="hud-actions" style="display: flex; gap: 8px;">
+          <button @click="store.graphInstance.zoomToFit(800, 150)" class="health-btn" title="Resetar Câmera">🎯 RECENTRAR</button>
+          <button @click="store.checkHealth" class="health-btn" title="Analisar Integridade">🛡️ CHECK</button>
+        </div>
       </div>
 
       <!-- O CONSOLE VIVO DO RACIOCÍNIO IA -->

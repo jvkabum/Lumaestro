@@ -125,11 +125,15 @@ func (s *EmbeddingService) embedWithRetry(ctx context.Context, contents []*genai
 			return nil, fmt.Errorf("vetor de embedding vazio na resposta")
 		}
 
-		if !utils.IsQuotaError(err) {
+		if !utils.IsQuotaError(err) && !utils.IsSuspendedError(err) {
 			return nil, fmt.Errorf("erro ao gerar embedding: %w", err)
 		}
 
-		fmt.Printf("[KeyPool] ⚠️ Chave atual exausta (quota). Tentando rotacionar...\n")
+		if utils.IsSuspendedError(err) {
+			fmt.Printf("[KeyPool] 🚫 Chave atual SUSPENSA detectada. Tentando rotacionar...\n")
+		} else {
+			fmt.Printf("[KeyPool] ⚠️ Chave atual exausta (quota). Tentando rotacionar...\n")
+		}
 
 		cfg, _ := config.Load()
 		maxRetries := 0
@@ -218,9 +222,15 @@ func (s *EmbeddingService) GenerateContentWithRetry(ctx context.Context, content
 					continue
 				}
 
-				// 🧠 Se for qualquer outro erro (404, 500, etc), PULA para o próximo MODELO na frota
+				// 🧠 Se a chave foi suspensa (403), pula para o próximo MODELO e avisa
+				if err != nil && (err.Error() == "PERMISSION_DENIED" || utils.IsSuspendedError(err)) {
+					fmt.Printf("[ResilienceFleet] 🚫 Chave SUSPENSA detectada (%d). Pulando para o próximo modelo...\n", i+1)
+					break 
+				}
+
+				// 🚩 Erro genérico (404, 500, etc), PULA para o próximo MODELO na frota
 				fmt.Printf("[ResilienceFleet] 🚩 Erro no modelo %s: %v. Pulando para o próximo modelo na cascata...\n", model, err)
-				break // Sai do loop de chaves, vai para o próximo modelo
+				break 
 			}
 		}
 

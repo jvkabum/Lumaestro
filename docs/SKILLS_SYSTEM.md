@@ -1,156 +1,127 @@
-﻿---
-title: Sistema de Skills (Expertise Injetável)
-type: architecture
-status: stable
-tags: [agents, skills, go, architecture]
+---
+tags:
+  - architecture
+  - agents
+  - skills
+  - development
 ---
 
-# 🧠 Sistema de Skills do Lumaestro
+# 🛠️ Sistema de Skills do Lumaestro
 
-O sistema de **Skills** é o coração da inteligência especializada do Lumaestro. Em vez de depender de um único prompt monolítico, o sistema utiliza uma arquitetura modular de **Expertise Injetável**, onde habilidades específicas são carregadas dinamicamente conforme a necessidade da tarefa.
-
-## 📌 Visão Geral
-
-Uma Skill no Lumaestro não é apenas um arquivo de texto; é um pacote Go auto-registrável que contém diretrizes de persona, capacidades técnicas e restrições de uso.
-
-> [!TIP]
-> O objetivo das skills é reduzir a alucinação e aumentar a precisão técnica, fornecendo ao agente o "estado da arte" de uma tecnologia ou domínio específico.
+> [!ABSTRACT] Visão Geral
+> No Lumaestro, uma **Skill** (Habilidade) não é apenas um comando, mas um **Injetor de Especialização**. Elas fornecem o "Know-how" técnico, comportamental e arquitetural para os agentes, transformando uma IA genérica em um especialista (ex: Go Expert, Vue Architect, Doc-Master).
 
 ---
 
-## 🏗️ Arquitetura Técnica
+## 🏗️ Arquitetura das Skills
 
-O sistema reside em internal/agents/skills/ e opera sob três pilares:
+O sistema é dividido em duas camadas: **Skills Estáticas** (Arsenal Nativo) e **Skills Dinâmicas** (Skillbook/Qdrant).
 
-### 1. O Registro Central (`manager.go`)
-Responsável por manter o mapa global de habilidades em memória e fornecer métodos de busca.
+### 1. Arsenal Nativo (Static Skills)
+São centenas de habilidades pré-definidas em Go, organizadas por categorias no diretório `internal/agents/skills/`.
 
-```go
-type Skill struct {
-    Name        string
-    Category    string
-    Content     string // O prompt em Markdown/YAML
-    Description string
-}
-```
+*   **Registro Automático:** Cada skill reside em seu próprio pacote e usa a função `init()` para se registrar no `manager.go`.
+*   **Estrutura de Código (`internal/agents/skills/manager.go`):**
+    `go
+    type Skill struct {
+        Name        string
+        Category    string
+        Content     string // O "Prompt" da habilidade em Markdown
+        Description string
+    }
+    `
 
-### 2. O Mecanismo de Auto-Registro
-Utiliza o padrão `init()` do Go para registrar habilidades sem necessidade de configuração manual extensiva.
-
-```mermaid
-sequenceDiagram
-    participant App as Main Application
-    participant Loader as loader/loader.go
-    participant All as category/all.go
-    participant Skill as specific_skill/skill.go
-    participant Registry as manager.go
-
-    App->>Loader: Import loader
-    Loader->>All: Blank Import (_)
-    All->>Skill: Blank Import (_)
-    Skill->>Registry: Register(Skill{...})
-    Note over Registry: Skill disponível no mapa global
-```
-
-### 3. Estrutura de Pastas
-As skills são organizadas hierarquicamente por domínio:
-
-```text
-internal/agents/skills/
-├── manager.go        # Lógica de registro
-├── loader/           # Orquestrador de carregamento
-└── development/      # Categoria
-    ├── all.go        # Agregador da categoria
-    └── golang_pro/   # Pasta da Skill
-        └── skill.go  # Definição e conteúdo
-```
+### 2. Skillbook (Dynamic Strategies)
+Localizado em `internal/agents/skillbook.go`, este componente usa o **Qdrant** para armazenar e recuperar estratégias de aprendizado baseadas em similaridade vetorial.
 
 ---
 
-## 📊 Fluxo de Dados e Integração
+## 🔄 Fluxo de Vida de uma Skill
 
-O diagrama abaixo ilustra como as categorias se conectam ao sistema central.
+O ciclo de vida vai desde o registro no backend até a injeção no System Prompt do agente.
 
 `mermaid
 graph TD
-    subgraph "Core System"
-        M[manager.go] -- gerencia --> R[(Registry Map)]
-    end
+    %% Estilo Dark Mode
+    classDef default fill:#2d333b,stroke:#6d5dfc,color:#e6edf3;
 
-    subgraph "Categorias de Expertise"
-        D[Development] -->|import| M
-        I[Infrastructure] -->|import| M
-        S[Security] -->|import| M
-        A[Architecture] -->|import| M
-    end
+    A[Inicialização do App] --> B{init() em cada Skill}
+    B --> C[skills.Register]
+    C --> D[Registry Global em manager.go]
+    
+    User[👤 Usuário] -->|Solicita Agente @golang-pro| E[Executor]
+    E --> F[skills.GetSkill]
+    F --> G[Injeção no System Prompt]
+    G --> H[🤖 Agente Especialista]
 
-    subgraph "Exemplo de Skill: golang_pro"
-        SK[skill.go] -->|init| D
-        C[Content Markdown] --> SK
+    subgraph "Camada de Persistência"
+        D
     end
-
-    style M fill:#2d333b,stroke:#6d5dfc,stroke-width:2px,color:#e6edf3
-    style R fill:#2d333b,stroke:#6d5dfc,stroke-width:2px,color:#e6edf3
-    style SK fill:#2d333b,stroke:#6d5dfc,stroke-width:1px,color:#e6edf3
 `
 
 ---
 
-## 🛠️ Anatomia de uma Skill (Conteúdo)
+## 🧩 Anatomia de uma Skill (`skill.go`)
 
-Cada skill possui um **Frontmatter YAML** seguido de instruções estruturadas. Isso permite que o sistema processe metadados antes mesmo de enviar o prompt ao LLM.
+Cada skill segue um padrão rigoroso de documentação interna. Veja o exemplo da `golang-pro` em `internal/agents/skills/development/golang_pro/skill.go`:
 
-`markdown
+| Seção | Propósito |
+| :--- | :--- |
+| **Frontmatter (YAML)** | Metadados como `name`, `risk` e `source`. |
+| **Use this skill when** | Gatilhos de contexto para o agente. |
+| **Instructions** | Passo a passo técnico para a execução da tarefa. |
+| **Capabilities** | Lista exaustiva de conhecimentos técnicos (ex: Concurrency, GORM). |
+| **Behavioral Traits** | Como o agente deve se comportar (ex: "Prefere simplicidade sobre esperteza"). |
+
 ---
-name: nome-da-skill
-description: Breve resumo da expertise
-risk: [low|medium|high]
-source: community/internal
-date_added: '2026-02-27'
----
-# Persona
-Você é um especialista em...
 
-## Quando usar
-- Tarefa A
-- Contexto B
+## 🧠 Integração com o Skillbook (RAG)
 
-## Capacidades
-- [ ] X
-- [ ] Y
+O `Skillbook` permite que o Lumaestro "aprenda" novas formas de resolver problemas e as recupere via busca semântica.
+
+`mermaid
+sequenceDiagram
+    participant A as Agente
+    participant SB as Skillbook (Go)
+    participant Q as Qdrant (Vector DB)
+
+    A->>SB: SaveSkill(description)
+    SB->>SB: GenerateEmbedding()
+    SB->>Q: UpsertPoint("ace_skills")
+    
+    Note over A, Q: Futuramente...
+    
+    A->>SB: RetrieveRelevantSkills(query)
+    SB->>Q: Search Similarity
+    Q-->>A: Retorna Estratégias Relevantes
 `
 
 ---
 
-## 🚀 Como Criar uma Nova Skill
+## 🛠️ Como Criar uma Nova Skill
 
-Para adicionar uma habilidade ao arsenal, siga estes passos:
+Para adicionar um novo especialista ao enxame, siga estes passos:
 
-1. **Crie a pasta:** Em internal/agents/skills/[categoria]/[nome_da_skill].
-2. **Crie o arquivo skill.go:**
-   `go
-   package nome_da_skill
-   import "Lumaestro/internal/agents/skills"
-
-   func init() {
-       skills.Register(skills.Skill{
-           Name: "nome-unico",
-           Category: "categoria",
-           Content: \[Conteúdo Markdown aqui]\,
-       })
-   }
-   `
-3. **Registre no Agregador:** Adicione o *blank import* no arquivo ll.go da categoria correspondente.
-   `go
-   import _ "Lumaestro/internal/agents/skills/[categoria]/[nome_da_skill]"
-   `
-
-> [!WARNING]
-> Certifique-se de que o Name da skill seja único em todo o sistema, pois o registro é case-insensitive e sobrescreverá duplicatas.
+1.  **Crie a Pasta:** `internal/agents/skills/[categoria]/[nome_da_skill]/`.
+2.  **Crie o Arquivo:** `skill.go`.
+3.  **Implemente o `init()`:**
+    `go
+    func init() {
+        skills.Register(skills.Skill{
+            Name: "minha-skill",
+            Category: "general",
+            Content: "--- prompt aqui ---",
+        })
+    }
+    `
+4.  **Importe o pacote:** Certifique-se de que o pacote da skill seja importado (direta ou indiretamente) para que o `init()` seja executado.
 
 ---
 
 ## 🔗 Documentos Relacionados
-- [[AGENTS_GUIDE]] - Como os agentes utilizam estas skills.
-- [[LUMAESTRO_CORE]] - Visão geral do sistema.
-- [[internal/agents/skills/manager.go|Código Fonte: Manager]]
+- [[AGENTS_GUIDE]]: Como o Executor utiliza as skills.
+- [[NEURAL_BRAIN]]: Como o Qdrant gerencia a memória rosa e as skills dinâmicas.
+- [[LIGHTNING_ENGINE]]: O motor que avalia a eficácia das skills aplicadas.
+
+---
+**Lumaestro: Da Habilidade à Maestria. 🐹⚙️⚡🕸️🧠🏎️🤖💰🏁🛡️🧪**

@@ -193,6 +193,18 @@ func IsQuotaError(err error) bool {
 		strings.Contains(msg, "too many requests")
 }
 
+// IsSuspendedError verifica se a chave de API foi suspensa ou bloqueada pelo provedor.
+func IsSuspendedError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "403") ||
+		strings.Contains(msg, "suspended") ||
+		strings.Contains(msg, "permission_denied") ||
+		strings.Contains(msg, "disabled")
+}
+
 // FormatGenAIError transforma os erros verbosos do Google GenAI em logs concisos e amigáveis.
 func FormatGenAIError(err error) string {
 	if err == nil {

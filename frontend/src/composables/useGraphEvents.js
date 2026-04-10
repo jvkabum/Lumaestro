@@ -123,7 +123,7 @@ export function useGraphEvents() {
           const targetNode = nodes.find(n => n.id === hop.to || n.name === hop.to)
           if (targetNode) {
             Graph.cameraPosition(
-              { x: targetNode.x + 80, y: targetNode.y + 60, z: targetNode.z + 80 },
+              { x: targetNode.x + 180, y: targetNode.y + 120, z: targetNode.z + 180 }, // Offset aumentado para zoom mais suave
               targetNode,
               600
             )
