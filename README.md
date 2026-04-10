@@ -4,6 +4,8 @@
 [![Status](https://img.shields.io/badge/Status-Industrial_Stability-10b981?style=for-the-badge)](https://github.com/lumaestro)
 [![Build](https://img.shields.io/badge/Build-Optimized-blue?style=for-the-badge)](./build.ps1)
 
+![Lumaestro Neural Graph Hero](./media/lumaestro_graph_hero.png)
+
 O **Lumaestro** não é apenas um chatbot; é um **Motor Cognitivo (Cognitive Engine)** projetado para transformar o conhecimento fragmentado do seu Obsidian em um ecossistema autônomo de alta performance. Utilizando uma arquitetura de orquestração **Swarm**, ele conecta agentes de elite (Gemini, Claude) a um grafo de conhecimento 3D dinâmico.
 
 ---
@@ -26,8 +28,39 @@ O motor analítico detecta padrões no seu grafo de conhecimento e propõe otimi
 ### 🕸️ Knowledge Weaving
 Visualização 3D nativa (D3.js) que exibe a saúde do seu grafo. Com algoritmos de **PageRank** e **Community Detection**, você identifica instantaneamente os gargalos e os centros de gravidade do seu conhecimento.
 
+![Lumaestro Full Interface Control](./media/lumaestro_full_ui.png)
+
 ### 🛡️ Auditoria Lógica (Validator)
 Um sistema de "Juiz Neural" (`AgentValidator`) que escania o banco de dados em busca de contradições lógicas e garante que a evolução do seu enxame seja matematicamente estável.
+
+---
+
+## 🕹️ Controle & Telemetria: O Painel de Comando
+
+O Lumaestro oferece uma visão transparente e granular sobre a operação da sua IA:
+
+### 📊 Dashboard Executivo
+Monitore em tempo real o investimento em tokens, a economia de escala e o "Fluxo de Consciência" (Live Rollouts) do enxame. Saiba exatamente o que seus agentes estão aprendendo agora.
+
+![Lumaestro Executive Dashboard](./media/lumaestro_dashboard.png)
+
+### ⚙️ Orquestração Avançada
+Configure o seu ecossistema com precisão industrial através do Hub de IA:
+- **Gestão de Motores**: Alterne entre Gemini, Claude e LLMs locais (LM Studio) com um clique.
+- **Identidades Isoladas**: Gerencie múltiplas contas Gemini para alternar quotas de API e perfis de pesquisa.
+- **Ecossistema MCP**: Integre ferramentas externas (Postgres, Shopify, Google Search) via **Model Context Protocol**.
+- **Aglomerados Estelares**: Injete repositórios de código locais como "Nós Núcleo" para expansão radial do conhecimento.
+
+| Hub de Motores | Gestão de Identidades |
+| :--- | :--- |
+| ![Motores](./media/lumaestro_settings_engines.png) | ![Contas](./media/lumaestro_settings_accounts.png) |
+
+| Protocolo MCP | Repositórios Radiais (Star Clusters) |
+| :--- | :--- |
+| ![MCP](./media/lumaestro_settings_mcp.png) | ![Aglomerados](./media/lumaestro_settings_repos.png) |
+
+> [!TIP]
+> Use o **Code RAG** (Devorar Código Fonte) nos Aglomerados Estelares para que a IA processe arquivos .js, .go, .py e .ts, injetando lógica de programação real no seu grafo de conhecimento.
 
 ---
 
