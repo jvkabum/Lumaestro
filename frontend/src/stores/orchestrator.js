@@ -38,6 +38,12 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   const modelStats = ref({ agent: null, info: '' }); // 📊 Estatísticas de Cota e Performance
   const awaitingTurnByAgent = ref({});
   const forcedUnlock = ref(false); // 🔓 Trava de segurança: impede re-lock após watchdog/cancel
+  const isPlanMode = ref(false); // 🔒 Modo de segurança: leitura apenas
+
+  const togglePlanMode = async (agent) => {
+    isPlanMode.value = !isPlanMode.value;
+    await safeCall('core', 'SetPlanMode', agent || activeAgent.value || 'gemini', isPlanMode.value);
+  };
 
   const pushStatus = (text, kind = 'status') => {
     const line = String(text || '').trim();
@@ -103,6 +109,15 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
       activeAgent.value = agent;
       isThinking.value = true; // Ativa o modo de carregamento
       resetSafetyTimeout();
+    });
+
+    // 📊 Telemetria de Tokens e Cache
+    EventsOn('agent:tokens', (data) => {
+      console.log("[Store] 📊 TELEMETRIA RECEBIDA:", data);
+      modelStats.value = {
+        agent: data.agent,
+        info: `Prompt: ${data.prompt} | Output: ${data.candidates} | 💎 Cache: ${data.cacheCurrent} (Total: ${data.cacheTotal})`
+      };
     });
 
     // 1. Logs Estruturados da IA (ACP)
@@ -510,6 +525,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   return {
     messages, isThinking, isTerminalMode, isWeaving, activeAgent, runningSessions, pendingReview, modelStats,
     sessions, currentACPID, isSidebarOpen, currentStatus, isNavigating, currentStatusKind, statusTimeline, statusFilter,
+    isPlanMode, togglePlanMode,
     initListeners, ask, startSession, sendInput, submitReview, switchAgent, stopSession, forceUnlock,
     fetchSessions, loadSession, newSession, toggleSidebar, clearStatusTimeline, sendSteeringHint
   };

@@ -64,9 +64,12 @@ type ACPSession struct {
 	Cmd       *exec.Cmd
 	Stdin     io.WriteCloser
 	Cancel    context.CancelFunc
+	Ctx       context.Context // 🌐 Contexto de execução da sessão
 	// initDone sinaliza eventos de inicialização.
 	// Usamos buffer de 1 para evitar bloqueios ao sinalizar.
 	initDone chan struct{}
+	// SteeringChan recebe hints de direcionamento em tempo real durante o processamento.
+	SteeringChan chan string
 	
 	// Governança e Orquestração Swarm
 	AgentID        uuid.UUID
@@ -87,10 +90,19 @@ type ACPSession struct {
 	LastPromptTokens     int
 	LastCandidatesTokens int
 	LastCacheTokens      int
+	TotalCacheTokens     int
 
 	// 🔄 Resilience Fleet (Auto-Retry)
 	LastInput      string
 	LastImagesJSON string
+
+	// 🔒 Security & Policy (Plan Mode)
+	PlanMode bool
+
+	// 🌳 Session Hierarchy (Subagents)
+	ParentSessionID string                   `json:"parentSessionId,omitempty"`
+	Subagents       map[string]*ACPSession   `json:"-"`
+	SubagentMu      sync.RWMutex             `json:"-"`
 }
 
 // ACPRpcHandler lida com o despacho de mensagens do protocolo JSON-RPC.

@@ -131,3 +131,22 @@ func (e *ACPExecutor) AskSync(sessionID string, prompt string, images []map[stri
 		}
 	}
 }
+
+// SendSteeringHint envia uma dica de direcionamento em tempo real para o canal da sessão.
+func (e *ACPExecutor) SendSteeringHint(sessionID string, hint string) error {
+	e.Mu.Lock()
+	session, ok := e.ActiveSessions[sessionID]
+	e.Mu.Unlock()
+
+	if !ok || session == nil {
+		return fmt.Errorf("sessão %s não encontrada para steering", sessionID)
+	}
+
+	select {
+	case session.SteeringChan <- hint:
+		fmt.Printf("[Steering] ⚡ Hint injetado para %s: %s\n", sessionID, hint)
+		return nil
+	default:
+		return fmt.Errorf("canal de steering de %s está cheio ou bloqueado", sessionID)
+	}
+}

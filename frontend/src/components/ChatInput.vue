@@ -118,6 +118,14 @@
             </div>
           </div>
 
+          <!-- Toggle Plan Mode 🔒 -->
+          <div class="safety-toggle plan-toggle" @click="orchestrator.togglePlanMode(selectedAgent)">
+            <span class="toggle-label">{{ orchestrator.isPlanMode ? '🔒 Plano' : 'Plano' }}</span>
+            <div class="switch plan" :class="{ on: orchestrator.isPlanMode }">
+              <div class="handle"></div>
+            </div>
+          </div>
+
           <div class="divider"></div>
 
           <!-- Mode Toggle (Act/Chat) -->
@@ -142,6 +150,11 @@
           <img :src="img.preview" />
           <button class="remove-img" @click="removeImage(idx)">×</button>
         </div>
+      </div>
+
+      <!-- 📊 Token & Cache Stats Bar -->
+      <div v-if="orchestrator.modelStats && orchestrator.modelStats.info" class="model-stats-bar">
+        <span class="stats-text">{{ orchestrator.modelStats.info }}</span>
       </div>
 
       <!-- Área de Texto e Enviar -->
@@ -185,11 +198,18 @@
             class="send-btn" 
             :disabled="(!messageText.trim() && attachedImages.length === 0)"
             @click="sendMessage"
-            :class="{ ready: (messageText.trim() || attachedImages.length > 0) }"
+            :class="{ ready: (messageText.trim() || attachedImages.length > 0), 'plan-ready': orchestrator.isPlanMode }"
           >
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5">
-              <path d="M7 11L12 6L17 11M12 18V7" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
+            <template v-if="orchestrator.isPlanMode">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5">
+                <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </template>
+            <template v-else>
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5">
+                <path d="M7 11L12 6L17 11M12 18V7" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </template>
           </button>
         </div>
       </div>
@@ -508,11 +528,13 @@ const sendMessage = () => {
   border-radius: 100px; position: relative; transition: all 0.3s;
 }
 .switch.on { background: #3b82f6; }
+.switch.plan.on { background: #a78bfa; }
 .handle {
   width: 7px; height: 7px; background: #fff; border-radius: 50%;
   position: absolute; top: 2px; left: 2px; transition: all 0.3s;
 }
 .switch.on .handle { left: 11px; }
+.send-btn.plan-ready { background: #a78bfa; color: #fff; border-color: #a78bfa; box-shadow: 0 0 15px rgba(167, 139, 250, 0.3); }
 
 .divider { width: 1px; height: 16px; background: rgba(255, 255, 255, 0.1); }
 
@@ -570,4 +592,18 @@ textarea::placeholder { color: #475569; }
 }
 .steer-btn:hover { transform: scale(1.05); }
 
+.model-stats-bar {
+  margin-bottom: 8px;
+  padding: 4px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+}
+.stats-text {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.5px;
+}
 </style>

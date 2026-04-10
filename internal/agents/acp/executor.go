@@ -10,6 +10,7 @@ import (
 	config "Lumaestro/internal/config"
 	"Lumaestro/internal/utils"
 
+	"github.com/google/uuid"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -230,9 +231,7 @@ func (e *ACPExecutor) HandleQuotaExhausted(sessionID string) {
 	// Como estamos dentro do Executor, podemos chamar StartSession.
 	// Precisamos apenas dos parâmetros originais.
 	time.Sleep(1 * time.Second) // Delay tático para limpeza de pipes
-	
-	err = e.StartSession(e.Ctx, session.AgentName, session.ID, "LATEST", session.AgentID, session.CurrentIssueID)
-	if err != nil {
+			if err := e.StartSession(e.Ctx, session.AgentName, session.ID, session.ACPSessID, session.AgentID, session.CurrentIssueID, session.PlanMode, nil); err != nil {
 		fmt.Printf("[Resilience] Erro ao reiniciar motor: %v\n", err)
 		return
 	}
@@ -257,4 +256,53 @@ func (e *ACPExecutor) HandleQuotaExhausted(sessionID string) {
 		
 		go e.SendInput(session.ID, session.LastInput, images)
 	}
+}
+
+// SpawnSubagent cria uma nova sessão ACP efêmera vinculada a esta sessão pai.
+func (e *ACPExecutor) SpawnSubagent(parent *ACPSession, agentName string, goal string) (*ACPSession, error) {
+	subSessID := fmt.Sprintf("%s-sub-%s", parent.ID, uuid.NewString()[:8])
+	
+	fmt.Printf("[Subagent] 🚀 Spawning subagent '%s' para: %s\n", agentName, goal)
+	
+	err := e.StartSession(parent.Ctx, agentName, subSessID, "LATEST", parent.AgentID, parent.CurrentIssueID, parent.PlanMode, parent)
+	if err != nil {
+		return nil, err
+	}
+	
+	e.Mu.Lock()
+	subSess := e.ActiveSessions[subSessID]
+	e.Mu.Unlock()
+	
+	return subSess, nil
+}
+
+// StopSession encerra uma sessão ACP e todos os seus subagentes recursivamente.
+func (e *ACPExecutor) StopSession(sessionID string) error {
+	e.Mu.Lock()
+	session, ok := e.ActiveSessions[sessionID]
+	e.Mu.Unlock()
+
+	if !ok || session == nil {
+		return fmt.Errorf("sessão %s não encontrada", sessionID)
+	}
+
+	fmt.Printf("[ACP] 🛑 Encerrando sessão %s e subagentes...\n", sessionID)
+
+	// 🌳 Cleanup Recursivo de Subagentes
+	session.SubagentMu.Lock()
+	for subID := range session.Subagents {
+		e.StopSession(subID) // Chamada recursiva
+	}
+	session.SubagentMu.Unlock()
+
+	// 🔪 Finalização do Processo
+	if session.Cancel != nil {
+		session.Cancel()
+	}
+
+	e.Mu.Lock()
+	delete(e.ActiveSessions, sessionID)
+	e.Mu.Unlock()
+
+	return nil
 }

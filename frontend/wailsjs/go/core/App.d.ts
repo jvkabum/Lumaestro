@@ -78,6 +78,8 @@ export function GetNodeDetails(arg1:string):Promise<Record<string, any>>;
 
 export function GetPendingApprovals():Promise<Array<db.Approval>>;
 
+export function GetPlanMode(arg1:string):Promise<boolean>;
+
 export function GetProjectDoc(arg1:string):Promise<string>;
 
 export function GetPromptCandidates():Promise<Array<Record<string, any>>>;
@@ -111,6 +113,8 @@ export function OpenFileInEditor(arg1:string):Promise<void>;
 export function PruneGraph(arg1:number):Promise<string>;
 
 export function PurgeCache():Promise<string>;
+
+export function ReadGeminiConfig():Promise<string>;
 
 export function RejectAction(arg1:string,arg2:string):Promise<string>;
 
@@ -146,6 +150,8 @@ export function SetAutonomousMode(arg1:boolean):Promise<string>;
 
 export function SetExplorationMode(arg1:boolean):Promise<string>;
 
+export function SetPlanMode(arg1:string,arg2:boolean):Promise<boolean>;
+
 export function SetupTool(arg1:string):Promise<string>;
 
 export function StartAgentSession(arg1:string):Promise<void>;
@@ -171,3 +177,5 @@ export function UpdateAgentSecret(arg1:string,arg2:string,arg3:string):Promise<s
 export function UpsertDocument(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
 
 export function WeaveNeuralLinks(arg1:number):Promise<void>;
+
+export function WriteGeminiConfig(arg1:string):Promise<void>;

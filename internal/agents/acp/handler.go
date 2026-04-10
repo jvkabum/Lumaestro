@@ -220,6 +220,46 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 	var rpcErr *RPCError
 	reviewID := fmt.Sprintf("rev-%v", id)
 
+	// 🔒 PLAN MODE: Bloqueia ferramentas destrutivas
+	if h.Session.PlanMode {
+		writeTools := map[string]bool{
+			"writefile": true, "write_file": true, "write_text_file": true, "write_file_content": true,
+			"deletefile": true, "delete_file": true, "remove": true,
+			"movefile": true, "move_file": true,
+			"runcommand": true, "run_command": true, "run_shell_command": true, "execute_command": true,
+		}
+		if writeTools[normMethod] {
+			rpcErr = &RPCError{
+				Code:    403,
+				Message: "🔒 Plan Mode ativo — operações de escrita bloqueadas. Aprove o plano para prosseguir para a fase de execução.",
+			}
+			h.Executor.SendRPC(h.Session, JSONRPCMessage{JSONRPC: JSONRPCVersion, ID: id, Error: rpcErr})
+			return
+		}
+	}
+
+	// 🪝 HOOKS: Pre-Tool Execution
+	hookCtx := &HookContext{Session: h.Session, Method: method, Params: params}
+	for _, hook := range GlobalHooks {
+		if res := hook.BeforeTool(hookCtx); res != nil {
+			if res.Abort {
+				rpcErr = res.Error
+				if rpcErr == nil {
+					rpcErr = &RPCError{Code: 403, Message: res.Message}
+				}
+				h.Executor.SendRPC(h.Session, JSONRPCMessage{JSONRPC: JSONRPCVersion, ID: id, Error: rpcErr})
+				return
+			}
+		}
+	}
+
+	defer func() {
+		// 🪝 HOOKS: Post-Tool Execution
+		for _, hook := range GlobalHooks {
+			hook.AfterTool(hookCtx, result, rpcErr)
+		}
+	}()
+
 	switch normMethod {
 	case "readfile", "read_file", "read_text_file":
 		var p struct {
@@ -394,6 +434,29 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 				}
 			} else {
 				rpcErr = &RPCError{Code: 403, Message: "🛡️ EXECUÇÃO BLOQUEADA"}
+			}
+		}
+
+	case "delegate_task", "spawn_subagent", "subagent":
+		var p struct {
+			Agent string `json:"agent"`
+			Goal  string `json:"goal"`
+		}
+		if json.Unmarshal(params, &p) == nil {
+			// 1. Spawning do Subagente Isolado
+			subSess, err := h.Executor.SpawnSubagent(h.Session, p.Agent, p.Goal)
+			if err != nil {
+				rpcErr = &RPCError{Code: -32007, Message: "Falha ao spawnar subagente: " + err.Error()}
+			} else {
+				// 2. Execução Síncrona (Aguardando resposta do subagente)
+				resp, errAsk := h.Executor.AskSync(subSess.ID, p.Goal, nil)
+				if errAsk != nil {
+					rpcErr = &RPCError{Code: -32008, Message: "Falha na execução do subagente: " + errAsk.Error()}
+				} else {
+					result = map[string]string{"result": resp}
+				}
+				// 3. Cleanup automático do subagente efêmero
+				h.Executor.StopSession(subSess.ID)
 			}
 		}
 

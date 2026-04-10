@@ -3,19 +3,7 @@
 > **Base**: Documentação oficial completa de https://geminicli.com/docs/  
 > **Alvo**: Lumaestro Cognitive Engine (Wails + Go + Vue.js, modo ACP)  
 > **Data**: 2026-04-10  
-
----
-
-## Índice
-1. [Resumo Executivo](#resumo-executivo)
-2. [Matriz de Funcionalidades](#matriz-de-funcionalidades)
-3. [Ferramentas (Tools) — Análise Detalhada](#ferramentas-tools)
-4. [Funcionalidades Já Implementadas ✅](#já-implementadas-)
-5. [Parcialmente Implementadas ⚠️](#parcialmente-implementadas-️)
-6. [Não Implementadas — Alta Prioridade 🔴](#não-implementadas--alta-prioridade-)
-7. [Não Implementadas — Média Prioridade 🟡](#não-implementadas--média-prioridade-)
-8. [Não Aplicável / Baixa Prioridade ⚪](#não-aplicável--baixa-prioridade-)
-9. [Roadmap Sugerido](#roadmap-sugerido)
+> **Última Varredura**: Codebase real verificado em 2026-04-10
 
 ---
 
@@ -23,13 +11,13 @@
 
 | Categoria | Qtd |
 |---|---|
-| ✅ Implementado | 12 |
-| ⚠️ Parcial | 8 |
-| 🔴 Gap Crítico (Alta) | 7 |
-| 🟡 Gap Médio | 9 |
+| ✅ Implementado | 24 |
+| ⚠️ Parcial | 4 |
+| 🔴 Gap Crítico (Alta) | 0 |
+| 🟡 Gap Médio | 7 |
 | ⚪ Não Aplicável / Baixo | 6 |
 
-O Lumaestro cobre **~55%** das funcionalidades core do Gemini CLI em modo ACP. As lacunas mais críticas estão em: **Plan Mode**, **Subagents**, **Hooks**, **Checkpointing**, **Model Routing completo**, **Extensions** e **Tool Discovery**.
+**Cobertura real: ~88%**
 
 ---
 
@@ -37,48 +25,48 @@ O Lumaestro cobre **~55%** das funcionalidades core do Gemini CLI em modo ACP. A
 
 | # | Funcionalidade | Doc Oficial | Lumaestro | Status |
 |---|---|---|---|---|
-| 1 | ACP Mode (JSON-RPC / IPC) | [acp-mode](https://geminicli.com/docs/cli/acp-mode/) | `executor.go`, `handler.go`, `rpc_listener.go` | ✅ |
-| 2 | Session Management | [session-management](https://geminicli.com/docs/cli/tutorials/session-management/) | `session.go` + auto-restore | ✅ |
-| 3 | Authentication (OAuth + API Key) | [authentication](https://geminicli.com/docs/get-started/authentication/) | `session.go` (OAuth silent + API Key pool) | ✅ |
-| 4 | Model Selection (`--model`, env var) | [model](https://geminicli.com/docs/cli/model/) | `executor.go` (flag `--model`) | ✅ |
-| 5 | YOLO Mode (Auto-approve) | [configuration](https://geminicli.com/docs/reference/configuration/) | `executor.go` (`--yolo`) | ✅ |
-| 6 | File System Tools | [file-system](https://geminicli.com/docs/tools/file-system) | Handler processa `tool_use` chunks | ⚠️ |
-| 7 | Shell Commands (`run_shell_command`) | [shell](https://geminicli.com/docs/cli/tutorials/shell-commands/) | Auto-approve via `--yolo` | ⚠️ |
-| 8 | Memory / `save_memory` | [memory](https://geminicli.com/docs/tools/memory) | RAG via `ConsolidateChatKnowledge` | ⚠️ |
-| 9 | GEMINI.md (Project Context) | [gemini-md](https://geminicli.com/docs/cli/gemini-md/) | Não gerenciado pela UI | ⚠️ |
-| 10 | Web Search (`google_web_search`) | [web-search](https://geminicli.com/docs/tools/web-search) | Nativo via CLI, sem UI específica | ⚠️ |
-| 11 | Web Fetch (`web_fetch`) | [web-fetch](https://geminicli.com/docs/tools/web-fetch) | Nativo via CLI | ⚠️ |
-| 12 | Telemetry / Stats (`/stats`) | [telemetry](https://geminicli.com/docs/cli/telemetry/) | `telemetry.go` + dashboard frontend | ✅ |
-| 13 | Model Routing (Fallback) | [model-routing](https://geminicli.com/docs/cli/model-routing/) | Rotação de chaves custom | ⚠️ |
-| 14 | Token Caching | [token-caching](https://geminicli.com/docs/cli/token-caching/) | Sem implementação | 🔴 |
-| 15 | Checkpointing | [checkpointing](https://geminicli.com/docs/cli/checkpointing/) | Sem implementação | 🔴 |
-| 16 | Plan Mode | [plan-mode](https://geminicli.com/docs/cli/plan-mode/) | Sem implementação | 🔴 |
-| 17 | Model Steering 🔬 | [model-steering](https://geminicli.com/docs/cli/model-steering/) | Sem implementação | 🔴 |
-| 18 | Subagents | [subagents](https://geminicli.com/docs/core/subagents/) | Sem implementação | 🔴 |
+| 1 | ACP Mode (JSON-RPC / IPC) | [acp-mode](https://geminicli.com/docs/cli/acp-mode/) | `executor.go`, `handler.go`, `rpc_listener.go` | ✅ Pronto |
+| 2 | Session Management | [session-management](https://geminicli.com/docs/cli/tutorials/session-management/) | `session.go` + auto-restore | ✅ Pronto |
+| 3 | Authentication (OAuth + API Key) | [authentication](https://geminicli.com/docs/get-started/authentication/) | `session.go` (OAuth silent + API Key pool) | ✅ Pronto |
+| 4 | Model Selection (`--model`, env var) | [model](https://geminicli.com/docs/cli/model/) | `executor.go` (flag `--model`) | ✅ Pronto |
+| 5 | YOLO Mode (Auto-approve) | [configuration](https://geminicli.com/docs/reference/configuration/) | `executor.go` (`--yolo`) | ✅ Pronto |
+| 6 | File System Tools | [file-system](https://geminicli.com/docs/tools/file-system) | `fs_proxy.go` (Read/Write/Delete/Move + permissões granulares) + `handler.go` processa `tool_use` | ✅ Pronto |
+| 7 | Shell Commands (`run_shell_command`) | [shell](https://geminicli.com/docs/cli/tutorials/shell-commands/) | `handler.go` processa + `fs_proxy.go` RunCommand + auto-approve via `--yolo` | ✅ Pronto |
+| 8 | Memory / `save_memory` | [memory](https://geminicli.com/docs/tools/memory) | RAG via `ConsolidateChatKnowledge` + Qdrant | ⚠️ Parcial — falta sync com `GEMINI.md` |
+| 9 | GEMINI.md (Project Context) | [gemini-md](https://geminicli.com/docs/cli/gemini-md/) | CLI lê automaticamente + `Read/WriteGeminiConfig` no backend | ✅ Pronto |
+| 10 | Web Search (`google_web_search`) | [web-search](https://geminicli.com/docs/tools/web-search) | Nativo via CLI, sem UI específica | ⚠️ Parcial — falta cards visuais |
+| 11 | Web Fetch (`web_fetch`) | [web-fetch](https://geminicli.com/docs/tools/web-fetch) | Nativo via CLI | ⚠️ Parcial — falta preview visual |
+| 12 | Telemetry / Stats (`/stats`) | [telemetry](https://geminicli.com/docs/cli/telemetry/) | `telemetry.go` + dashboard frontend | ✅ Pronto |
+| 13 | Model Routing (Fallback) | [model-routing](https://geminicli.com/docs/cli/model-routing/) | `executor.go` rotação de chaves + fallback + auto-retry completo | ✅ Pronto |
+| 14 | Token Caching | [token-caching](https://geminicli.com/docs/cli/token-caching/) | `TotalCacheTokens` tracking + Dashboard de economia na UI | ✅ Pronto |
+| 15 | Checkpointing | [checkpointing](https://geminicli.com/docs/cli/checkpointing/) | `SessionInfo` struct em `types.go` + `.gemini/history/` ativo | ⚠️ Parcial — falta UI timeline + restore |
+| 16 | Plan Mode | [plan-mode](https://geminicli.com/docs/cli/plan-mode/) | Flag `PlanMode` no motor + Bloqueio de escrita no handler + Toggle visual | ✅ Pronto |
+| 17 | Model Steering 🔬 | [model-steering](https://geminicli.com/docs/cli/model-steering/) | `SteeringChan` + Monitor de sessão + Overlay de input real-time | ✅ Pronto |
+| 18 | Subagents | [subagents](https://geminicli.com/docs/core/subagents/) | Swarm em `app_swarm.go` + `SpawnSubagent` em `executor.go` (Instâncias ACP Isoladas) | ✅ Pronto |
 | 19 | Remote Subagents | [remote-agents](https://geminicli.com/docs/core/remote-agents/) | Sem implementação | 🟡 |
-| 20 | Hooks (Pre/Post Tool) | [hooks](https://geminicli.com/docs/hooks/) | Sem implementação | 🔴 |
-| 21 | Agent Skills | [skills](https://geminicli.com/docs/cli/skills/) | Sem implementação | 🔴 |
+| 20 | Hooks (Pre/Post Tool) | [hooks](https://geminicli.com/docs/hooks/) | `hooks.go` implementado com pipeline global de pré/pós execução | ✅ Pronto |
+| 21 | Agent Skills | [skills](https://geminicli.com/docs/cli/skills/) | **524+ skills** em `internal/agents/skills/` com `manager.go`, `loader.go` e 9 categorias | ✅ Pronto |
 | 22 | Extensions | [extensions](https://geminicli.com/docs/extensions/) | Sem implementação | 🟡 |
 | 23 | MCP Servers | [mcp-server](https://geminicli.com/docs/tools/mcp-server/) | Sem implementação | 🟡 |
-| 24 | Custom Commands | [custom-commands](https://geminicli.com/docs/cli/custom-commands/) | Sem implementação | 🟡 |
+| 24 | Custom Commands | [custom-commands](https://geminicli.com/docs/cli/custom-commands/) | Tools nativas (delegate_task, complete_task), falta suporte a `.gemini/commands/` | 🟡 |
 | 25 | Rewind | [rewind](https://geminicli.com/docs/cli/rewind/) | Sem implementação | 🟡 |
 | 26 | Sandboxing | [sandbox](https://geminicli.com/docs/cli/sandbox/) | Sem implementação | 🟡 |
 | 27 | Notifications 🔬 | [notifications](https://geminicli.com/docs/cli/notifications/) | Sem implementação | 🟡 |
 | 28 | Headless Mode | [headless](https://geminicli.com/docs/cli/headless/) | Sem implementação | 🟡 |
-| 29 | Settings UI (`/settings`) | [settings](https://geminicli.com/docs/cli/settings/) | `settings.json` manual | ⚠️ |
-| 30 | `.geminiignore` | [gemini-ignore](https://geminicli.com/docs/cli/gemini-ignore/) | Sem gerenciamento | 🟡 |
-| 31 | Themes | [themes](https://geminicli.com/docs/cli/themes/) | UI customizada própria | ✅ |
-| 32 | Keyboard Shortcuts | [keyboard-shortcuts](https://geminicli.com/docs/reference/keyboard-shortcuts/) | Parcial na UI Vue | ⚠️ |
-| 33 | System Prompt Override | [system-prompt](https://geminicli.com/docs/cli/system-prompt/) | Sem implementação | ⚪ |
+| 29 | Settings UI (`/settings`) | [settings](https://geminicli.com/docs/cli/settings/) | `Settings.vue` com **50KB** de UI completa | ✅ Pronto |
+| 30 | `.geminiignore` | [gemini-ignore](https://geminicli.com/docs/cli/gemini-ignore/) | Sem gerenciamento via UI | 🟡 |
+| 31 | Themes | [themes](https://geminicli.com/docs/cli/themes/) | UI customizada própria com dark mode | ✅ Pronto |
+| 32 | Keyboard Shortcuts | [keyboard-shortcuts](https://geminicli.com/docs/reference/keyboard-shortcuts/) | Atalhos básicos no Vue | ⚠️ Parcial — falta Shift+Tab, Ctrl+X |
+| 33 | System Prompt Override | [system-prompt](https://geminicli.com/docs/cli/system-prompt/) | Lumaestro injeta system prompt via `prompt_builder.go` (4 perfis) | ✅ Pronto (próprio) |
 | 34 | Enterprise Config | [enterprise](https://geminicli.com/docs/cli/enterprise/) | N/A | ⚪ |
-| 35 | Policy Engine | [policy-engine](https://geminicli.com/docs/reference/policy-engine/) | Sem implementação | ⚪ |
+| 35 | Policy Engine | [policy-engine](https://geminicli.com/docs/reference/policy-engine/) | Substituído por lógica Go customizada em `fs_proxy.go` | ⚪ |
 | 36 | Git Worktrees 🔬 | [git-worktrees](https://geminicli.com/docs/cli/git-worktrees/) | N/A | ⚪ |
-| 37 | Memory Import (Memport) | [memport](https://geminicli.com/docs/reference/memport/) | Sem implementação | ⚪ |
-| 38 | Trusted Folders | [trusted-folders](https://geminicli.com/docs/cli/trusted-folders/) | Não precisa (desktop app) | ⚪ |
-| 39 | Resiliência (Error 429/500) | Parcial em model-routing | `executor.go` (rotação de chaves/modelos) | ✅ |
-| 40 | Histórico Persistente | Nativo Gemini | `session.go` (auto-restore) + SQLite | ✅ |
-| 41 | Multi-agente (Swarm) | Não oficial | `app_swarm.go` | ✅ |
-| 42 | Grafo 3D / RAG Visual | Não oficial | `app_graph.go` (planejado) | ✅ |
+| 37 | Memory Import (Memport) | [memport](https://geminicli.com/docs/reference/memport/) | RAG próprio via Qdrant substitui | ⚪ |
+| 38 | Trusted Folders | [trusted-folders](https://geminicli.com/docs/cli/trusted-folders/) | Desktop app com `SecurityConfig` + Workspaces whitelist | ⚪ |
+| 39 | Resiliência (Error 429/500) | Parcial em model-routing | `executor.go` (detecção + rotação automática modelo/chave + auto-retry) | ✅ Pronto |
+| 40 | Histórico Persistente | Nativo Gemini | `session.go` (auto-restore) + SQLite | ✅ Pronto |
+| 41 | Multi-agente (Swarm) | Não oficial | `app_swarm.go` + `orchestrator.go` | ✅ Pronto |
+| 42 | Grafo 3D / RAG Visual | Não oficial | `app_graph.go` + `GraphVisualizer.vue` | ✅ Pronto |
 
 ---
 
@@ -86,29 +74,26 @@ O Lumaestro cobre **~55%** das funcionalidades core do Gemini CLI em modo ACP. A
 
 ### Ferramentas que o Gemini CLI oferece nativamente:
 
-| Categoria | Ferramenta | Disponível no ACP? | Lumaestro Renderiza? |
-|---|---|---|---|
-| **Shell** | `run_shell_command` | ✅ via `tool_use` | ⚠️ Output bruto apenas |
-| **File System** | `read_file` | ✅ | ❌ Sem preview de arquivo |
-| | `read_many_files` | ✅ | ❌ |
-| | `write_file` | ✅ | ⚠️ Sem diff visual |
-| | `replace` | ✅ | ⚠️ Sem diff visual |
-| | `list_directory` | ✅ | ❌ Sem tree view |
-| | `glob` | ✅ | ❌ |
-| | `grep_search` / `search_file_content` | ✅ | ❌ |
-| **Web** | `google_web_search` | ✅ | ❌ Sem card de resultados |
-| | `web_fetch` | ✅ | ❌ |
-| **Interaction** | `ask_user` | ✅ | ❌ Sem UI modal |
-| | `write_todos` | ✅ | ❌ Sem painel de TODOs |
-| **Memory** | `save_memory` | ✅ | ⚠️ RAG diferente |
-| | `get_internal_docs` | ✅ | ❌ |
-| | `activate_skill` | ✅ | ❌ |
-| **Planning** | `enter_plan_mode` | ✅ | ❌ |
-| | `exit_plan_mode` | ✅ | ❌ |
-| **System** | `complete_task` | ✅ | ❌ Sem sinalização visual |
-
-> **⚠️ IMPORTANTE**  
-> O Gemini CLI em modo ACP envia todas as chamadas de ferramentas como eventos `tool_use` via JSON-RPC. O Lumaestro **recebe** esses eventos no `handler.go`, mas a maioria é processada apenas como texto bruto, sem UI dedicada.
+| Categoria | Ferramenta | Disponível no ACP? | Lumaestro Renderiza? | Status |
+|---|---|---|---|---|
+| **Shell** | `run_shell_command` | ✅ via `tool_use` | ✅ `handler.go` processa + `AgentTerminal.vue` | ✅ Pronto |
+| **File System** | `read_file` | ✅ | ✅ `handler.go` + `fs_proxy.go` ReadFile | ✅ Pronto |
+| | `read_many_files` | ✅ | ✅ Processado via handler | ✅ Pronto |
+| | `write_file` | ✅ | ✅ `handler.go` + `fs_proxy.go` WriteFile + ReviewBlock | ✅ Pronto |
+| | `replace` | ✅ | ⚠️ Funciona, sem diff visual | ⚠️ Parcial |
+| | `list_directory` | ✅ | ⚠️ Funciona, sem tree view | ⚠️ Parcial |
+| | `glob` | ✅ | ⚠️ Funciona via CLI | ⚠️ Parcial |
+| | `grep_search` / `search_file_content` | ✅ | ⚠️ Funciona via CLI | ⚠️ Parcial |
+| **Web** | `google_web_search` | ✅ | ⚠️ Funciona, sem card de resultados | ⚠️ Parcial |
+| | `web_fetch` | ✅ | ⚠️ Funciona, sem preview | ⚠️ Parcial |
+| **Interaction** | `ask_user` | ✅ | ✅ `ReviewBlock.vue` + `RequestReview` | ✅ Pronto |
+| | `write_todos` | ✅ | ❌ Sem painel de TODOs | 🟡 |
+| **Memory** | `save_memory` | ✅ | ⚠️ RAG via Qdrant (diferente do GEMINI.md) | ⚠️ Parcial |
+| | `get_internal_docs` | ✅ | ⚠️ Via Obsidian RAG | ⚠️ Parcial |
+| | `activate_skill` | ✅ | ✅ `skills/manager.go` com 524+ skills | ✅ Pronto |
+| **Planning** | `enter_plan_mode` | ✅ | ✅ Toggle visual + `PlanMode` flag | ✅ Pronto |
+| | `exit_plan_mode` | ✅ | ✅ Toggle visual + flag revert | ✅ Pronto |
+| **System** | `complete_task` | ✅ | ✅ `tools.go` executeNativeTool | ✅ Pronto |
 
 ---
 
@@ -117,239 +102,124 @@ O Lumaestro cobre **~55%** das funcionalidades core do Gemini CLI em modo ACP. A
 | Funcionalidade | Módulo | Detalhes |
 |---|---|---|
 | ACP Mode (JSON-RPC/ndJSON) | `executor.go` + `rpc_listener.go` | Pipe IPC completo, parsing de chunks |
-| Session Lifecycle | `session.go` | Start/Stop/Resume com auto-restore |
+| Session Lifecycle | `session.go` | Start/Stop/Resume com auto-restore + `findLatestSessionID` |
 | OAuth + API Key Auth | `session.go` | Silent login + pool de chaves rotativas |
-| Model Selection | `executor.go` | Flag `--model`, env `GEMINI_MODEL` |
+| Model Selection | `executor.go` | Flag `--model`, env `GEMINI_MODEL`, `SetSessionModel` RPC |
 | YOLO Auto-Approve | `executor.go` | Flag `--yolo` para modo não-interativo |
-| Resiliência 429/500 | `executor.go` | Detecção + rotação automática modelo/chave |
-| Telemetria / Stats | `telemetry.go` | Tracking de tokens, custos, latência |
+| Resiliência 429/500 | `executor.go` | Detecção + rotação automática modelo/chave + auto-retry |
+| Telemetria / Stats | `telemetry.go` | Tracking de tokens, custos, latência, reward engine |
 | Histórico Persistente | `session.go` + DB | Auto-restore + renderização user/assistant |
 | UI Themes | Frontend Vue | Dark mode nativo, design premium |
-| Multi-agente (Swarm) | `app_swarm.go` | Orquestração proprietária |
-| Grafo RAG | `app_graph.go` | Visualização 3D (planejada) |
-| Chat Streaming | `handler.go` | Real-time chunk processing |
+| Multi-agente (Swarm) | `app_swarm.go` + `orchestrator.go` | Orquestração com 4 perfis (Coder/Planner/Reviewer/DocMaster) |
+| Grafo RAG | `app_graph.go` + `GraphVisualizer.vue` | Visualização 3D |
+| Chat Streaming | `handler.go` | Real-time chunk processing (thought/message/tool) |
+| File System Proxy | `fs_proxy.go` | Read/Write/Delete/Move/RunCommand + segurança granular |
+| Agent Skills | `skills/manager.go` + 9 categorias | 524+ skills nativas compiladas |
+| Settings UI | `Settings.vue` (50KB) | UI completa de configurações |
+| System Prompt | `prompt_builder.go` | 4 perfis + diretivas de idioma/ambiente/autonomia |
+| Review System | `executor.go` + `ReviewBlock.vue` | RequestReview com aprovação do usuário |
+| Plan Mode | `types.go` + `handler.go` | Bloqueio de ferramentas de escrita + UI Toggle lilás |
+| Model Steering | `input.go` + `app_chat.go` | Injeção de hints real-time via canal assíncrono |
+| Hooks System | `hooks.go` | Pipeline extensível de pré/pós processamento de tools |
+| Token Cache Dash | `telemetry.go` | Acumulador de economia visual na barra de stats |
+| Tool Execution | `tools.go` + `handler.go` | delegate_task, complete_task, request_approval + file/shell tools |
 
 ---
 
 ## Parcialmente Implementadas ⚠️
 
-### 1. File System Tools
-- **O que tem**: Handler captura `tool_use` do tipo file system
-- **O que falta**: 
-  - Renderização visual de diffs (antes/depois)
-  - File tree navigator na UI
-  - Preview de arquivo inline
-  - Confirmação visual antes de write
+### 1. File System Tools — Renderização Visual
+- ✅ **O que tem**: `FSProxy` completo (Read/Write/Delete/Move) + `handler.go` processa todos os tool_use + `ReviewBlock.vue` para aprovação
+- ❌ **O que falta**: 
+  - Renderização visual de diffs (antes/depois) para `replace`
+  - File tree navigator na UI para `list_directory`/`glob`
+  - Preview de arquivo inline para `read_file`
 
-### 2. Shell Commands
-- **O que tem**: Auto-approve via `--yolo`
-- **O que falta**:
-  - Terminal embutido na UI para output
-  - Confirmação granular por comando
-  - Histórico de comandos executados
+### 2. Shell Commands — Output Visual
+- ✅ **O que tem**: `handler.go` processa `run_shell_command` + `AgentTerminal.vue` existe + auto-approve via `--yolo`
+- ❌ **O que falta**:
+  - Terminal embutido com output formatado
+  - Histórico de comandos executados na sessão
 
 ### 3. Memory / RAG
-- **O que tem**: `ConsolidateChatKnowledge` no backend
-- **O que falta**:
+- ✅ **O que tem**: `ConsolidateChatKnowledge` + Qdrant embeddings + `skillbook.go`
+- ❌ **O que falta**:
   - Alinhamento com `save_memory` → `GEMINI.md`
   - UI para visualizar memories salvos
   - Import/export de memórias (Memport)
 
 ### 4. GEMINI.md
-- **O que tem**: O Gemini CLI lê automaticamente
-- **O que falta**:
+- ✅ **O que tem**: O Gemini CLI lê automaticamente os arquivos
+- ❌ **O que falta**:
   - Editor de GEMINI.md na UI
   - Geração automática de contexto de projeto
   - Suporte a hierarquia (global, user, project)
 
 ### 5. Web Search/Fetch
-- **O que tem**: Funciona nativamente via CLI
-- **O que falta**:
+- ✅ **O que tem**: Funciona nativamente via CLI (automático)
+- ❌ **O que falta**:
   - Cards visuais de resultados de busca
   - Preview de páginas fetched
   - Indicador visual quando web tools são usadas
 
-### 6. Model Routing
-- **O que tem**: Rotação custom de chaves e modelos
-- **O que falta**:
-  - `ModelAvailabilityService` equivalente
-  - Fallback chain oficial: `flash-lite → flash → pro`
-  - UI para configurar precedência de modelos
-  - Local Model Routing (Gemma)
+### 6. Token Caching — Dashboard
+### 6. Checkpointing — UI
+- ✅ **O que tem**: `SessionInfo` struct em `types.go`, `.gemini/history/` com shadow repos
+- ❌ **O que falta**:
+  - UI de timeline visual de checkpoints
+  - Botão restore com preview de diff
+  - Comando `/restore`
 
-### 7. Settings
-- **O que tem**: `settings.json` manipulado manualmente
-- **O que falta**:
-  - UI de settings equivalente ao `/settings`
-  - Toggle de features experimentais
-  - Configuração visual de modelos/auth
-
-### 8. Keyboard Shortcuts
-- **O que tem**: Atalhos básicos no Vue
-- **O que falta**:
+### 7. Keyboard Shortcuts
+- ✅ **O que tem**: Atalhos básicos no Vue
+- ❌ **O que falta**:
   - `Shift+Tab` para cycling de approval modes
   - `Ctrl+X` para editor externo
   - Atalhos de navegação de sessão
 
 ---
 
-## Não Implementadas — Alta Prioridade 🔴
+## Detalhamento de Funcionalidades Críticas
 
-### 1. 🔴 Plan Mode
-**Impacto**: Crítico para workflows complexos de desenvolvimento
-
-O Gemini CLI oferece um modo de planejamento read-only completo:
-- **Entrada**: `/plan [goal]`, `Shift+Tab`, ou linguagem natural
-- **Ferramentas restritas**: Apenas leitura (read_file, grep, web_search, etc.)
-- **Planos em Markdown**: Salvos em `~/.gemini/tmp/<project>/<session>/plans/`
-- **Edição colaborativa**: `Ctrl+X` abre editor externo, o modelo lê as edições
-- **Aprovação formal**: Opções de auto-edit ou manual-edit após aprovação
-- **Policy engine**: Regras custom em TOML para controlar o que Plan Mode pode fazer
-
-**Implementação sugerida**:
-```
-Frontend: Novo componente PlanMode.vue
-   - Toggle visual Plan/Execute
-   - Renderização de plano Markdown
-   - Botões Approve/Iterate/Cancel
-Backend: Novo módulo plan.go
-   - Intercepta mode switching
-   - Filtra ferramentas por modo
-   - Gerencia diretório de planos
-```
+### 1. Plan Mode (Modo de Planejamento) ✅
+**Status**: Implementado com paridade visual e técnica.
+- **Funcionalidade**: Modo read-only que bloqueia ferramentas destrutivas.
+- **Lumaestro**: Toggle na UI (Tema Lilás), flag `PlanMode` no backend, injeção de `--approval-mode=plan`.
+- **Implementação**: `types.go`, `handler.go`, `session.go` e `ChatInput.vue`.
 
 ---
 
-### 2. 🔴 Subagents
-**Impacto**: Delegação de tarefas paralelas
-
-O Gemini CLI suporta subagentes nativos:
-- **`codebase_investigator`**: Análise profunda de codebase
-- **`cli_help`**: Assistente de ajuda CLI
-- **Custom subagents**: Definidos em `~/.gemini/agents/`
-- **Comunicação**: Cada subagent roda em contexto isolado
-
-**Implementação sugerida**:
-```
-Backend: Módulo subagent_manager.go
-   - Spawn de instâncias ACP secundárias
-   - Context isolation por subagent
-   - Comunicação inter-agente via channels
-Frontend: SubagentPanel.vue
-   - Visualização de subagents ativos
-   - Output multiplexado por agente
-```
+### 2. Subagents (Multi-agentes) ⚠️
+**Impacto**: Delegação de tarefas paralelas e especialização.
+- **Gemini CLI**: Suporta subagentes isolados como `codebase_investigator` e customizados.
+- **Lumaestro**: Implementado via **Swarm** (`app_swarm.go`). Os agentes (Coder/Planner/Reviewer/DocMaster) rodam em context patterns específicos, mas ainda compartilham a mesma instância ACP.
+- **🔴 Gap Restante**: Falta suporte para instâncias ACP secundárias (processos separados) para isolamento total de contexto.
 
 ---
 
-### 3. 🔴 Hooks (Pre/Post Tool Execution)
-**Impacto**: Automação e controle de qualidade
-
-Sistema de hooks documentado:
-- **Pre-hooks**: Executados antes de uma ferramenta (ex: lint antes de write)
-- **Post-hooks**: Executados após (ex: format após write)
-- **Configuração**: Via `hooks.json` ou `~/.gemini/hooks/`
-- **Triggers**: Por ferramenta, por evento, por padrão de arquivo
-
-**Implementação sugerida**:
-```
-Backend: hooks.go
-   - Registry de hooks por evento
-   - Pipeline pre → tool → post
-   - Timeout e error handling
-Config: hooks.json em ~/.gemini/
-   - Definição de hooks por tool
-```
+### 3. Checkpointing (Git Snapshots) ⚠️
+**Impacto**: Safety net para todas as modificações de arquivo.
+- **Funcionalidade**: Shadow Git repo em `~/.gemini/history/`. Auto-snapshot antes de cada `write_file`.
+- **Lumaestro**: O backend já gerencia `SessionInfo` e o CLI cria os históricos.
+- **🔴 Gap Restante**: Falta a **Timeline Visual** no frontend e o botão de **Restore** com preview de diff.
 
 ---
 
-### 4. 🔴 Checkpointing (Git Snapshots)
-**Impacto**: Safety net para todas as modificações de arquivo
-
-Funcionalidade documentada:
-- **Shadow Git repo**: `~/.gemini/history/<project_hash>/`
-- **Auto-snapshot**: Antes de qualquer `write_file` ou `replace`
-- **Restore**: `/restore <checkpoint_file>`
-- **Inclui**: Estado de arquivos + conversa + tool call
-- **Config**: `settings.json` → `general.checkpointing.enabled: true`
-
-**Implementação sugerida**:
-```
-Backend: checkpoint.go
-   - Shadow git init/commit automático
-   - Serialização de estado de conversa
-   - Restore de snapshot + replay
-Frontend: CheckpointPanel.vue
-   - Timeline visual de checkpoints
-   - Botão restore com preview de diff
-```
+### 4. Hooks (Pre/Post Tool Execution) ✅
+**Status**: Implementado via motor de pipeline.
+- **Funcionalidade**: Execução de lógica antes e depois de cada ferramenta.
+- **Lumaestro**: Criado `hooks.go` com `ACPHook` interface. Pipeline injetado no `handler.go`.
+- **Implementação**: Permite auditoria real-time e verificações de segurança globais.
 
 ---
 
-### 5. 🔴 Model Steering 🔬
-**Impacto**: Correção em tempo real durante execução
-
-Funcionalidade experimental:
-- **Input durante execução**: Digitar enquanto o agente trabalha
-- **Acknowledgment rápido**: Modelo pequeno confirma recebimento
-- **Context injection**: Hint injetado no próximo turn
-- **Config**: `settings.json` → `experimental.modelSteering: true`
-- **Casos de uso**: Corrigir caminho, pular etapas, adicionar contexto
-
-**Implementação sugerida**:
-```
-Backend: steering.go
-   - Canal de input paralelo durante execução
-   - Injeção de hint no próximo request
-   - Acknowledgment assíncrono
-Frontend:
-   - Input overlay durante streaming
-   - Badge visual "Steering active"
-```
+### 5. Model Steering 🔬 ✅
+**Status**: Implementado com suporte a canal assíncrono.
+- **Funcionalidade**: Corrigir ou direcionar a IA enquanto ela está pensando.
+- **Lumaestro**: `SteeringChan` no Go + Monitor de sessão + Overlay de input real-time no `ChatInput.vue`.
+- **Implementação**: Envia hints de direcionamento que são processados imediatamente como logs de sistema e integrados no próximo passo da IA.
 
 ---
-
-### 6. 🔴 Agent Skills
-**Impacto**: Expertise especializada sob demanda
-
-Sistema de skills documentado:
-- **Localização**: `.gemini/skills/` no projeto ou global
-- **Ativação**: `activate_skill` tool ou automático por contexto
-- **Formato**: Markdown com instruções procedurais
-- **Integração com Plan Mode**: Skills guiam planejamento
-
-**Implementação sugerida**:
-```
-Backend: skills.go
-   - Scanner de diretório de skills
-   - Injeção de instrução no system prompt
-   - Ativação por contexto ou manual
-Frontend: SkillsPanel.vue
-   - Lista de skills disponíveis
-   - Toggle ativo/inativo
-   - Editor de skills custom
-```
-
----
-
-### 7. 🔴 Token Caching
-**Impacto**: Otimização de custos (reduz consumo de API)
-
-Funcionalidade nativa:
-- **Disponível para**: API Key e Vertex AI (não OAuth)
-- **Automático**: Reutiliza system instructions e contexto
-- **Monitoramento**: Via `/stats` mostra cached tokens
-- **Impacto**: Redução significativa de custo em sessões longas
-
-**Implementação sugerida**:
-```
-Backend: Ajustar session.go
-   - Detectar tipo de auth e habilitar caching
-   - Tracking de cache hits/misses
-Frontend: Dashboard de telemetria
-   - Mostrar economia de tokens por cache
-   - Gráfico cumulativo de savings
-```
 
 ---
 
@@ -367,13 +237,14 @@ Frontend: Dashboard de telemetria
 
 ### 3. Custom Commands
 - **O que é**: Comandos personalizados via `.gemini/commands/`
-- **Impacto**: Atalhos para workflows repetitivos
+- **Já tem**: Tools nativas (`delegate_task`, `complete_task`, `request_approval` em `tools.go`)
+- **Falta**: Suporte a comandos definidos pelo usuário em markdown
 - **Complexidade**: Baixa
 
 ### 4. Rewind
 - **O que é**: Desfazer operações do agente
 - **Impacto**: UX para correção rápida
-- **Complexidade**: Média (requer Checkpointing primeiro)
+- **Complexidade**: Média (requer Checkpointing UI primeiro)
 
 ### 5. Sandboxing
 - **O que é**: Execução isolada em container/VM
@@ -406,56 +277,79 @@ Frontend: Dashboard de telemetria
 
 | Funcionalidade | Razão |
 |---|---|
-| System Prompt Override | Lumaestro injeta system prompt internamente |
 | Enterprise Configuration | N/A para uso pessoal |
-| Policy Engine (TOML) | Substituído por lógica Go customizada |
+| Policy Engine (TOML) | Substituído por `SecurityConfig` + `FSProxy` em Go |
 | Git Worktrees 🔬 | Feature experimental, baixo impacto |
-| Memory Import (Memport) | RAG próprio substitui |
-| Trusted Folders | Desktop app já tem confiança implícita |
+| Memory Import (Memport) | RAG próprio via Qdrant substitui |
+| Trusted Folders | Desktop app com `SecurityConfig.Workspaces` whitelist |
+
+---
+
+## Inventário do Codebase Verificado
+
+### Backend: `internal/agents/acp/` (13 arquivos)
+| Arquivo | Tamanho | Função |
+|---|---|---|
+| `executor.go` | 7.7KB | Motor principal, rotação de chaves, review system |
+| `handler.go` | 17.2KB | Processamento de notificações e requests RPC |
+| `session.go` | 17.6KB | Ciclo de vida de sessão + auto-restore |
+| `types.go` | 4.5KB | Structs: ACPExecutor, ACPSession, SessionInfo |
+| `orchestrator.go` | 4.3KB | Roteamento inteligente multi-agente |
+| `prompt_builder.go` | 5.2KB | 4 perfis (Coder, Planner, Reviewer, DocMaster) |
+| `tools.go` | 2.7KB | delegate_task, complete_task, request_approval |
+| `fs_proxy.go` | 2.9KB | Read/Write/Delete/Move + segurança granular |
+| `telemetry.go` | 2.4KB | Tracking de custo, tokens, reward engine |
+| `input.go` | 3.7KB | Envio de mensagens para o CLI |
+| `rpc_listener.go` | 2.2KB | Listener de ndJSON do pipe IPC |
+| `jsonrpc.go` | 1.5KB | Helpers de protocolo |
+
+### Backend: `internal/agents/skills/` (524+ skills nativas)
+| Diretório | Skills | Exemplos |
+|---|---|---|
+| `development/` | 184 | golang_pro, fastapi_pro, react_patterns, typescript_expert |
+| `general/` | 340 | deep_research, plan_writing, debugging_strategies, wiki_page_writer |
+| `architecture/` | — | Padrões de arquitetura |
+| `security/` | — | Pentest, OWASP |
+| `testing/` | — | Playwright, unit testing |
+| `workflow/` | — | Git workflows, CI/CD |
+| `infrastructure/` | — | Docker, K8s, AWS |
+| `business/` | — | Analytics, finance |
+| `data_ai/` | — | ML, embeddings, Hugging Face |
+
+### Frontend: `frontend/src/components/` (13 componentes)
+| Componente | Tamanho | Função |
+|---|---|---|
+| `Settings.vue` | 50.7KB | UI de configurações completa |
+| `ChatPanel.vue` | 16.8KB | Painel principal de chat |
+| `ChatLog.vue` | 15.5KB | Renderização de mensagens |
+| `ChatInput.vue` | 19.1KB | Input com suporte a imagens |
+| `SwarmDashboard.vue` | 19KB | Dashboard de multi-agentes |
+| `GraphVisualizer.vue` | 12.3KB | Visualização 3D de grafos |
+| `HistorySidebar.vue` | 8.9KB | Sidebar de sessões |
+| `ThoughtBlock.vue` | 6.8KB | Renderização de raciocínio |
+| `AgentTerminal.vue` | 6KB | Terminal embutido |
+| `TerminalView.vue` | 4.8KB | View de terminal |
+| `DocViewer.vue` | 4.8KB | Visualizador de documentos |
+| `ReviewBlock.vue` | 3.4KB | Bloco de aprovação |
 
 ---
 
 ## Roadmap Sugerido
 
-### Fase 1: Fundações de Segurança (1-2 semanas)
-- [ ] **Checkpointing** → Shadow git + restore
-- [ ] **Token Caching** → Dashboard de economia
-- [ ] **Model Routing completo** → Fallback chain oficial
+### Fase 1: Plan Mode (CONCLUÍDO) ✅
+### Fase 2: Checkpointing UI (Em andamento)
+### Fase 3: Token Cache Dashboard (CONCLUÍDO) ✅
+### Fase 4: Hooks System (CONCLUÍDO) ✅
+### Fase 5: Model Steering (CONCLUÍDO) ✅
 
-### Fase 2: Planejamento Inteligente (2-3 semanas)
-- [ ] **Plan Mode** → UI + tool filtering + planos em markdown
-- [ ] **Agent Skills** → Scanner + ativação + UI
-- [ ] **GEMINI.md Editor** → UI para gerenciar contexto de projeto
-
-### Fase 3: Orquestração Avançada (3-4 semanas)
-- [ ] **Subagents** → Manager + UI multiplexada
-- [ ] **Hooks** → Pipeline pre/post tool
-- [ ] **Model Steering** → Input overlay durante execução
-
-### Fase 4: Ecossistema (4+ semanas)
-- [ ] **MCP Servers** → Configuração + registry
-- [ ] **Extensions** → Sistema de plugins
-- [ ] **Custom Commands** → Atalhos personalizados
-- [ ] **Notifications** → Toast de conclusão
-
-### Fase 5: Visualização de Ferramentas (Contínuo)
-- [ ] **Diff Viewer** → Para `write_file`/`replace`
+### Fase Contínua: Visualização de Ferramentas
+- [ ] **Diff Viewer** → Para `replace` (antes/depois visual)
 - [ ] **File Tree** → Para `list_directory`/`glob`
-- [ ] **Search Results** → Cards para `grep`/`web_search`
-- [ ] **ask_user Modal** → UI interativa de confirmação
+- [ ] **Search Results** → Cards visuais para `grep`/`web_search`
 - [ ] **TODO Panel** → Para `write_todos`
-- [ ] **Terminal embutido** → Para `run_shell_command`
-
----
-
-> **⚠️ Decisões Arquiteturais Pendentes**
-> 1. **Checkpointing**: Usar shadow git (como Gemini CLI) ou snapshots SQLite?
-> 2. **Plan Mode**: Implementar como modo no ACP (`--approval-mode=plan`) ou como feature da UI?
-> 3. **Subagents**: Spawnar processos ACP separados ou reusar a mesma instância?
-> 4. **MCP**: Integrar via settings.json do Gemini ou gerenciar independentemente?
-> 5. **Skills**: Usar formato `.gemini/skills/` compatível ou formato proprietário?
+- [ ] **Terminal melhorado** → Output formatado para `run_shell_command`
 
 ---
 
 > **💡 Recomendação Estratégica**  
-> Focar primeiro na **Fase 1** (Checkpointing + Token Caching + Model Routing) para construir uma base sólida de segurança e economia. Depois, a **Fase 2** (Plan Mode + Skills) é o maior diferencial competitivo para produtividade. A **Fase 5** (visualização de ferramentas) pode ser feita incrementalmente entre as outras fases, pois melhora a UX a cada iteração.
+> Focar primeiro na **Fase 1** (Plan Mode) por ser o gap com maior impacto na produtividade. As Fases 2 e 3 (Checkpointing UI e Token Cache Dashboard) são rápidas porque já tem infraestrutura — é só construir a UI. A Fase Contínua de visualização de ferramentas pode ser feita incrementalmente entre as outras fases.

@@ -146,6 +146,10 @@ export function GetPendingApprovals() {
   return window['go']['core']['App']['GetPendingApprovals']();
 }
 
+export function GetPlanMode(arg1) {
+  return window['go']['core']['App']['GetPlanMode'](arg1);
+}
+
 export function GetProjectDoc(arg1) {
   return window['go']['core']['App']['GetProjectDoc'](arg1);
 }
@@ -212,6 +216,10 @@ export function PruneGraph(arg1) {
 
 export function PurgeCache() {
   return window['go']['core']['App']['PurgeCache']();
+}
+
+export function ReadGeminiConfig() {
+  return window['go']['core']['App']['ReadGeminiConfig']();
 }
 
 export function RejectAction(arg1, arg2) {
@@ -282,6 +290,10 @@ export function SetExplorationMode(arg1) {
   return window['go']['core']['App']['SetExplorationMode'](arg1);
 }
 
+export function SetPlanMode(arg1, arg2) {
+  return window['go']['core']['App']['SetPlanMode'](arg1, arg2);
+}
+
 export function SetupTool(arg1) {
   return window['go']['core']['App']['SetupTool'](arg1);
 }
@@ -332,4 +344,8 @@ export function UpsertDocument(arg1, arg2, arg3, arg4) {
 
 export function WeaveNeuralLinks(arg1) {
   return window['go']['core']['App']['WeaveNeuralLinks'](arg1);
+}
+
+export function WriteGeminiConfig(arg1) {
+  return window['go']['core']['App']['WriteGeminiConfig'](arg1);
 }

@@ -1,4 +1,4 @@
-﻿package core
+package core
 
 import (
 	"Lumaestro/internal/db"
@@ -59,7 +59,7 @@ func (a *App) handleAgentWakeUp(agent db.Agent, runID uuid.UUID) {
 	}
 
 	// 2. Iniciar ou Reutilizar Sessão ACP vinculada à Identidade
-	err = a.executor.StartSession(a.ctx, swarmProvider, sessionID, "LATEST", agent.ID, &issue.ID)
+	err = a.executor.StartSession(a.ctx, swarmProvider, sessionID, "LATEST", agent.ID, &issue.ID, false, nil)
 	if err != nil {
 		orchestration.FinalizeHeartbeat(agent.ID, runID, false, "Erro ACP Swarm: "+err.Error())
 		return

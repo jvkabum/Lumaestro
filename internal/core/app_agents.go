@@ -48,7 +48,7 @@ func (a *App) StartAgentSession(agent string) error {
 
 	fmt.Printf("[App] Iniciando agente: %s\n", agent)
 	// No primeiro boot ou reinício, passamos loadSessionID como "LATEST" para carregar a última Sinfonia.
-	return a.executor.StartSession(a.ctx, agent, sessionID, "LATEST", uuid.Nil, nil)
+	return a.executor.StartSession(a.ctx, agent, sessionID, "LATEST", uuid.Nil, nil, false, nil)
 }
 
 // StartBackgroundAgentSession cria uma instância paralela silenciosa exclusiva para o processamento de RAG
@@ -66,7 +66,7 @@ func (a *App) StartBackgroundAgentSession(agent string) error {
 
 	fmt.Printf("[App] Iniciando Agente de BACKGROUND (Black): %s\n", agent)
 	// Background NUNCA deve carregar histórico (LATEST) para não misturar os contextos. Inicia sempre limpo.
-	return a.executor.StartSession(a.ctx, agent, sessionID, "", uuid.Nil, nil)
+	return a.executor.StartSession(a.ctx, agent, sessionID, "", uuid.Nil, nil, false, nil)
 }
 
 // ListAgentSessions retorna a lista de conversas salvas para o agente
@@ -87,14 +87,14 @@ func (a *App) ListAgentSessions(agent string) ([]acp.SessionInfo, error) {
 func (a *App) LoadAgentSession(agent string, acpSessionID string) error {
 	fmt.Printf("[App] Trocando para sessão: %s\n", acpSessionID)
 	sessionID := agent
-	return a.executor.StartSession(a.ctx, agent, sessionID, acpSessionID, uuid.Nil, nil)
+	return a.executor.StartSession(a.ctx, agent, sessionID, acpSessionID, uuid.Nil, nil, false, nil)
 }
 
 // NewAgentSession força a criação de um novo chat (limpa o contexto)
 func (a *App) NewAgentSession(agent string) error {
 	fmt.Println("[App] Iniciando NOVO chat (limpando contexto)...")
 	sessionID := agent
-	return a.executor.StartSession(a.ctx, agent, sessionID, "", uuid.Nil, nil)
+	return a.executor.StartSession(a.ctx, agent, sessionID, "", uuid.Nil, nil, false, nil)
 }
 
 func (a *App) ResizeTerminal(agent string, cols int, rows int) {

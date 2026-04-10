@@ -6,6 +6,7 @@ import (
 	"Lumaestro/internal/config"
 	"Lumaestro/internal/orchestration"
 	"github.com/google/uuid"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // emitReward emite um bônus ou penalidade técnica autônoma (Sistema Lightning).
@@ -64,6 +65,21 @@ func (h *ACPRpcHandler) reportTurnCost() {
 		
 		_ = orchestration.RegistrarCusto(h.Session.AgentID, h.Session.CurrentIssueID, "google", modelName, pt, ct, costCents)
 		
+		// 📈 Acumular economia de cache
+		h.Session.TotalCacheTokens += h.Session.LastCacheTokens
+
+		// Emitir evento de telemetria para o Dashboard (Wails)
+		if h.Executor.Ctx != nil {
+			runtime.EventsEmit(h.Executor.Ctx, "agent:tokens", map[string]interface{}{
+				"agent":          h.Session.AgentName,
+				"prompt":         h.Session.LastPromptTokens,
+				"candidates":     h.Session.LastCandidatesTokens,
+				"cacheCurrent":   h.Session.LastCacheTokens,
+				"cacheTotal":     h.Session.TotalCacheTokens,
+				"costCentsTotal": costCents,
+			})
+		}
+
 		// Reseta para o próximo turno
 		h.Session.LastPromptTokens = 0
 		h.Session.LastCandidatesTokens = 0

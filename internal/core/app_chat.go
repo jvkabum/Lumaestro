@@ -310,9 +310,58 @@ func (a *App) SendSteeringHint(agent string, input string) string {
 	
 	// No Lumaestro, a sessão ACP de chat principal usa o nome do agente como ID.
 	sessionID := agent
-	err := a.executor.SendInput(sessionID, input, nil)
+	err := a.executor.SendSteeringHint(sessionID, input)
 	if err != nil {
 		return "Erro ao enviar direcionamento: " + err.Error()
 	}
 	return "Dica enviada!"
+}
+
+// SetPlanMode ativa ou desativa o modo de planejamento para a sessão.
+func (a *App) SetPlanMode(agent string, enabled bool) bool {
+	a.executor.Mu.Lock()
+	session, ok := a.executor.ActiveSessions[agent]
+	a.executor.Mu.Unlock()
+
+	if ok {
+		session.PlanMode = enabled
+		fmt.Printf("[App] 🛡️ Plan Mode alterado para %v na sessão %s\n", enabled, agent)
+		
+		status := "Modo Execução (⚡) ativado"
+		if enabled {
+			status = "Modo Plano (📝) ativado — Escrita bloqueada"
+		}
+		a.emitAgentStatus(agent, status, "status")
+		return true
+	}
+	return false
+}
+
+// GetPlanMode retorna o estado atual do Plan Mode para a sessão.
+func (a *App) GetPlanMode(agent string) bool {
+	a.executor.Mu.Lock()
+	session, ok := a.executor.ActiveSessions[agent]
+	a.executor.Mu.Unlock()
+
+	if ok {
+		return session.PlanMode
+	}
+	return false
+}
+
+// ReadGeminiConfig lê o conteúdo do arquivo GEMINI.md na raiz do projeto.
+func (a *App) ReadGeminiConfig() (string, error) {
+	data, err := os.ReadFile("GEMINI.md")
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "# Diretrizes do Gemini\n\nAdicione suas instruções globais aqui...", nil
+		}
+		return "", err
+	}
+	return string(data), nil
+}
+
+// WriteGeminiConfig salva as novas diretrizes no arquivo GEMINI.md.
+func (a *App) WriteGeminiConfig(content string) error {
+	return os.WriteFile("GEMINI.md", []byte(content), 0644)
 }

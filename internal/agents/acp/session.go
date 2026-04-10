@@ -19,7 +19,7 @@ import (
 )
 
 // StartSession inicia o Gemini CLI com a flag --acp. Se loadSessionID for fornecido, tenta restaurar essa sessão em vez de criar uma nova.
-func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID string, loadSessionID string, agentID uuid.UUID, issueID *uuid.UUID) error {
+func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID string, loadSessionID string, agentID uuid.UUID, issueID *uuid.UUID, planMode bool, parent *ACPSession) error {
 	e.Mu.Lock()
 	defer e.Mu.Unlock()
 	e.Ctx = ctx
@@ -37,7 +37,11 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 
 	// Resolver binário de forma robusta
 	binaryPath := agent
-	args := []string{"--acp", "--approval-mode=yolo"}
+	approvalMode := "yolo"
+	if planMode {
+		approvalMode = "plan"
+	}
+	args := []string{"--acp", "--approval-mode=" + approvalMode}
 
 	// 💎 Injeção Dinâmica de Modelo (Gemini)
 	if agent == "gemini" && cfgLoaded != nil && cfgLoaded.GeminiModel != "" {
@@ -83,8 +87,8 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 
 		if jsTarget != "" {
 			binaryPath = "node"
-			args = []string{"--no-warnings=DEP0040", jsTarget, "--acp", "--approval-mode=yolo"}
-			fmt.Printf("[ACP] Bypass CMD ativado: Rodando diretamente Node em %s\n", jsTarget)
+			args = []string{"--no-warnings=DEP0040", jsTarget, "--acp", "--approval-mode=" + approvalMode}
+			fmt.Printf("[ACP] Bypass CMD ativado: Rodando diretamente Node em %s (Modo: %s)\n", jsTarget, approvalMode)
 		}
 	}
 
@@ -196,18 +200,57 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 
 	session := &ACPSession{
 		ID:             sessionID,
+		ACPSessID:      uuid.NewString(), // Geração de ID interno para o protocolo
 		AgentName:      agent,
 		Cmd:            cmd,
 		Stdin:          stdin,
 		Cancel:         cancel,
+		Ctx:            cmdCtx,
 		initDone:       make(chan struct{}, 1),
+		SteeringChan:   make(chan string, 5),
 		AgentID:        agentID,
 		CurrentIssueID: issueID,
 		RolloutID:      rolloutID,
 		AttemptID:      attemptID,
+		PlanMode:       planMode,
+		Subagents:      make(map[string]*ACPSession),
+	}
+
+	if parent != nil {
+		session.ParentSessionID = parent.ID
+		parent.SubagentMu.Lock()
+		parent.Subagents[sessionID] = session
+		parent.SubagentMu.Unlock()
+		fmt.Printf("[Subagent] 🌳 Sessão %s vinculada ao pai: %s\n", sessionID, parent.ID)
 	}
 
 	e.ActiveSessions[sessionID] = session
+
+	// 📡 Monitor de Steering: Escuta dicas de direcionamento enquanto a sessão está ativa
+	go func(s *ACPSession) {
+		for {
+			select {
+			case hint, ok := <-s.SteeringChan:
+				if !ok { return }
+				fmt.Printf("[Steering] ⚡ Recebido hint para %s: %s\n", s.ID, hint)
+				
+				// Emite log para a UI para feedback visual imediato
+				e.LogChan <- ExecutionLog{
+					Source:  "SYSTEM",
+					Content: fmt.Sprintf("⚡ Direcionamento: %s", hint),
+					Type:    "system",
+				}
+				
+				// TODO: Se o binário suportar sinal de steering (v0.37+), enviar aqui.
+				// Por enquanto, o log sistêmico e o re-prompting manual no próximo turno 
+				// servem como fallback estável.
+				
+			case <-s.Ctx.Done():
+				return // Encerra monitor quando o processo morre
+			}
+		}
+	}(session)
+
 	runtime.EventsEmit(e.Ctx, "agent:starting", agent)
 
 	go e.runRPCListener(session, stdout)
@@ -365,23 +408,6 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 	return nil
 }
 
-// StopSession encerra uma sessão ativa.
-func (e *ACPExecutor) StopSession(sessionID string) error {
-	e.Mu.Lock()
-	session, ok := e.ActiveSessions[sessionID]
-	e.Mu.Unlock()
-
-	if ok {
-		if session.Cancel != nil {
-			session.Cancel()
-		}
-		e.Mu.Lock()
-		delete(e.ActiveSessions, sessionID)
-		e.Mu.Unlock()
-		return nil
-	}
-	return fmt.Errorf("sessão '%s' não encontrada", sessionID)
-}
 
 // ListSessions recupera a lista de conversas salvas diretamente do sistema de arquivos.
 func (e *ACPExecutor) ListSessions(s *ACPSession) ([]SessionInfo, error) {
