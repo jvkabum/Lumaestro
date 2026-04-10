@@ -95,14 +95,29 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 				}
 			}
 
-			if update.SessionUpdate == "agent_message_chunk" || update.SessionUpdate == "message_chunk" || update.SessionUpdate == "content_chunk" {
+			if update.SessionUpdate == "agent_message_chunk" || update.SessionUpdate == "message_chunk" || update.SessionUpdate == "content_chunk" || 
+			   update.SessionUpdate == "user_message_chunk" || update.SessionUpdate == "user_message" || update.Content.Type == "user" {
+				
 				txt := update.Content.Text
 				if txt == "" {
 					txt = update.Text
 				}
 
+				msgType := "message"
+				if update.Content.Type == "user" || update.SessionUpdate == "user_message" || update.SessionUpdate == "user_message_chunk" {
+					msgType = "user"
+					
+					// 🧹 LIMPEZA DE HISTÓRICO: Remove diretrizes de sistema do prompt restaurado
+					if strings.Contains(txt, "OBJETIVO ATUAL:") {
+						parts := strings.Split(txt, "OBJETIVO ATUAL:")
+						if len(parts) > 1 {
+							txt = strings.TrimSpace(parts[1])
+						}
+					}
+				}
+
 				if txt != "" && !isBg {
-					if !h.Session.isLoggingMessage {
+					if !h.Session.isLoggingMessage && msgType == "message" {
 						utils.LogInfo("O Maestro está orquestrando a resposta...", "💬")
 						h.Session.isLoggingMessage = true
 						h.Session.isLoggingThought = false
@@ -110,7 +125,7 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 					h.Executor.LogChan <- ExecutionLog{
 						Source:  h.Session.AgentName,
 						Content: txt,
-						Type:    "message",
+						Type:    msgType,
 					}
 				}
 			} else if update.SessionUpdate == "agent_thought_chunk" || update.SessionUpdate == "thought_chunk" {
@@ -432,15 +447,17 @@ func (h *ACPRpcHandler) HandleResponse(id interface{}, result json.RawMessage, r
 		return
 	}
 
-		if rpcErr != nil {
-		isQuotaError := strings.Contains(rpcErr.Message, "exhausted your daily quota") || 
-						strings.Contains(rpcErr.Message, "429") || 
-						strings.Contains(rpcErr.Message, "quota exceeded")
+	if rpcErr != nil {
+		isResilienceError := strings.Contains(rpcErr.Message, "exhausted your daily quota") || 
+						 strings.Contains(rpcErr.Message, "429") || 
+						 strings.Contains(rpcErr.Message, "quota exceeded") ||
+						 strings.Contains(rpcErr.Message, "INTERNAL") ||
+						 strings.Contains(rpcErr.Message, "500")
 
 		if strings.Contains(rpcErr.Message, "Model stream ended with empty response") {
 			h.Executor.LogChan <- ExecutionLog{Source: "SYSTEM", Content: "O Gemini decidiu não responder agora."}
-		} else if isQuotaError {
-			h.Executor.LogChan <- ExecutionLog{Source: "RESILIENCE", Content: "🔄 Cota exaurida detectada! Iniciando rotação de frota..."}
+		} else if isResilienceError {
+			h.Executor.LogChan <- ExecutionLog{Source: "RESILIENCE", Content: "🔄 Instabilidade ou Cota detectada! Rotacionando frota para garantir a resposta..."}
 			// Tenta rotacionar a chave e o modelo em background
 			go h.Executor.HandleQuotaExhausted(h.Session.ID)
 		} else {

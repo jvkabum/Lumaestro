@@ -128,17 +128,18 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
         return;
       }
 
-      // TRATAMENTO DE MENSAGENS E PENSAMENTOS DA IA
+      // TRATAMENTO DE MENSAGENS E PENSAMENTOS
       let lastMsg = messages.value[messages.value.length - 1];
+      const role = type === 'user' ? 'user' : 'assistant';
       
-      // Se a última mensagem não for do assistente ou for de sistema, cria uma nova
-      if (!lastMsg || lastMsg.role !== 'assistant' || lastMsg.mode === 'system' || lastMsg.agent !== source) {
+      // Se a última mensagem não for do mesmo autor (role/source) ou for de sistema, cria uma nova
+      if (!lastMsg || lastMsg.role !== role || lastMsg.mode === 'system' || (role === 'assistant' && lastMsg.agent !== source)) {
           lastMsg = { 
-            role: 'assistant', 
+            role: role, 
             text: '', 
             thought: '',
             agent: source,
-            isPlanning: true,
+            isPlanning: role === 'assistant',
             isStreaming: true
           };
           messages.value = [...messages.value, lastMsg];

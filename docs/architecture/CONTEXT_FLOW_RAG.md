@@ -1,23 +1,57 @@
-# Arquitetura: Context-Flow RAG (TrustGraph Core) 🚀🎻🔍
+﻿# 🌌 Fluxo de Contexto RAG (Cognitive Cosmos) 🧠🚀
 
-O **Context-Flow** é o motor de navegação do Lumaestro que evolui a busca vetorial simples para uma exploração de grafos semânticos em tempo real.
+O motor RAG do Lumaestro utiliza uma arquitetura de **Duas Fases** baseada em uma metáfora celestial para organizar e recuperar conhecimento.
 
-## 🚀 Motor de Navegação N-Hop
-Diferente de RAGs tradicionais que apenas buscam notas similares (K-Nearest Neighbors), o Context-Flow realiza uma **Expansão de Vizinhança (N-Hop Traversal)**.
-- **Nucleação**: Identifica os nós mestre (Sóis do Conhecimento) via similaridade vetorial.
-- **Exploração**: Recupera todos os documentos conectados a esses núcleos até uma profundidade configurável (`graph_depth`).
-- **Orquestração**: Os dados são consolidados em um sub-grafo que sustenta o prompt final, eliminando lacunas de contexto entre notas relacionadas.
+## 🛰️ Arquitetura Celestial (The Cosmos Model)
 
-## ⚡ Otimização: Batch Fetch (GetPoints)
-Para garantir alta performance, o Lumaestro utiliza buscadores em lote:
-- O método `GetPoints` no cliente Qdrant permite recuperar múltiplos IDs em uma única chamada HTTP.
-- Isso reduz a latência da expansão de 1-Hop para milissegundos, mesmo em vaults com milhares de links.
+O Crawler organiza o vault do Obsidian e repositórios de código em uma hierarquia visual:
 
-## ⚙️ Controle Dinâmico: Alcance da Teia
-A variável `graph_neighbor_limit` (configurável via UI) permite ao usuário ditar a "Curiosidade" da IA:
-- **Low (1-3)**: Foco extremo no assunto direto.
-- **High (15-25)**: Pesquisa profunda que conecta temas distantes no Vault do Obsidian.
+| Nível | Entidade | Representação no Grafo |
+|-------|----------|------------------------|
+| **1** | Galáxia | Raiz do Vault ou Repositório Satélite. |
+| **2** | Planeta | Pastas e subpastas (Agrupadores). |
+| **3** | Lua | Notas (.md), código e mídias (Arquivos). |
+| **4** | Estrela | Links semânticos e Triplas extraídas via IA. |
+
+`mermaid
+graph TD
+    %% Estilo Dark Mode
+    classDef sun fill:#f9d71c,stroke:#6d5dfc,color:#2d333b;
+    classDef planet fill:#2d333b,stroke:#6d5dfc,color:#e6edf3;
+    classDef moon fill:#2d333b,stroke:#4a4a4a,color:#e6edf3;
+
+    Sun((Galáxia Core)):::sun --> Planet1(Pasta: Backend):::planet
+    Sun --> Planet2(Pasta: Docs):::planet
+    Planet1 --> Moon1[auth.go]:::moon
+    Planet1 --> Moon2[db.go]:::moon
+    Planet2 --> Moon3[RAG.md]:::moon
+    
+    Moon1 -.->|Link Semântico| Moon3
+`
+
+## ⚡ O Ciclo de Indexação
+
+### Fase 1: Sincronização de Estrutura (Zero-Cost)
+O crawler percorre o sistema de arquivos e emite eventos graph:node e graph:edge para o frontend.
+- **Hash SHA-256:** Detecta mudanças reais de conteúdo.
+- **Resumo Estático:** Extrai automaticamente títulos e exportações (Go/JS/Py) sem usar LLM.
+
+### Fase 2: Enriquecimento Cognitivo (IA)
+Para arquivos novos ou modificados, o enxame realiza:
+1.  **Extração de Triplas:** Converte texto em conhecimento estruturado (Sujeito -> Predicado -> Objeto).
+2.  **Multimodalidade:** Processa imagens e PDFs via visão computacional.
+3.  **Vetorização:** Salva embeddings de 3072 dimensões no **Qdrant**.
+
+## 🔍 Motor de Busca N-Hop
+
+Diferente de um RAG tradicional que busca apenas por similaridade, o Lumaestro faz:
+1.  **Busca Vetorial:** Encontra as notas mais próximas semanticamente.
+2.  **Exploração de Adjacência:** Puxa notas vizinhas no grafo (links [[ ]]) mesmo que não sejam similares por texto.
+3.  **Re-Ranking:** O Agente Reflector valida se o contexto é útil para a tarefa atual.
+
+## 🛠️ Configurações Críticas
+- workerCount: Limitado a 2 por padrão para evitar estouro de cota (Rate Limit).
+- cachePath: .context/index_cache.json armazena o estado da última indexação.
 
 ---
-**Status**: Implementado e Ativo.
-**Base Tecnológica**: Qdrant, Golang, IA Generativa (Gemini 2.0).
+[[INDEX|⬅️ Voltar ao Índice]] | [[DATABASE_SCHEMA|Anterior: Banco de Dados ⬅️]]

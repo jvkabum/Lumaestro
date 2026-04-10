@@ -111,9 +111,9 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 
 	if isUsingOAuth {
 		if agent == "gemini" {
-			// Motores principais: Sempre preferir o Login Global do sistema
-			sessionHome = globalGeminiHome
-			fmt.Printf("[ACP] 🌐 Motor Central: Usando Login Global em %s\n", sessionHome)
+			// Motores principais: Usar o Home do usuário onde reside a pasta .gemini
+			sessionHome = userHome
+			fmt.Printf("[ACP] 🌐 Motor Central: Usando Perfil em %s (Base .gemini)\n", sessionHome)
 		} else {
 			// Contas Gemini do Projeto/Sub-agentes: Tentar local primeiro
 			if _, err := os.Stat(filepath.Join(cwd, ".gemini")); err == nil {
@@ -238,9 +238,10 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		methodId = "gemini-api-key"
 	} else {
 		// 🌐 Lógica de Silêncio: Se já houver credenciais OAuth, não pede login de novo
-		credsPath := filepath.Join(sessionHome, "oauth_creds.json")
+		userHome, _ := os.UserHomeDir()
+		credsPath := filepath.Join(userHome, ".gemini", "oauth_creds.json")
 		if _, err := os.Stat(credsPath); err == nil {
-			fmt.Printf("[ACP] 🛡️ Credenciais OAuth detectadas em %s. Pulando login redundante.\n", sessionHome)
+			fmt.Printf("[ACP] 🛡️ Credenciais OAuth detectadas em %s. Pulando login redundante.\n", credsPath)
 			shouldAuthenticate = false
 		}
 	}
@@ -264,8 +265,13 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 	if loadSessionID != "" {
 		targetID := loadSessionID
 		if loadSessionID == "LATEST" {
-			fmt.Println("[ACP] Restore nativo no ACP deprecado na v0.36. Assumindo modo clean start.")
-			targetID = ""
+			// 🚀 BUSCA DINÂMICA: Tenta achar a sessão mais recente no sistema de arquivos
+			targetID = e.findLatestSessionID(sessionHome)
+			if targetID != "" {
+				fmt.Printf("[ACP] 🕰️ Última sessão detectada: %s. Tentando restauração...\n", targetID)
+			} else {
+				fmt.Println("[ACP] Nenhuma sessão anterior encontrada. Iniciando conversa limpa.")
+			}
 		}
 
 		if targetID != "" {
@@ -290,14 +296,14 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 				Params:  json.RawMessage(`{"cwd":"` + strings.ReplaceAll(cwd, "\\", "\\\\") + `","mcpServers":[]}`),
 			})
 		}
-		if targetID != "" {
-			e.SendRPC(session, JSONRPCMessage{
-				JSONRPC: JSONRPCVersion,
-				ID:      e.getNextID(),
-				Method:  "session/load",
-				Params:  json.RawMessage(`{"sessionId":"` + targetID + `","cwd":"` + strings.ReplaceAll(cwd, "\\", "\\\\") + `"}`),
-			})
-		}
+	} else {
+		// Modo padrão: Criar nova se não houver flag de restauração
+		e.SendRPC(session, JSONRPCMessage{
+			JSONRPC: JSONRPCVersion,
+			ID:      e.getNextID(),
+			Method:  "session/new",
+			Params:  json.RawMessage(`{"cwd":"` + strings.ReplaceAll(cwd, "\\", "\\\\") + `","mcpServers":[]}`),
+		})
 	}
 
 	select {
@@ -543,4 +549,46 @@ func (e *ACPExecutor) DeleteSession(filePath string) error {
 	runtime.EventsEmit(e.Ctx, "agent:turn_complete", "system")
 
 	return nil
+}
+
+// findLatestSessionID vasculha recursivamente a pasta .gemini/tmp em busca do chat JSON mais recente.
+func (e *ACPExecutor) findLatestSessionID(sessionHome string) string {
+	var latestFile string
+	var latestTime time.Time
+
+	// 🕵️ Sempre buscar dentro de .gemini/tmp, mesmo que o sessionHome seja a raiz do perfil
+	userHome, _ := os.UserHomeDir()
+	geminiHome := filepath.Join(userHome, ".gemini")
+	
+	tmpDir := filepath.Join(geminiHome, "tmp")
+	if _, err := os.Stat(tmpDir); err != nil {
+		return ""
+	}
+
+	filepath.Walk(tmpDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		// Procuramos por arquivos .json dentro de diretórios 'chats'
+		if !info.IsDir() && strings.HasSuffix(path, ".json") && strings.Contains(path, "chats") {
+			if info.ModTime().After(latestTime) {
+				latestTime = info.ModTime()
+				latestFile = path
+			}
+		}
+		return nil
+	})
+
+	if latestFile != "" {
+		data, err := os.ReadFile(latestFile)
+		if err == nil {
+			var meta struct {
+				SessionID string `json:"sessionId"`
+			}
+			if json.Unmarshal(data, &meta) == nil && meta.SessionID != "" {
+				return meta.SessionID
+			}
+		}
+	}
+	return ""
 }
