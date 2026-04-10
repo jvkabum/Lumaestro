@@ -152,7 +152,8 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 	cmd.Env = append(cmd.Env, "GEMINI_TELEMETRY_OUTFILE="+diagLog)
 
 	if cfgLoaded != nil {
-		if agent == "gemini" && cfgLoaded.GeminiAPIKey != "" {
+		// 🔑 Injeção de Chave de API apenas se o usuário explicitamente optou por este modo
+		if agent == "gemini" && cfgLoaded.UseGeminiAPIKey && cfgLoaded.GeminiAPIKey != "" {
 			apiKey := cfgLoaded.GetActiveGeminiKey()
 			cmd.Env = append(cmd.Env, "GOOGLE_API_KEY="+apiKey)
 			cmd.Env = append(cmd.Env, "GEMINI_API_KEY="+apiKey)
@@ -281,6 +282,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		methodId = "gemini-api-key"
 	} else {
 		// 🌐 Lógica de Silêncio: Se já houver credenciais OAuth, não pede login de novo
+		methodId = "oauth-personal" // Força o ID correto para modo login
 		userHome, _ := os.UserHomeDir()
 		credsPath := filepath.Join(userHome, ".gemini", "oauth_creds.json")
 		if _, err := os.Stat(credsPath); err == nil {

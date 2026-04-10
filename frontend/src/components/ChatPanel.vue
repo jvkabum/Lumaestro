@@ -1,6 +1,7 @@
 <script setup>
 import { storeToRefs } from 'pinia'
 import { onMounted, ref } from 'vue'
+import { useSettingsStore } from '../stores/settings'
 import { useOrchestratorStore } from '../stores/orchestrator'
 import ChatInput from './ChatInput.vue'
 import ChatLog from './ChatLog.vue'
@@ -11,7 +12,30 @@ import TerminalView from './TerminalView.vue'
 
 // --- Uso da Store (Pinia) ---
 const orchestrator = useOrchestratorStore()
+const settings = useSettingsStore()
 const { messages, isThinking, isNavigating, isTerminalMode, activeAgent, runningSessions, pendingReview, modelStats } = storeToRefs(orchestrator)
+
+const getAgentStatusLabel = () => {
+  const agent = activeAgent.value
+  if (!agent) return 'PRONTO'
+  
+  if (modelStats.value.agent === agent) return modelStats.value.info
+
+  // Se for LM Studio, checamos apenas se está habilitado
+  if (agent === 'lmstudio') {
+    return (settings.config.lmstudio_enabled && settings.config.lmstudio_url) ? 'PRONTO' : 'OFFLINE'
+  }
+
+  // Checa instalação e autenticação via status centralizado
+  const toolStatus = settings.status.tools[agent]
+  const authStatus = settings.status.tools[agent + '_auth']
+  const useKey = settings.config[`use_${agent}_api_key`]
+
+  if (!toolStatus) return 'NÃO INSTALADO'
+  if (!useKey && !authStatus) return 'ERRO AUTH'
+  
+  return 'PRONTO'
+}
 
 // --- Estados Locais de UI ---
 const logContainer = ref(null)
@@ -115,7 +139,7 @@ const handleSessionEnded = (agent) => {
           <!-- 📊 Badge de Cota Diária (Injetado via ACP Stats) -->
           <div v-if="activeAgent" class="quota-badge glass" :title="modelStats.agent === activeAgent ? 'Performance e Uso do Modelo' : 'Sessão Ativa'">
              <span class="quota-icon">⚡</span>
-             <span class="quota-value">{{ modelStats.agent === activeAgent ? modelStats.info : 'PRONTO' }}</span>
+             <span class="quota-value">{{ getAgentStatusLabel() }}</span>
           </div>
         </div>
       </div>

@@ -398,9 +398,9 @@ watch(() => store.activeTab, (tab) => {
                       </div>
                       <div>
                         <h4 style="margin: 0; font-weight: 900; color: #fff; font-size: 1.3rem; letter-spacing: 2px;">{{ tool === 'lmstudio' ? 'LM STUDIO' : tool.toUpperCase() }}</h4>
-                        <div v-if="tool !== 'lmstudio'" class="engine-status-badge" :style="store.status.tools[tool] ? '' : 'border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.05);'">
-                          <span class="status-dot" :style="store.status.tools[tool] ? '' : 'background: #ef4444; box-shadow: none;'"></span> 
-                          {{ store.status.tools[tool] ? 'SISTEMA PRONTO' : 'NÃO INSTALADO' }}
+                        <div v-if="tool !== 'lmstudio'" class="engine-status-badge" :style="store.status.tools[tool] ? (store.config[`use_${tool}_api_key`] || store.status.tools[tool + '_auth'] ? '' : 'border-color: rgba(245, 158, 11, 0.3); background: rgba(245, 158, 11, 0.05); color: #f59e0b;') : 'border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.05);'">
+                          <span class="status-dot" :style="store.status.tools[tool] ? (store.config[`use_${tool}_api_key`] || store.status.tools[tool + '_auth'] ? '' : 'background: #f59e0b; box-shadow: none;') : 'background: #ef4444; box-shadow: none;'"></span> 
+                          {{ store.status.tools[tool] ? (store.config[`use_${tool}_api_key`] || store.status.tools[tool + '_auth'] ? 'SISTEMA PRONTO' : 'NÃO AUTENTICADO') : 'NÃO INSTALADO' }}
                         </div>
                         <div v-else class="engine-status-badge" :style="(store.config.lmstudio_enabled || isAutoStart('lmstudio')) && store.config.lmstudio_url ? 'border-color: rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.05);' : 'border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.05);'">
                           <span class="status-dot" :style="(store.config.lmstudio_enabled || isAutoStart('lmstudio')) && store.config.lmstudio_url ? 'background: #10b981;' : 'background: #ef4444; box-shadow: none;'"></span> 

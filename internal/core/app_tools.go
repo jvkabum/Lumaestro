@@ -1,4 +1,4 @@
-﻿package core
+package core
 
 import (
 	"Lumaestro/internal/config"
@@ -200,8 +200,9 @@ func (a *App) LoginGeminiAccount(name string) error {
 		binaryPath = filepath.Join(cwd, "node_modules", ".bin", "gemini.cmd")
 	}
 
-	// Script para o PowerShell forçar o ambiente de sessão desta conta
-	script := fmt.Sprintf(`$env:GEMINI_CLI_HOME='%s'; $env:NO_BROWSER='true'; & '%s' login`, targetDir, binaryPath)
+	// Script para o PowerShell forçar o ambiente de sessão desta conta.
+	// NOTA: Removemos NO_BROWSER para permitir o fluxo visual de login no navegador.
+	script := fmt.Sprintf(`$env:GEMINI_CLI_HOME='%s'; & '%s'`, targetDir, binaryPath)
 
 	fmt.Printf("[Maestro] 🔑 Iniciando fluxo de Login OAuth para: %s\n", name)
 	return exec.Command("cmd", "/c", "start", "powershell", "-NoExit", "-Command", script).Run()

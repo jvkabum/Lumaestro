@@ -56,15 +56,32 @@ func (i *Installer) CheckClaudeAuth() bool {
 
 // CheckGeminiAuth verifica silenciosamente se existe uma sessão configurada do Gemini no sistema.
 func (i *Installer) CheckGeminiAuth() bool {
+	// A biblioteca do Gemini CLI utiliza Application Default Credentials (ADC)
+	// Verifica o ADC do Google Cloud no Windows
+	appData := os.Getenv("APPDATA")
+	if appData != "" {
+		adcPath := filepath.Join(appData, "gcloud", "application_default_credentials.json")
+		if _, err := os.Stat(adcPath); err == nil {
+			return true
+		}
+	}
+
+	// Verifica o ADC no Unix/Linux/macOS
 	home, err := os.UserHomeDir()
-	if err != nil {
-		return false
+	if err == nil {
+		// Padrão GCloud ADC
+		adcPathUnix := filepath.Join(home, ".config", "gcloud", "application_default_credentials.json")
+		if _, err := os.Stat(adcPathUnix); err == nil {
+			return true
+		}
+
+		// Padrão Nativo Gemini CLI (oauth_creds.json) - Muito comum no Windows/NPM
+		geminiPath := filepath.Join(home, ".gemini", "oauth_creds.json")
+		if _, err := os.Stat(geminiPath); err == nil {
+			return true
+		}
 	}
-	// O Gemini CLI pode usar ~/.gemini/settings.json
-	configPath := filepath.Join(home, ".gemini", "settings.json")
-	if _, err := os.Stat(configPath); err == nil {
-		return true
-	}
+
 	return false
 }
 
@@ -206,8 +223,9 @@ func (i *Installer) GetSetupCommand(name string) (string, []string) {
 	if name == "claude" {
 		args = []string{"auth", "login"}
 	} else if name == "gemini" {
-		// O login do Gemini abre o browser, mas precisamos do terminal para ver o link e confirmar
-		args = []string{"login"}
+		// No Gemini v0.37.0+, o comando 'login' é inválido. 
+		// Rodar o binário puro inicia o REPL e oferece as opções de autenticação (OAuth vs API Key).
+		args = []string{}
 	}
 
 	return binaryPath, args

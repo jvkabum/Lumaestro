@@ -112,79 +112,7 @@ export function useGraphSetup() {
         if (store.clickedNodeLinks.has(`${s}-${t}`) || store.clickedNodeLinks.has(`${t}-${s}`)) return 2.5
         return 1.5
       })
-      .onNodeClick(async node => {
-        // ── Zoom no nó ──
-        const distance = 60
-        const distRatio = 1 + distance/Math.hypot(node.x, node.y, node.z)
-        Graph.cameraPosition(
-          { x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio }, 
-          node, 
-          2000
-        )
-
-        // ── Animação de partículas nos links conectados ao nó clicado ──
-        if (store._clickedNodeTimeout) clearTimeout(store._clickedNodeTimeout)
-
-        // Encontra todos os links conectados a este nó
-        const { links } = Graph.graphData()
-        store.clickedNodeLinks.clear()
-        links.forEach(link => {
-          const s = link.source.id || link.source
-          const t = link.target.id || link.target
-          if (s === node.id || t === node.id) {
-            store.clickedNodeLinks.add(`${s}-${t}`)
-            store.clickedNodeLinks.add(`${t}-${s}`)
-          }
-        })
-
-        // Força refresh das partículas
-        Graph.linkDirectionalParticles(Graph.linkDirectionalParticles())
-
-        // Apaga automaticamente após 5 segundos
-        store._clickedNodeTimeout = setTimeout(() => {
-          store.clickedNodeLinks.clear()
-          Graph.linkDirectionalParticles(Graph.linkDirectionalParticles())
-        }, 5000)
-
-        // Compatibilidade com nova arquitetura (core) vs antiga (main)
-        const bridge = (window.go && window.go.core && window.go.core.App) || 
-                       (window.go && window.go.main && window.go.main.App);
-
-        // ── Reforço Neural (Aprendizado Ativo) ──
-        if (bridge && bridge.HandleNodeClick) {
-          bridge.HandleNodeClick(node.id)
-        }
-
-        store.selectedNode = node
-        store.nodeDetails = null
-        store.nodeDetails = { loading: true }
-        
-        try {
-          let details = null;
-          if (bridge && bridge.GetNodeDetails) {
-             details = await bridge.GetNodeDetails(node.id)
-          }
-
-          if (details) {
-            store.nodeDetails = details
-          } else {
-            store.nodeDetails = {
-              path: "Conceito Neural",
-              content: `O nó '${node.id}' é uma ponte lógica criada pela IA para conectar suas ideias. Ele não possui um arquivo físico, mas serve como âncora semântica no seu grafo.`,
-              source: "Inteligência Artificial",
-              isVirtual: true
-            }
-          }
-        } catch (e) {
-          console.error("Erro ao buscar detalhes:", e)
-          store.nodeDetails = {
-            path: "Conceito Neural",
-            content: `O nó '${node.id}' é uma ponte lógica criada pela IA para conectar suas ideias. Ele não possui um arquivo físico, mas serve como âncora semântica no seu grafo.`,
-            source: "Inteligência Artificial",
-            isVirtual: true
-          }
-        }
-      })
+      .onNodeClick(node => focusNode(node))
 
     // 🚀 CONFIGURAÇÃO DE FÍSICA SOLAR (NUCLEAÇÃO E ÓRBITAS)
     Graph.d3Force('charge').strength(node => {
@@ -244,5 +172,84 @@ export function useGraphSetup() {
     return Graph
   }
 
-  return { initGraph, getCachedMaterial }
+  /**
+   * 🎯 focusNode — Centraliza, dá zoom e abre detalhes de um nó programaticamente
+   */
+  const focusNode = async (node) => {
+    const Graph = store.graphInstance
+    if (!Graph || !node) return
+
+    // ── Zoom no nó ──
+    const distance = 80
+    const distRatio = 1 + distance / Math.hypot(node.x || 1, node.y || 1, node.z || 1)
+    
+    Graph.cameraPosition(
+      { 
+        x: (node.x || 0) * distRatio, 
+        y: (node.y || 0) * distRatio, 
+        z: (node.z || 0) * distRatio 
+      }, 
+      node, 
+      2000
+    )
+
+    // ── Animação de partículas nos links conectados ──
+    if (store._clickedNodeTimeout) clearTimeout(store._clickedNodeTimeout)
+
+    const { links } = Graph.graphData()
+    store.clickedNodeLinks.clear()
+    links.forEach(link => {
+      const s = link.source.id || link.source
+      const t = link.target.id || link.target
+      if (s === node.id || t === node.id) {
+        store.clickedNodeLinks.add(`${s}-${t}`)
+        store.clickedNodeLinks.add(`${t}-${s}`)
+      }
+    })
+
+    Graph.linkDirectionalParticles(Graph.linkDirectionalParticles())
+    store._clickedNodeTimeout = setTimeout(() => {
+      store.clickedNodeLinks.clear()
+      Graph.linkDirectionalParticles(Graph.linkDirectionalParticles())
+    }, 5000)
+
+    // Bridge Wails
+    const bridge = (window.go && window.go.core && window.go.core.App) || 
+                   (window.go && window.go.main && window.go.main.App);
+
+    if (bridge && bridge.HandleNodeClick) {
+      bridge.HandleNodeClick(node.id)
+    }
+
+    store.selectedNode = node
+    store.nodeDetails = { loading: true }
+    
+    try {
+      let details = null;
+      if (bridge && bridge.GetNodeDetails) {
+         details = await bridge.GetNodeDetails(node.id)
+      }
+
+      if (details) {
+        store.nodeDetails = details
+      } else {
+        store.nodeDetails = {
+          path: node.path || "Conceito Neural",
+          content: node.content || `O nó '${node.id}' é uma ponte lógica criada pela IA para conectar suas ideias.`,
+          source: "Inteligência Artificial",
+          isVirtual: true
+        }
+      }
+    } catch (e) {
+      console.error("Erro ao buscar detalhes:", e)
+      store.nodeDetails = {
+        path: "Erro de Sincronização",
+        content: `Não foi possível recuperar os detalhes do nó '${node.id}'.`,
+        source: "Sistema",
+        isVirtual: true
+      }
+    }
+  }
+
+  return { initGraph, getCachedMaterial, focusNode }
 }

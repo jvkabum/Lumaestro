@@ -16,7 +16,7 @@ const orchestrator = useOrchestratorStore()
 const isUiMinimized = ref(false)
 
 // ── Composables ──
-const { initGraph } = useGraphSetup()
+const { initGraph, focusNode } = useGraphSetup()
 const { getGraphData } = useGraphData()
 const { registerKeyboardControls } = useGraphControls()
 const { registerGraphEvents, resolveConflict } = useGraphEvents()
@@ -76,24 +76,20 @@ watch(() => [props.nodes, props.edges], () => {
   }
 }, { deep: true })
 
-// W2: Fly-to no nó ativo + luz dinâmica
+// W2: Fly-to no nó ativo + abertura de detalhes
 watch(() => props.activeNode, (newId) => {
   if (!store.graphInstance || !newId) return
 
   const node = store.graphInstance.graphData().nodes.find(n => n.id === newId)
   if (node) {
-    store.graphInstance.cameraPosition(
-      { x: node.x + 100, y: node.y + 100, z: node.z + 100 }, 
-      node, 
-      2000
-    )
+    // 🎯 Foco completo: Zoom + Detalhes + Brilho
+    focusNode(node)
     
-    const light = new THREE.PointLight(0xfcd34d, 2, 100)
+    // Luz de pulso adicional para destaque extra no 3D
+    const light = new THREE.PointLight(0xfcd34d, 2.5, 120)
     light.position.set(node.x, node.y, node.z)
     store.graphInstance.scene().add(light)
     setTimeout(() => { store.graphInstance.scene().remove(light) }, 3000)
-
-    store.graphInstance.nodeThreeObject(store.graphInstance.nodeThreeObject()) 
   }
 })
 
