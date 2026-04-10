@@ -1,4 +1,4 @@
-# 🐹 Lumaestro: Advanced Cognitive Engine & Graph-RAG Orchestrator ⚡🤖🧬🏆
+# Lumaestro: Advanced Cognitive Engine & Graph-RAG Orchestrator ⚡🤖🧬🏆
 
 [![Version](https://img.shields.io/badge/Lumaestro-v15.0--Quantum_Elite-8b5cf6?style=for-the-badge&logo=go)](https://github.com/lumaestro)
 [![Status](https://img.shields.io/badge/Status-Industrial_Stability-10b981?style=for-the-badge)](https://github.com/lumaestro)
