@@ -34,6 +34,10 @@ export const useGraphStore = defineStore('graph', () => {
   const pruneLoading = ref(false)
   const skeletalMode = ref(false)
 
+  // ── FPS Monitor (F1) ──
+  const showFps = ref(false)
+  const currentFps = ref(0)
+
   // ── Sincronização ──
   const scanning = ref(false)
   const showConfirmModal = ref(false)
@@ -83,6 +87,7 @@ export const useGraphStore = defineStore('graph', () => {
     graphHealth,
     highlightedLinks, clickedNodeLinks,
     xRayThreshold, scanLoading, pruneLoading, skeletalMode,
+    showFps, currentFps,
     scanning, showConfirmModal, modalMode,
     currentConflict,
     communityPalette,

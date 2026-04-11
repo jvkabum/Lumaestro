@@ -16,6 +16,7 @@ export function useGraphControls() {
   const keys = { w: false, a: false, s: false, d: false, q: false, e: false }
   const moveSpeed = 20
   let moveInterval = null
+  let fpsRafId = null
 
   const isInputFocused = () => {
     const el = document.activeElement
@@ -56,7 +57,49 @@ export function useGraphControls() {
     moveInterval = requestAnimationFrame(move)
   }
 
+  // 📊 FPS Monitor — Loop de medição real via rAF
+  const startFpsLoop = () => {
+    let frameCount = 0
+    let lastTime = performance.now()
+
+    const measure = () => {
+      frameCount++
+      const now = performance.now()
+      const elapsed = now - lastTime
+      if (elapsed >= 1000) {
+        store.currentFps = Math.round((frameCount * 1000) / elapsed)
+        frameCount = 0
+        lastTime = now
+      }
+      if (store.showFps) {
+        fpsRafId = requestAnimationFrame(measure)
+      } else {
+        fpsRafId = null
+      }
+    }
+    fpsRafId = requestAnimationFrame(measure)
+  }
+
+  const stopFpsLoop = () => {
+    if (fpsRafId) {
+      cancelAnimationFrame(fpsRafId)
+      fpsRafId = null
+    }
+  }
+
   const handleKeyDown = (e) => {
+    // F1: Toggle FPS counter
+    if (e.key === 'F1') {
+      e.preventDefault()
+      store.showFps = !store.showFps
+      if (store.showFps) {
+        startFpsLoop()
+      } else {
+        stopFpsLoop()
+      }
+      return
+    }
+
     if (isInputFocused()) return
     const k = e.key.toLowerCase()
     if (k in keys) {
@@ -91,6 +134,7 @@ export function useGraphControls() {
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('keyup', handleKeyUp)
       if (moveInterval) cancelAnimationFrame(moveInterval)
+      stopFpsLoop()
     }
   }
 

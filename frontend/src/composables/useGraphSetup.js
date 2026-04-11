@@ -3,6 +3,7 @@ import * as d3 from 'd3'
 import ForceGraph3D from '3d-force-graph'
 import { useGraphStore } from '../stores/graph'
 import { useGraphData } from './useGraphData'
+import { toRaw } from 'vue'
 
 /**
  * 🚀 useGraphSetup — Motor de Inicialização do Grafo 3D
@@ -65,6 +66,10 @@ export function useGraphSetup() {
         containerRef.style.height = '100%'
     }
 
+    // Variáveis locais para cache de física (NUNCA usar 'store' aqui para evitar Vue Proxies que destroem a CPU)
+    let tempCharge = null;
+    let tempCollide = null;
+
     const Graph = ForceGraph3D()(containerRef)
       .graphData(getGraphData(nodes, edges))
       .width(containerRef.clientWidth || 800)
@@ -99,8 +104,8 @@ export function useGraphSetup() {
       .linkColor(link => {
         const s = link.source.id || link.source
         const t = link.target.id || link.target
-        
-        if (store.clickedNodeLinks.has(`${s}-${t}`) || store.clickedNodeLinks.has(`${t}-${s}`)) return '#ffffff' 
+        const clickedLinks = toRaw(store.clickedNodeLinks)
+        if (clickedLinks.has(`${s}-${t}`) || clickedLinks.has(`${t}-${s}`)) return '#ffffff' 
         return 'rgba(0, 242, 255, 0.6)'
       })
       .linkOpacity(0.5)
@@ -111,25 +116,29 @@ export function useGraphSetup() {
       .linkDirectionalParticles(link => {
         const s = link.source.id || link.source
         const t = link.target.id || link.target
-        if (store.clickedNodeLinks.has(`${s}-${t}`) || store.clickedNodeLinks.has(`${t}-${s}`)) return 4
-        if (store.highlightedLinks.has(`${s}-${t}`) || store.highlightedLinks.has(`${t}-${s}`)) return 2
+        const clickedLinks = toRaw(store.clickedNodeLinks)
+        const hlLinks = toRaw(store.highlightedLinks)
+        if (clickedLinks.has(`${s}-${t}`) || clickedLinks.has(`${t}-${s}`)) return 4
+        if (hlLinks.has(`${s}-${t}`) || hlLinks.has(`${t}-${s}`)) return 2
         return 0 
       })
       .linkDirectionalParticleSpeed(0.006)
       .linkDirectionalParticleWidth(link => {
         const s = link.source.id || link.source
         const t = link.target.id || link.target
-        if (store.clickedNodeLinks.has(`${s}-${t}`) || store.clickedNodeLinks.has(`${t}-${s}`)) return 2.5
+        const clickedLinks = toRaw(store.clickedNodeLinks)
+        if (clickedLinks.has(`${s}-${t}`) || clickedLinks.has(`${t}-${s}`)) return 2.5
         return 1.5
       })
       .onNodeClick(node => focusNode(node))
+      // Delega o arrasto para o 3d-force-graph nativo, que já faz o pinning (node.fx) fluidamente sem recriar as Forças 60x por segundo.
 
     // 🚀 CONFIGURAÇÃO DE FÍSICA SOLAR (NUCLEAÇÃO E ÓRBITAS EXPANDIDAS)
     Graph.d3Force('charge').strength(node => {
-        // Repulsão Dinâmica: Nós maiores (Sóis) repelem muito mais para abrir espaço
+        // Repulsão Dinâmica calibrada para 765+ nós (reduzida 3x para convergência rápida)
         const importance = (node.pagerank && node.pagerank > 0) ? (node.pagerank * 15) : (node.degree || 0)
-        const baseRepulsion = -1200
-        return baseRepulsion - (importance * 150) // Expansão proporcional à massa
+        const baseRepulsion = -400
+        return baseRepulsion - (importance * 60)
     })
 
     Graph.d3Force('link').distance(link => {
@@ -150,50 +159,21 @@ export function useGraphSetup() {
         return (1 + Math.pow(importance, 0.5) * 4) + 10 // Raio de colisão + margem
     }))
 
-    // Otimização de CPU: Acelera o repouso da simulação
-    Graph.d3AlphaDecay(0.04)
-    Graph.d3VelocityDecay(0.3)
-
-    Graph.nodeThreeObject(node => {
-      const isVirtual = node.virtual
+    // Otimização de CPU: Convergência rápida para 765+ nós
+    Graph.d3AlphaDecay(0.08)       // 2x mais rápido para esfriar
+    Graph.d3VelocityDecay(0.45)    // Mais amortecimento = menos oscilação
+    Graph.warmupTicks(100)         // Layout inicial: 100 ticks síncronos
+    Graph.cooldownTicks(300)       // Para a simulação após 300 ticks
+    // 📏 VOLUME / TAMANHO DOS NÓS: Restaura o InstancedMesh (1 Draw Call na GPU vs 700+)
+    Graph.nodeVal(node => {
       const isActive = node.id === activeNode
-      const type = node['status'] === 'legacy' ? 'legacy' : (node['status'] === 'conflict' ? 'conflict' : (node['document-type'] || node['document_type'] || 'chunk'))
-      
-      const colors = {
-        source: '#a855f7',
-        page: '#22d3ee',
-        chunk: '#3b82f6',
-        system: '#f1f5f9',
-        memory: '#f472b6',
-        legacy: '#475569',
-        conflict: '#ef4444',
-        virtual: '#1e3a8a',
-        active: '#fcd34d'
-      }
-
-      const displayColor = node.status === 'conflict' ? colors.conflict : (node.status === 'legacy' ? colors.legacy : (colors[type] || colors.chunk))
-      const nodeColor = isActive ? colors.active : (isVirtual ? colors.virtual : displayColor)
-      
-      // 📐 ESCALA DINÂMICA (NUCLEAÇÃO): Cresce conforme a importância (PageRank ou Grau)
-      // Se tiver PageRank (backend ativo), usa ele. Caso contrário, usa grau de conexões local.
       const importance = (node.pagerank && node.pagerank > 0) ? (node.pagerank * 15) : (node.degree || 0)
       const baseScale = 1 + Math.pow(importance, 0.5) * 0.4
       const finalScale = isActive ? baseScale * 1.5 : baseScale
-
-      // Otimização: Reuso de Geometria
-      const geometry = isActive ? sphereActive : (isVirtual ? sphereVirtual : sphereLowRes)
-      const material = new THREE.MeshLambertMaterial({ 
-        color: nodeColor, 
-        transparent: true,
-        opacity: isVirtual ? 0.4 : 0.9,
-        emissive: nodeColor,
-        emissiveIntensity: isActive ? 1.5 : (importance > 5 ? 0.5 : 0.1)
-      })
-      
-      const obj = new THREE.Mesh(geometry, material)
-      obj.scale.set(finalScale, finalScale, finalScale)
-      return obj
+      // Retorna o volume (Raio ao cubo) para a GPU dimensionar nativamente
+      return Math.pow(finalScale, 3) 
     })
+    Graph.nodeResolution(12) // Mantém esferas redondinhas para todo mundo
 
     // Salva a instância na store
     store.graphInstance = Graph
@@ -223,11 +203,15 @@ export function useGraphSetup() {
     let lastNodeCount = 0
     let firstZoomDone = false
 
+    let tickCounter = 0
     Graph.onEngineTick(() => {
+        tickCounter++
+        // Throttle: Só verifica a cada 60 ticks (~1s) em vez de cada frame
+        if (tickCounter % 60 !== 0) return
         const currentCount = Graph.graphData().nodes.length
         if (currentCount > 0 && (currentCount > lastNodeCount + 50 || (!firstZoomDone && currentCount > 0))) {
             console.log(`[NeuralGraph] Crescimento detectado (${currentCount} nós). Re-enquadrando visao...`)
-            Graph.zoomToFit(1200, 300) // Padding aumentado de 150 para 300 para visão mais ampla
+            Graph.zoomToFit(1200, 300)
             lastNodeCount = currentCount
             firstZoomDone = true
         }

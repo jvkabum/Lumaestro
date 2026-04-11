@@ -49,11 +49,15 @@ export function useGraphData() {
 
     const finalNodes = Array.from(nodesMap.values())
 
-    // 3. Cálculo de Massa Gravitacional (Degree) para escalonamento visual
-    // Permite que o visualizador identifique 'Sóis' (hubs) de conhecimento
+    // 3. Cálculo de Massa Gravitacional (Degree) — O(L) com Map
+    // Antes: O(N×L) = ~1.5M comparações. Agora: O(L) = ~2K iterações.
+    const degreeMap = new Map()
+    links.forEach(l => {
+      degreeMap.set(l.source, (degreeMap.get(l.source) || 0) + 1)
+      degreeMap.set(l.target, (degreeMap.get(l.target) || 0) + 1)
+    })
     finalNodes.forEach(node => {
-      const degree = links.filter(l => l.source === node.id || l.target === node.id).length
-      node.degree = degree
+      node.degree = degreeMap.get(node.id) || 0
     })
 
     return { 

@@ -61,49 +61,60 @@ export function useGraphEvents() {
       store.graphHealth = stats
     })
 
-    // 🕸️ Ouvinte de Arestas Dinâmicas (Streaming de Conexões)
-    window.runtime.EventsOn("graph:edge", (edge) => {
-      if (!Graph || !edge?.source || !edge?.target) return
-      
+    // 🕸️ Ouvinte de Arestas Dinâmicas (Batched — evita restart de simulação por aresta)
+    let edgeBatchTimeout = null
+    const pendingEdges = []
+
+    const flushPendingEdges = () => {
+      if (!Graph || pendingEdges.length === 0) return
       const { nodes, links } = Graph.graphData()
       let dataChanged = false
-      
-      // Assegura que ambos os nós existem no grafo
-      let sourceNode = nodes.find(n => n.id === edge.source)
-      if (!sourceNode) {
-        sourceNode = { id: edge.source, name: edge.source, "document-type": "chunk", virtual: true }
-        nodes.push(sourceNode)
-        dataChanged = true
+
+      for (const edge of pendingEdges) {
+        if (!edge?.source || !edge?.target) continue
+
+        let sourceNode = nodes.find(n => n.id === edge.source)
+        if (!sourceNode) {
+          sourceNode = { id: edge.source, name: edge.source, "document-type": "chunk", virtual: true }
+          nodes.push(sourceNode)
+          dataChanged = true
+        }
+
+        let targetNode = nodes.find(n => n.id === edge.target)
+        if (!targetNode) {
+          targetNode = { id: edge.target, name: edge.target, "document-type": "chunk", virtual: true }
+          nodes.push(targetNode)
+          dataChanged = true
+        }
+
+        const exists = links.find(l => 
+          ((l.source.id || l.source) === edge.source && (l.target.id || l.target) === edge.target) || 
+          ((l.source.id || l.source) === edge.target && (l.target.id || l.target) === edge.source)
+        )
+
+        if (!exists) {
+          links.push({ source: edge.source, target: edge.target, weight: edge.weight || 1 })
+          dataChanged = true
+        } else {
+          exists.weight = (exists.weight || 1) + (edge.weight || 1)
+          dataChanged = true
+        }
       }
 
-      let targetNode = nodes.find(n => n.id === edge.target)
-      if (!targetNode) {
-        targetNode = { id: edge.target, name: edge.target, "document-type": "chunk", virtual: true }
-        nodes.push(targetNode)
-        dataChanged = true
-      }
-      
-      // Evita duplicatas visuais
-      const exists = links.find(l => 
-        ((l.source.id || l.source) === edge.source && (l.target.id || l.target) === edge.target) || 
-        ((l.source.id || l.source) === edge.target && (l.target.id || l.target) === edge.source)
-      )
-      
-      if (!exists) {
-        links.push({
-          source: edge.source,
-          target: edge.target,
-          weight: edge.weight || 1
-        })
-        dataChanged = true
-      } else {
-        // Reforço Sináptico Dinâmico
-        exists.weight = (exists.weight || 1) + (edge.weight || 1)
-        dataChanged = true
-      }
+      pendingEdges.length = 0 // Limpa o buffer
 
       if (dataChanged) {
         Graph.graphData({ nodes, links })
+      }
+    }
+
+    window.runtime.EventsOn("graph:edge", (edge) => {
+      pendingEdges.push(edge)
+      if (!edgeBatchTimeout) {
+        edgeBatchTimeout = setTimeout(() => {
+          flushPendingEdges()
+          edgeBatchTimeout = null
+        }, 300) // Acumula por 300ms antes de aplicar
       }
     })
 

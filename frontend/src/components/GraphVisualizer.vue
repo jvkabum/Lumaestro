@@ -75,7 +75,7 @@ watch(() => [props.nodes, props.edges], () => {
     console.log(`[NeuralGraph] Dados Recebidos: ${props.nodes.length} nós, ${props.edges.length} arestas.`)
     store.graphInstance.graphData(getGraphData(props.nodes, props.edges))
   }
-}, { deep: true })
+})
 
 // W2: Fly-to no nó ativo + abertura de detalhes
 watch(() => props.activeNode, (newId) => {
@@ -148,6 +148,18 @@ watch(() => props.graphLogs, () => {
 
     <!-- Container para o Grafo 3D (WebGL) -->
     <div ref="containerRef" class="main-canvas"></div>
+
+    <!-- 📊 FPS MONITOR (F1 para toggle) -->
+    <Transition name="fade">
+      <div v-if="store.showFps" class="fps-hud">
+        <span class="fps-label">FPS</span>
+        <span class="fps-value" :class="{
+          'fps-good': store.currentFps >= 50,
+          'fps-warn': store.currentFps >= 20 && store.currentFps < 50,
+          'fps-bad': store.currentFps < 20
+        }">{{ store.currentFps }}</span>
+      </div>
+    </Transition>
     
     <!-- Controles & Console de Logs (Painel de Pensamento Vidrado) -->
     <div class="graph-ui glass">
