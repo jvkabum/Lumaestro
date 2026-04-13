@@ -26,30 +26,21 @@ export function useGraphControls() {
   const startMoving = () => {
     const move = () => {
       const Graph = store.graphInstance
-      if (!Graph) return
-      
-      const camera = Graph.camera()
-      const pos = Graph.cameraPosition()
-      const direction = new THREE.Vector3()
-      camera.getWorldDirection(direction)
-      
-      const right = new THREE.Vector3().crossVectors(camera.up, direction).normalize()
+      if (!Graph || typeof Graph.panTarget !== 'function') return
       
       let dx = 0, dy = 0, dz = 0
 
-      if (keys.w) { dx += direction.x * moveSpeed; dy += direction.y * moveSpeed; dz += direction.z * moveSpeed; }
-      if (keys.s) { dx -= direction.x * moveSpeed; dy -= direction.y * moveSpeed; dz -= direction.z * moveSpeed; }
-      if (keys.a) { dx += right.x * moveSpeed; dy += right.y * moveSpeed; dz += right.z * moveSpeed; }
-      if (keys.d) { dx -= right.x * moveSpeed; dy -= right.y * moveSpeed; dz -= right.z * moveSpeed; }
-      if (keys.q) { dy -= moveSpeed; }
-      if (keys.e) { dy += moveSpeed; }
+      // Intenções Brutas de Movimento
+      if (keys.w) dz -= moveSpeed
+      if (keys.s) dz += moveSpeed
+      if (keys.a) dx -= moveSpeed
+      if (keys.d) dx += moveSpeed
+      if (keys.q) dy -= moveSpeed
+      if (keys.e) dy += moveSpeed
 
       if (dx !== 0 || dy !== 0 || dz !== 0) {
-        Graph.cameraPosition({
-          x: pos.x + dx,
-          y: pos.y + dy,
-          z: pos.z + dz
-        })
+         // Delega o cálculo do quaternion/yaw para o Motor Gráfico Ativo (Deck.gl)
+         Graph.panTarget(dx, dy, dz)
       }
 
       moveInterval = requestAnimationFrame(move)

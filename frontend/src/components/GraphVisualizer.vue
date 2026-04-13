@@ -3,7 +3,7 @@ import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import * as THREE from 'three'
 import { useGraphStore } from '../stores/graph'
 import { useOrchestratorStore } from '../stores/orchestrator'
-import { useGraphSetup } from '../composables/useGraphSetup'
+import { useDeckRender } from '../composables/useDeckRender'
 import { useGraphData } from '../composables/useGraphData'
 import { useGraphControls } from '../composables/useGraphControls'
 import { useGraphEvents } from '../composables/useGraphEvents'
@@ -16,7 +16,7 @@ const orchestrator = useOrchestratorStore()
 const isUiMinimized = ref(false)
 
 // ── Composables ──
-const { initGraph, focusNode } = useGraphSetup()
+const { initGraph, updateGraph, destroyGraph } = useDeckRender()
 const { getGraphData } = useGraphData()
 const { registerKeyboardControls } = useGraphControls()
 const { registerGraphEvents, resolveConflict } = useGraphEvents()
@@ -33,7 +33,7 @@ const props = defineProps({
 })
 
 // ── Refs de DOM ──
-const containerRef = ref(null)
+const containerRef = ref(null) // Para a <canvas> do Deck.gl
 const logContainerRef = ref(null)
 
 // ── Cleanup references ──
@@ -43,7 +43,7 @@ let cleanupEvents = null
 // ── Lifecycle ──
 onMounted(async () => {
   await nextTick()
-  // 1. Inicializar o grafo 3D
+  // 1. Inicializar o grafo 3D via Deck.gl
   initGraph(containerRef.value, props.nodes, props.edges, props.activeNode)
 
   // 2. Sincronizar todos os nós do banco na partida
@@ -61,52 +61,32 @@ onUnmounted(() => {
   if (cleanupKeyboard) cleanupKeyboard()
   if (cleanupEvents) cleanupEvents()
   
-  // Limpeza de memória do 3d-force-graph
-  if (store.graphInstance) {
-    store.graphInstance._destructor()
-    store.graphInstance = null
-  }
+  // Limpeza de memória do Deck.gl
+  destroyGraph()
 })
 
 // ── Watchers (Sincronização Reativa) ──
 
-watch(() => [props.nodes, props.edges], () => {
-  if (store.graphInstance) {
-    console.log(`[NeuralGraph] Dados Recebidos: ${props.nodes.length} nós, ${props.edges.length} arestas.`)
-    store.graphInstance.graphData(getGraphData(props.nodes, props.edges))
-  }
-})
+// W2: Observa reatividade de links extras
+watch(() => [store.clickedNodeLinks, store.highlightedLinks], () => {
+  // Nota: Na v1 arquitetura PRO, atualizaremos a camada via reatividade se necessário.
+  // Por ora, confiamos no buffer inicial puro.
+}, { deep: true })
 
-// W2: Fly-to no nó ativo + abertura de detalhes
-watch(() => props.activeNode, (newId) => {
-  if (!store.graphInstance || !newId) return
-
-  const node = store.graphInstance.graphData().nodes.find(n => n.id === newId)
-  if (node) {
-    // 🎯 Foco completo: Zoom + Detalhes + Brilho
-    focusNode(node)
-    
-    // Luz de pulso adicional para destaque extra no 3D
-    const light = new THREE.PointLight(0xfcd34d, 2.5, 120)
-    light.position.set(node.x, node.y, node.z)
-    store.graphInstance.scene().add(light)
-    setTimeout(() => { store.graphInstance.scene().remove(light) }, 3000)
+// W4: Vigia dados de backend + Filtros UI (X-Ray, Esqueleto) com DEBOUNCE Híbrido
+let renderTimeout = null;
+watch(() => [props.nodes, props.edges, store.xRayThreshold, store.skeletalMode], () => {
+  if (containerRef.value && props.nodes.length > 0) {
+    clearTimeout(renderTimeout);
+    renderTimeout = setTimeout(() => {
+      // 1. Passa pela lógica preciosa de X-Ray / Esqueleto / Nós Virtuais
+      const { nodes: filteredNodes, links: filteredEdges } = getGraphData(props.nodes, props.edges);
+      
+      // 2. Sincronização Incremental (Zero Jitter) em vez de rebuild total
+      updateGraph(filteredNodes, filteredEdges);
+    }, 450); // Agrupa rajadas de websocket E cliques rápidos no Slider de X-Ray
   }
-})
-
-// W3: X-Ray reativo
-watch(() => store.xRayThreshold, () => {
-  if (store.graphInstance) {
-    store.graphInstance.graphData(getGraphData(props.nodes, props.edges))
-  }
-})
-
-// W4: Modo esqueletal (MST)
-watch(() => store.skeletalMode, () => {
-  if (store.graphInstance) {
-    store.graphInstance.graphData(getGraphData(props.nodes, props.edges))
-  }
-})
+}, { deep: true });
 
 // W5: Auto-scroll dos logs
 watch(() => props.graphLogs, () => {
@@ -146,7 +126,7 @@ watch(() => props.graphLogs, () => {
       </div>
     </div>
 
-    <!-- Container para o Grafo 3D (WebGL) -->
+    <!-- Container para a Câmera Espacial (Deck.gl VRAM) -->
     <div ref="containerRef" class="main-canvas"></div>
 
     <!-- 📊 FPS MONITOR (F1 para toggle) -->

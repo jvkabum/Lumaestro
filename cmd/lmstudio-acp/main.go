@@ -1,4 +1,4 @@
-package main
+package lmstudio_acp
 
 import (
 	"bufio"

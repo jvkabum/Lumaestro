@@ -138,8 +138,8 @@ export function GetLightningStats() {
   return window['go']['core']['App']['GetLightningStats']();
 }
 
-export function GetNodeDetails(arg1) {
-  return window['go']['core']['App']['GetNodeDetails'](arg1);
+export function GetNeuralNodeContext(arg1) {
+  return window['go']['core']['App']['GetNeuralNodeContext'](arg1);
 }
 
 export function GetPendingApprovals() {

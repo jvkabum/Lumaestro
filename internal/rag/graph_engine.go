@@ -292,6 +292,18 @@ func (ge *GraphEngine) GetCommunity(id string) int {
 	return ge.communities[id]
 }
 
+// GetCommunityIDs retorna uma lista de todos os IDs de comunidade presentes no grafo.
+func (ge *GraphEngine) GetCommunityIDs() []int {
+	ge.mu.RLock()
+	defer ge.mu.RUnlock()
+	
+	var ids []int
+	for _, id := range ge.communities {
+		ids = append(ids, id)
+	}
+	return ids
+}
+
 // GetBetweenness retorna a centralidade de pontilha.
 func (ge *GraphEngine) GetBetweenness(id string) float64 {
 	ge.mu.RLock()
@@ -380,4 +392,24 @@ func (ge *GraphEngine) Prune(threshold float64) []string {
 		fmt.Printf("[GraphEngine] 🧹 Poda Neural: %d nós irrelevantes removidos do Córtex.\n", len(removed))
 	}
 	return removed
+}
+// GetNeighborEdges retorna todos os IDs de arestas conectadas a um nó (entrantes e saintes).
+func (ge *GraphEngine) GetNeighborEdges(id string) []string {
+	ge.mu.RLock()
+	defer ge.mu.RUnlock()
+
+	var edges []string
+	// Saintes
+	if targets, ok := ge.adj[id]; ok {
+		for target := range targets {
+			edges = append(edges, fmt.Sprintf("%s-%s", id, target))
+		}
+	}
+	// Entrantes
+	for source, targets := range ge.adj {
+		if _, ok := targets[id]; ok {
+			edges = append(edges, fmt.Sprintf("%s-%s", source, id))
+		}
+	}
+	return edges
 }

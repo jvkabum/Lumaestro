@@ -12,45 +12,52 @@ import (
 // 🧠 CÓRTEX RELACIONAL E VISUALIZAÇÃO (O MAPA)
 // ============================================================
 
-func (a *App) GetNodeDetails(nodeID string) (map[string]interface{}, error) {
+func (a *App) GetNeuralNodeContext(nodeID string) (map[string]interface{}, error) {
 	fmt.Printf("[Audit] Buscando origem de: %s\n", nodeID)
+
+	var result map[string]interface{}
 
 	// 1. Tentar buscar em Notas do Obsidian ou Sistema (Chave: name)
 	res, err := a.qdrant.SearchByField("obsidian_knowledge", "name", nodeID)
 
-	// Fallback: Se não achar campo exato (slug mismatch), tentar busca similar textual
-	if err != nil || res == nil {
-		fmt.Printf("[Audit] Nó '%s' não encontrado por campo exato.\n", nodeID)
-	}
-
 	if err == nil && res != nil {
-		return map[string]interface{}{
+		result = map[string]interface{}{
 			"path":    res["path"],
 			"content": res["content"],
 			"type":    res["type"],
 			"source":  res["document-type"], // Retorna se é "system" ou "vault"
-		}, nil
+		}
+	} else {
+		// 2. Tentar buscar em Memórias de Chat (Chave: subject)
+		res, err = a.qdrant.SearchByField("knowledge_graph", "subject", nodeID)
+		if err == nil && res != nil {
+			result = map[string]interface{}{
+				"path":    "Memória de Chat",
+				"content": res["content"],
+				"type":    "memory",
+				"source":  "RAG Synapse",
+			}
+		} else {
+			// 3. Fallback: Se não existe no banco, é uma dedução/especulação da IA (Nó Virtual)
+			result = map[string]interface{}{
+				"path":    "Conceito Neural",
+				"content": fmt.Sprintf("O nó '%s' é um conceito abstrato detectado pela IA durante a tecelagem do conhecimento. Ele ainda não possui uma nota física dedicada no seu Obsidian.", nodeID),
+				"type":    "virtual",
+				"source":  "Inteligência Artificial",
+			}
+		}
 	}
 
-	// 2. Tentar buscar em Memórias de Chat (Chave: subject)
-	res, err = a.qdrant.SearchByField("knowledge_graph", "subject", nodeID)
-	if err == nil && res != nil {
-		return map[string]interface{}{
-			"path":    "Memória de Chat",
-			"content": res["content"],
-			"type":    "memory",
-			"source":  "RAG Synapse",
-		}, nil
+	// 🔍 Adiciona conexões relacionadas (Vizinhos) para o efeito de laços dourados
+	if a.GEngine != nil {
+		result["related_edges"] = a.GEngine.GetNeighborEdges(nodeID)
+	} else {
+		result["related_edges"] = []string{}
 	}
 
-	// 3. Fallback: Se não existe no banco, é uma dedução/especulação da IA (Nó Virtual)
-	return map[string]interface{}{
-		"path":    "Conceito Neural",
-		"content": fmt.Sprintf("O nó '%s' é um conceito abstrato detectado pela IA durante a tecelagem do conhecimento. Ele ainda não possui uma nota física dedicada no seu Obsidian.", nodeID),
-		"type":    "virtual",
-		"source":  "Inteligência Artificial",
-	}, nil
+	return result, nil
 }
+
 
 // AnalyzeGraphHealth analisa a integridade semântica do grafo.
 func (a *App) AnalyzeGraphHealth() (map[string]interface{}, error) {
@@ -243,5 +250,12 @@ func (a *App) GetSkeletalGraph() map[string]interface{} {
 
 // helper para contar comunidades únicas
 func countCommunities(ge *rag.GraphEngine) int {
-	return 5 // Placeholder estático para o HUD
+	if ge == nil { return 0 }
+	
+	unique := make(map[int]struct{})
+	// Precisamos expor ou acessar os IDs de comunidade
+	for _, id := range ge.GetCommunityIDs() {
+		unique[id] = struct{}{}
+	}
+	return len(unique)
 }

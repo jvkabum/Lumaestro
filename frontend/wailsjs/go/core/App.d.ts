@@ -74,7 +74,7 @@ export function GetLatestSpans():Promise<Array<Record<string, any>>>;
 
 export function GetLightningStats():Promise<Record<string, any>>;
 
-export function GetNodeDetails(arg1:string):Promise<Record<string, any>>;
+export function GetNeuralNodeContext(arg1:string):Promise<Record<string, any>>;
 
 export function GetPendingApprovals():Promise<Array<db.Approval>>;
 

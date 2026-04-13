@@ -8,5 +8,13 @@ export default defineConfig({
     watch: {
       ignored: ['**/docs/**', '**/*.md']
     }
+  },
+  build: {
+    target: 'esnext'
+  },
+  optimizeDeps: {
+    esbuildOptions: {
+      target: 'esnext'
+    }
   }
 })

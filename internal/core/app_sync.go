@@ -240,27 +240,9 @@ func (a *App) SyncAllNodes() {
 		return
 	}
 
-	// 1. TENTA TOPOLOGY CACHE (IGNORA O QDRANT INSTANTANEAMENTE SE EXISTIR)
-	cache := a.loadTopologyCache()
-	if cache != nil && len(cache.Nodes) > 0 {
-		fmt.Printf("[Sync] ⚡ Carregando %d nós e %d arestas via Fast Topology Cache...\n", len(cache.Nodes), len(cache.Edges))
-		
-		// Emite os nós em lote
-		runtime.EventsEmit(a.ctx, "graph:nodes:batch", cache.Nodes)
-		
-		// Emite as arestas individualmente (mais seguro para o motor D3)
-		for _, edge := range cache.Edges {
-			runtime.EventsEmit(a.ctx, "graph:edge", edge)
-		}
-
-		go func() {
-			time.Sleep(800 * time.Millisecond) // Respiro para o motor físico processar as arestas
-			stats, _ := a.AnalyzeGraphHealth()
-			runtime.EventsEmit(a.ctx, "graph:health:update", stats)
-		}()
-		return
-	}
-
+	// 1. FORÇA ATUALIZAÇÃO (Ignora Cache para garantir cores novas)
+	os.Remove(".lumaestro_topology.json") 
+	
 	fmt.Println("[Sync] Sincronizando todos os nós do Qdrant com o Frontend (BATCH)...")
 	// Busca um lote grande o suficiente para cobrir o vault do usuário (1500+)
 	points, err := a.qdrant.Search("obsidian_knowledge", nil, 1500)
@@ -277,6 +259,39 @@ func (a *App) SyncAllNodes() {
 	var edgesBatch []map[string]interface{}
 	batchIndex := map[string]struct{}{}
 	edgeIndex := map[string]struct{}{}
+
+	// 2. ADICIONA ARESTAS AO MOTOR (Passo 1: Construir a topologia em RAM)
+	fmt.Println("[Sync] Construindo topologia neural em memória...")
+	for _, p := range points {
+		name, _ := p["name"].(string)
+		if name == "" { continue }
+		nodeID := strings.ToLower(name)
+		a.GEngine.AddNode(nodeID, name, p["document-type"].(string))
+		
+		if linksRaw, ok := p["links"].([]interface{}); ok {
+			for _, target := range linksRaw {
+				if t, ok := target.(string); ok && t != "" {
+					a.GEngine.AddEdge(nodeID, strings.ToLower(t), 1, "link")
+				}
+			}
+		}
+	}
+	for _, p := range memoryPoints {
+		subject, _ := p["subject"].(string)
+		object, _ := p["object"].(string)
+		if subject != "" && object != "" {
+			a.GEngine.AddNode(subject, subject, "memory")
+			a.GEngine.AddNode(object, object, "memory")
+			a.GEngine.AddEdge(subject, object, 1, "memory")
+		}
+	}
+
+	// 3. COMPUTAÇÃO ATÔMICA (O segredo das Nebulosas)
+	fmt.Println("[Sync] 🧠 Inteligência Neural: Calculando autoridade e comunidades Louvain...")
+	a.GEngine.ComputePageRank()
+	a.GEngine.ComputeCommunities()
+	a.GEngine.ComputeBetweenness()
+	a.GEngine.ComputeHITS()
 
 	addNode := func(node map[string]interface{}) {
 		id, _ := node["id"].(string)
