@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, watch } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useSettingsStore } from '../stores/settings'
 import { useSettingsConfig } from '../composables/useSettingsConfig'
 import { useSettingsTools } from '../composables/useSettingsTools'
@@ -127,8 +127,22 @@ const setPrimaryProvider = (provider) => {
   }
 }
 
-// Atualiza a dimensão padrão ao trocar o provedor de embeddings
-const onEmbeddingsProviderChange = () => {
+const pendingProvider = ref('')
+const showProviderModal = ref(false)
+
+const confirmProviderChange = (e) => {
+  // Aceita tanto o evento do <select> quanto o valor direto do card
+  const newProv = e?.target?.value || e
+  if (newProv === store.config.embeddings_provider) return
+  
+  pendingProvider.value = newProv
+  showProviderModal.value = true
+}
+
+const applyProviderChange = async () => {
+  store.config.embeddings_provider = pendingProvider.value
+  showProviderModal.value = false
+  
   if (store.config.embeddings_provider === 'gemini') {
     store.config.embedding_dimension = 3072
     store.config.embeddings_model = ''
@@ -142,7 +156,25 @@ const onEmbeddingsProviderChange = () => {
       }
       detectEmbeddingDimension()
     }
+  } else if (store.config.embeddings_provider === 'native') {
+    store.config.embedding_dimension = 1024
+    store.config.embeddings_model = 'qwen3-0.6b-embedding.gguf'
   }
+  
+  // 🔥 SALVA e notifica o backend imediatamente
+  await save()
+  
+  // Após aplicar a mudança, abre o modal de reset do Qdrant
+  setTimeout(() => {
+    store.showResetModal = true
+  }, 300)
+}
+
+const cancelProviderChange = () => {
+  showProviderModal.value = false
+  pendingProvider.value = ''
+  const selectEl = document.getElementById('embedding-provider-select')
+  if (selectEl) selectEl.value = store.config.embeddings_provider
 }
 
 // Carrega modelos ao trocar para LM Studio no motor de RAG
@@ -269,6 +301,56 @@ watch(() => store.activeTab, (tab) => {
         <div class="premium-form-group">
           <label>Qdrant API Key (Coolify)</label>
           <input v-model="store.config.qdrant_api_key" type="password" class="maestro-input" placeholder="••••••••" />
+        </div>
+
+        <!-- SELETOR DE MOTOR DE EMBEDDINGS (direto na aba Qdrant) -->
+        <div style="margin: 2rem 0; padding: 1.5rem; border-radius: 16px; border: 1px solid rgba(59,130,246,0.15); background: rgba(59,130,246,0.03);">
+          <h3 style="margin: 0 0 0.5rem; font-size: 0.85rem; font-weight: 800; letter-spacing: 1px; color: #94a3b8; text-transform: uppercase;">🔬 Motor de Embeddings</h3>
+          <p style="color: var(--p-text-dim); font-size: 0.8rem; margin-bottom: 1rem; line-height: 1.5;">
+            Escolha se os vetores semânticos serão gerados na <strong style="color: #60a5fa;">Nuvem (Gemini)</strong> ou <strong style="color: #10b981;">Localmente (llama.cpp)</strong>.
+          </p>
+
+          <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+            <!-- Card NUVEM -->
+            <div 
+              @click="store.config.embeddings_provider !== 'gemini' ? confirmProviderChange('gemini') : null"
+              style="flex: 1; min-width: 200px; padding: 1.2rem; border-radius: 14px; cursor: pointer; transition: all 0.3s; border: 2px solid; display: flex; flex-direction: column; gap: 8px;"
+              :style="store.config.embeddings_provider === 'gemini' 
+                ? 'border-color: #3b82f6; background: rgba(59,130,246,0.1); box-shadow: 0 0 20px rgba(59,130,246,0.15);' 
+                : 'border-color: rgba(255,255,255,0.06); background: rgba(0,0,0,0.2);'"
+            >
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 1.5rem;">☁️</span>
+                <div>
+                  <div style="font-weight: 900; font-size: 0.9rem; color: #fff;">Nuvem (Gemini)</div>
+                  <div style="font-size: 0.7rem; color: #94a3b8;">gemini-embedding-2 · 3072 dim · Multimídia</div>
+                </div>
+              </div>
+              <div v-if="store.config.embeddings_provider === 'gemini'" style="font-size: 0.65rem; font-weight: 900; color: #3b82f6; letter-spacing: 1px;">✓ ATIVO</div>
+            </div>
+
+            <!-- Card LOCAL -->
+            <div 
+              @click="store.config.embeddings_provider !== 'native' ? confirmProviderChange('native') : null"
+              style="flex: 1; min-width: 200px; padding: 1.2rem; border-radius: 14px; cursor: pointer; transition: all 0.3s; border: 2px solid; display: flex; flex-direction: column; gap: 8px;"
+              :style="store.config.embeddings_provider === 'native' 
+                ? 'border-color: #10b981; background: rgba(16,185,129,0.1); box-shadow: 0 0 20px rgba(16,185,129,0.15);' 
+                : 'border-color: rgba(255,255,255,0.06); background: rgba(0,0,0,0.2);'"
+            >
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 1.5rem;">🖥️</span>
+                <div>
+                  <div style="font-weight: 900; font-size: 0.9rem; color: #fff;">Local (llama.cpp)</div>
+                  <div style="font-size: 0.7rem; color: #94a3b8;">Qwen3-Embedding-0.6B-GGUF · 1024 dim · Offline</div>
+                </div>
+              </div>
+              <div v-if="store.config.embeddings_provider === 'native'" style="font-size: 0.65rem; font-weight: 900; color: #10b981; letter-spacing: 1px;">✓ ATIVO</div>
+            </div>
+          </div>
+
+          <small style="display: block; margin-top: 0.8rem; color: var(--p-text-dim); font-size: 0.72rem; line-height: 1.4;">
+            ⚠️ Trocar o motor exige um <b>Reset do Banco Qdrant</b> (dimensão vetorial muda). O modo Local não processa fotos/vídeos.
+          </small>
         </div>
 
         <button @click="save" class="btn-glow-blue" style="width: 100%; margin-bottom: 1rem;">SALVAR CONFIGURAÇÃO VETORIAL</button>
@@ -536,9 +618,10 @@ watch(() => store.activeTab, (tab) => {
 
         <div class="premium-form-group" style="margin-bottom: 1.2rem;">
           <label>Provedor de embeddings</label>
-          <select v-model="store.config.embeddings_provider" class="maestro-input" @change="onEmbeddingsProviderChange">
-            <option value="gemini">Gemini (gemini-embedding-2-preview · 3072 dim)</option>
-            <option value="lmstudio">LM Studio (modelo local)</option>
+          <select id="embedding-provider-select" :value="store.config.embeddings_provider" class="maestro-input" @change="confirmProviderChange">
+            <option value="gemini">Nuvem: Gemini (gemini-embedding-2-preview · 3072 dim)</option>
+            <option value="native">Local: Lumaestro Nativo (Qwen3 0.6B Interno · 1024 dim)</option>
+            <option value="lmstudio">Servidor Externo: LM Studio</option>
           </select>
         </div>
 
@@ -828,6 +911,29 @@ watch(() => store.activeTab, (tab) => {
         <div v-if="store.installStatus" class="t-status">>> {{ store.installStatus }}</div>
       </div>
     </footer>
+
+    <!-- MODAL DE MIGRAÇÃO DE PROVEDOR (NATIVO/LMSTUDIO/GEMINI) -->
+    <div v-if="showProviderModal" class="premium-modal-overlay">
+       <div class="premium-modal-content warning-modal" style="border-color: #3b82f6; box-shadow: 0 0 30px rgba(59,130,246,0.2);">
+          <div class="modal-icon" style="color: #60a5fa;">🔄</div>
+          <h2 class="modal-title" style="color: #60a5fa;">Migração de Motor Neural</h2>
+          <div class="modal-body">
+             <p>Você selecionou o motor: <strong style="color: #fff; background: rgba(59,130,246,0.3); padding: 2px 6px; border-radius: 4px;">{{ pendingProvider.toUpperCase() }}</strong></p>
+             <div style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 10px; margin: 15px 0;">
+               <ul style="color: #cbd5e1; text-align: left; padding-left: 20px; font-size: 0.85rem; line-height: 1.6; margin: 0;">
+                 <li style="margin-bottom: 8px;"><strong style="color: #ef4444;">Dimensão Vetorial:</strong> Isso altera o formato geométrico das sinapses (3072 vs 1024). Um Reset Atômico do banco será <b>obrigatório</b> a seguir.</li>
+                 <li><strong style="color: #fbbf24;">Multimídia Limitada:</strong> Apenas textos e códigos-fonte. O processamento semântico de fotos e vídeos não embarca no motor local.</li>
+               </ul>
+             </div>
+          </div>
+          <div class="modal-actions">
+             <button @click="cancelProviderChange" class="btn-cancel">VOLTAR</button>
+             <button @click="applyProviderChange" style="background: #3b82f6; color: white; padding: 12px 24px; border-radius: 12px; border: none; cursor: pointer; font-weight: bold; box-shadow: 0 4px 15px rgba(59,130,246,0.4);">
+                ENTENDI, CONTINUAR
+             </button>
+          </div>
+       </div>
+    </div>
 
     <!-- MODAL DE CONFIRMAÇÃO DE RESET -->
     <div v-if="store.showResetModal" class="premium-modal-overlay">

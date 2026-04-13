@@ -71,8 +71,8 @@ type Config struct {
 	PrimaryProvider      string   `json:"primary_provider"`
 
 	// 🔬 Motor de Embeddings (vetores para busca semântica no Qdrant)
-	EmbeddingsProvider string `json:"embeddings_provider"` // "gemini" ou "lmstudio"
-	EmbeddingsModel    string `json:"embeddings_model"`    // Ex: "nomic-embed-text", "text-embedding-nomic-embed-text-v1.5"
+	EmbeddingsProvider string `json:"embeddings_provider"` // "gemini", "lmstudio", ou "native"
+	EmbeddingsModel    string `json:"embeddings_model"`    // Ex: "nomic-embed-text", "text-embedding-nomic-embed-text-v1.5", etc
 	EmbeddingDimension int    `json:"embedding_dimension"` // 3072 para Gemini, 768 para nomic, etc.
 
 	// 🧠 Motor de RAG/Ontologia (geração textual para extração de triplas e chat semântico)
@@ -88,7 +88,7 @@ func (c *Config) NormalizeProviders() {
 	}
 
 	if len(c.ActiveModelProviders) == 0 {
-		c.ActiveModelProviders = []string{"gemini", "claude", "lmstudio"}
+		c.ActiveModelProviders = []string{"gemini", "claude", "lmstudio", "native"}
 	}
 
 	if strings.TrimSpace(c.PrimaryProvider) == "" {
@@ -102,6 +102,8 @@ func (c *Config) NormalizeProviders() {
 	if c.EmbeddingDimension <= 0 {
 		if c.EmbeddingsProvider == "lmstudio" {
 			c.EmbeddingDimension = 768 // Default para modelos nomic/local
+		} else if c.EmbeddingsProvider == "native" {
+			c.EmbeddingDimension = 1024 // Default para Qwen3-0.6B local
 		} else {
 			c.EmbeddingDimension = 3072 // Gemini embedding v2
 		}
@@ -120,6 +122,7 @@ func (c *Config) GetActiveProviders() []string {
 		"gemini":   true,
 		"claude":   true,
 		"lmstudio": true,
+		"native":   true,
 	}
 	seen := map[string]bool{}
 	providers := make([]string, 0, len(c.ActiveModelProviders))

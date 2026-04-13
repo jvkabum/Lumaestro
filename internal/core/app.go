@@ -59,6 +59,9 @@ type App struct {
 
 	// 🤖 LM Studio (Motor Local)
 	lmStudio *provider.LMStudioClient
+
+	// 🧠 Motor Nativo (Interno)
+	nativeEmbedder *provider.NativeEmbedder
 }
 
 // NewApp cria uma nova instância soberana do Lumaestro.
@@ -105,6 +108,14 @@ func (a *App) Startup(ctx context.Context) {
 
 	// 🧠 Córtex Autônomo (APO): Monitora falhas e otimiza prompts em background
 	go a.startAPOWorker()
+}
+
+// Shutdown é acionado quando o Lumaestro é fechado.
+func (a *App) Shutdown(ctx context.Context) {
+	if a.nativeEmbedder != nil {
+		fmt.Println("🛑 Encerrando motor nativo interno...")
+		a.nativeEmbedder.Stop()
+	}
 }
 
 // bootSequence executa a inicialização dos motores em background. (DNA 1:1)
@@ -253,6 +264,20 @@ func (a *App) initServices() error {
 				a.embedder = lmEmb
 				a.emitBoot("embeddings", "✅", fmt.Sprintf("Motor de Embeddings: LM Studio (%s · %d dim)", embedModel, dim))
 			}
+		}
+	} else if embProvider == "native" {
+		a.emitBoot("embeddings", "🧩", "Iniciando motor nativo (llama.cpp + HuggingFace auto-download)...")
+
+		// Usa "" para o modelo padrão (Qwen/Qwen3-Embedding-0.6B-GGUF:Q8_0)
+		// O llama-server baixa automaticamente na primeira vez e cacheia localmente.
+		native := provider.NewNativeEmbedder("")
+		if err := native.Start(); err != nil {
+			a.emitBoot("embeddings", "⚠️", "Falha ao iniciar motor nativo: "+err.Error())
+			a.embedder = nil
+		} else {
+			a.nativeEmbedder = native
+			a.embedder = native
+			a.emitBoot("embeddings", "✅", "Motor Nativo (Qwen3 0.6B · 1024 dim) Online.")
 		}
 	} else {
 		emb, err := provider.NewEmbeddingService(a.ctx, cfg.GetActiveGeminiKey())

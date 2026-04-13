@@ -296,9 +296,22 @@ watch([selectedAgent, mode], () => {
 });
 
 const handlePaste = async (e) => {
+  const isLocalMode = (selectedAgent.value === 'lmstudio') || 
+                      (settings.config.rag_provider === 'lmstudio') || 
+                      (settings.config.embeddings_provider === 'native');
+
   const items = (e.clipboardData || e.originalEvent.clipboardData).items;
   for (const item of items) {
     if (item.type.indexOf('image') !== -1) {
+      if (isLocalMode) {
+        orchestrator.messages.push({
+          role: 'assistant',
+          text: `⚠️ **Multimídia Desativada**: Motores Locais (LM Studio / Native Embeddings) suportam apenas processamento semântico de código e texto. Para visão computacional, mude para Nuvem (Gemini/Claude).`,
+          mode: 'system'
+        });
+        return;
+      }
+      
       const file = item.getAsFile();
       const reader = new FileReader();
       reader.onload = (event) => {
