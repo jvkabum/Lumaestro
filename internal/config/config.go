@@ -76,7 +76,7 @@ type Config struct {
 	EmbeddingDimension int    `json:"embedding_dimension"` // 3072 para Gemini, 768 para nomic, etc.
 
 	// 🧠 Motor de RAG/Ontologia (geração textual para extração de triplas e chat semântico)
-	RAGProvider string `json:"rag_provider"` // "gemini", "lmstudio", ou "claude"
+	RAGProvider string `json:"rag_provider"` // "gemini", "lmstudio", "claude" ou "native"
 	RAGModel    string `json:"rag_model"`    // Ex: "google/gemma-4-26b-a4b", "claude-3-5-sonnet-latest"
 	GeminiModel string `json:"gemini_model"` // Modelo padrão para chat (auto, 2.5-flash, etc)
 }

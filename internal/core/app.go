@@ -61,7 +61,9 @@ type App struct {
 	lmStudio *provider.LMStudioClient
 
 	// 🧠 Motor Nativo (Interno)
-	nativeEmbedder *provider.NativeEmbedder
+	nativeEmbedder   *provider.NativeEmbedder
+	nativeExtraction *provider.NativeGenerator // Qwen Reasoning (Port 8086)
+	nativeGenerator  *provider.NativeGenerator // Gemma Chat (Port 8087)
 }
 
 // NewApp cria uma nova instância soberana do Lumaestro.
@@ -71,6 +73,12 @@ func NewApp() *App {
 	a.orchestrator = acp.NewOrchestrator(a.executor)
 	a.legacyExec = agents.NewExecutor()
 	a.installer = tools.NewInstaller()
+
+	// 🧠 Motores Vitais (Sempre vivos para evitar Nil Panics)
+	a.GEngine = rag.NewGraphEngine()
+	a.ranker = neural.NewRanker()
+	a.ranker.Decay() // Inicializa o estado neural
+
 	return a
 }
 
@@ -113,8 +121,14 @@ func (a *App) Startup(ctx context.Context) {
 // Shutdown é acionado quando o Lumaestro é fechado.
 func (a *App) Shutdown(ctx context.Context) {
 	if a.nativeEmbedder != nil {
-		fmt.Println("🛑 Encerrando motor nativo interno...")
+		fmt.Println("🛑 Encerrando motor nativo interno (embeddings)...")
 		a.nativeEmbedder.Stop()
+	}
+	if a.nativeExtraction != nil {
+		a.nativeExtraction.Stop()
+	}
+	if a.nativeGenerator != nil {
+		a.nativeGenerator.Stop()
 	}
 }
 
@@ -133,6 +147,15 @@ func (a *App) bootSequence() {
 
 	// Injeta o contexto oficial em todos os serviços APÓS a inicialização
 	a.injectContexts()
+
+	// 🏗️ Pró-atividade: Garante que a infraestrutura do Qdrant exista no boot
+	if a.crawler != nil && a.ctx != nil {
+		go func() {
+			if err := a.crawler.EnsureCollections(a.ctx); err != nil {
+				fmt.Printf("[BOOT] ⚠️ Falha ao preparar coleções do Qdrant: %v\n", err)
+			}
+		}()
+	}
 
 	// 🚀 Auto-Start: Inicia os agentes e sincroniza conhecimento
 	if a.config != nil {
@@ -266,18 +289,35 @@ func (a *App) initServices() error {
 			}
 		}
 	} else if embProvider == "native" {
-		a.emitBoot("embeddings", "🧩", "Iniciando motor nativo (llama.cpp + HuggingFace auto-download)...")
+		if !a.installer.CheckStatus("llama-server") {
+			a.emitBoot("embeddings", "🛠️", "Motor local não encontrado. Iniciando instalação via winget...")
+			go func() {
+				if err := a.installer.InstallLlamaCPP(); err == nil {
+					a.emitBoot("embeddings", "✅", "Instalação concluída. Atualizando ambiente...")
+					a.installer.SyncPath()
+					time.Sleep(2 * time.Second)
+					a.initServices() // Tenta novamente
+				}
+			}()
+			return nil // Sai para aguardar a instalação
+		}
 
-		// Usa "" para o modelo padrão (Qwen/Qwen3-Embedding-0.6B-GGUF:Q8_0)
-		// O llama-server baixa automaticamente na primeira vez e cacheia localmente.
+		a.emitBoot("embeddings", "🧩", "Iniciando motor nativo (llama.cpp)...")
 		native := provider.NewNativeEmbedder("")
+		native.OnLog = func(line string) {
+			a.emitBoot("embeddings", "⏳", "Baixando Gráfico: "+line)
+			runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+				"source":  "NATIVE-EMB",
+				"content": "📥 " + line,
+			})
+		}
 		if err := native.Start(); err != nil {
 			a.emitBoot("embeddings", "⚠️", "Falha ao iniciar motor nativo: "+err.Error())
 			a.embedder = nil
 		} else {
 			a.nativeEmbedder = native
 			a.embedder = native
-			a.emitBoot("embeddings", "✅", "Motor Nativo (Qwen3 0.6B · 1024 dim) Online.")
+			a.emitBoot("embeddings", "✅", "Motor Nativo (Qwen3 0.6B) Online.")
 		}
 	} else {
 		emb, err := provider.NewEmbeddingService(a.ctx, cfg.GetActiveGeminiKey())
@@ -299,6 +339,51 @@ func (a *App) initServices() error {
 			}
 			contentGen = provider.NewLMStudioEmbedder(cfg.LMStudioURL, "", ragModel)
 			a.emitBoot("rag", "✅", "Motor RAG/Ontologia: LM Studio ("+ragModel+")")
+		} else if ragProvider == "native" {
+			a.emitBoot("rag", "🧩", "Iniciando Cérebro Colaborativo (Qwen + Gemma)...")
+
+			// --- TIME DE ELITE 2026 ---
+			// OPÇÃO A: O Especialista (Qwen 3.5 4B destilado do Claude 4.6 Opus - 262k Context)
+			qwenModel := "Jackrong/Qwen3.5-4B-Claude-4.6-Opus-Reasoning-Distilled-v2-GGUF:Qwen3.5-4B.Q5_K_M.gguf"
+			
+			// OPÇÕES RESERVA (Fallback):
+			// qwenModel := "mradermacher/Qwen3-4B-Qwen3.6-plus-Reasoning-Slerp-i1-GGUF:Qwen3-4B-Qwen3.6-plus-Reasoning-Slerp.i1-Q4_K_M.gguf"
+			// qwenModel := "khazarai/Qwen3-4B-Qwen3.6-plus-Reasoning-Distilled-GGUF:Q4_1" 
+
+			a.emitBoot("rag", "🧪", "Lançando Especialista de Lógica (Claude 4.6 Distilled na 8086)...")
+			nativeExtraction := provider.NewNativeGenerator(qwenModel, 8086, "QWEN-CLAUDE")
+			nativeExtraction.OnLog = func(line string) {
+				a.emitBoot("rag", "⏳", "Baixando Especialista: "+line)
+				runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+					"source":  "QWEN-CLAUDE",
+					"content": "📥 " + line,
+				})
+			}
+			
+			// --- CHAT & ORQUESTRAÇÃO ---
+			// Agora focado 100% no Modo ACP Cloud (Gemini/Claude via CLI) para economizar RAM.
+			// Se quiser reativar o motor local de chat, descomente as linhas abaixo:
+			/*
+			gemmaModel := "unsloth/gemma-4-E4B-it-GGUF:gemma-4-E4B-it-Q4_K_M.gguf"
+			a.emitBoot("rag", "🧪", "Lançando Revisor Linguístico (Gemma 4 na 8087)...")
+			nativeGeneral := provider.NewNativeGenerator(gemmaModel, 8087, "GEMMA-4")
+			nativeGeneral.OnLog = func(line string) {
+				a.emitBoot("rag", "⏳", "Baixando Linguística: "+line)
+				runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+					"source":  "GEMMA-4",
+					"content": "📥 " + line,
+				})
+			}
+			*/
+
+			errQ := nativeExtraction.Start()
+			// errG := nativeGeneral.Start()
+
+			if errQ == nil {
+				a.emitBoot("rag", "✅", "Motor Nativo (Especialista Claude-Distilled) ONLINE")
+				a.nativeExtraction = nativeExtraction
+				contentGen = nativeExtraction
+			}
 		} else if ragProvider == "gemini" || ragProvider == "" {
 			// Reusa o embedder Gemini como ContentGenerator se disponível
 			if gemEmb, ok := a.embedder.(*provider.EmbeddingService); ok {
@@ -320,10 +405,8 @@ func (a *App) initServices() error {
 		}
 	}
 
-	a.emitBoot("neon", "🧠", "Ativando Córtex Neural — Esquecimento Natural (Decay)...")
-	a.ranker = neural.NewRanker()
-	a.ranker.Decay()
-
+	a.emitBoot("neon", "🧠", "Sincronizando Córtex Neural...")
+	
 	search := rag.NewSearchService(a.qdrant, a.ranker)
 	a.navigator = rag.NewGraphNavigator(a.qdrant, a.ranker)
 	if a.embedder != nil && a.ontology != nil {
@@ -336,7 +419,7 @@ func (a *App) initServices() error {
 	a.chat = rag.NewChatService(a.legacyExec, a.orchestrator, search, a.navigator, a.embedder, a.installer)
 
 	a.emitBoot("crawler", "🕸️", "Tecendo o Crawler do Obsidian...")
-	a.GEngine = rag.NewGraphEngine()
+	// a.GEngine = rag.NewGraphEngine() // Já inicializado no NewApp
 	a.Validator = rag.NewAgentValidator(a.LStore, a.GEngine)
 	a.Recon = rag.NewAgentRecon(a.LStore, a.GEngine, a.qdrant)
 
@@ -393,6 +476,12 @@ func (a *App) resetServicesForReload() {
 
 // injectContexts garante que todos os motores de RAG tenham o contexto oficial.
 func (a *App) injectContexts() {
+	// 1. Limpeza de Memória: Mata motores órfãos de sessões anteriores
+	a.installer.KillOrphans()
+
+	// 2. Garante que os diretórios de cache existam
+	os.MkdirAll(".context", 0755)
+
 	if a.ctx == nil {
 		return
 	}

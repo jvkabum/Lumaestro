@@ -678,10 +678,57 @@ watch(() => store.activeTab, (tab) => {
         <div class="premium-form-group" style="margin-bottom: 1.2rem;">
           <label>Provedor de RAG/Ontologia</label>
           <select v-model="store.config.rag_provider" class="maestro-input" @change="onRAGProviderChange">
-            <option value="gemini">Gemini (cascata resiliente de modelos)</option>
-            <option value="lmstudio">LM Studio (modelo local)</option>
-            <option value="claude">Claude (melhor para análise de código)</option>
+            <option value="gemini">Nuvem: Gemini (cascata resiliente de modelos)</option>
+            <option value="native">Local: Lumaestro Híbrido (Qwen Reasoning + Gemma Chat)</option>
+            <option value="lmstudio">Servidor Externo: LM Studio (modelo local)</option>
+            <option value="claude">Nuvem: Claude (melhor para análise de código)</option>
           </select>
+        </div>
+
+        <!-- SELETOR DE MOTOR DE RAG (Cards Visuais) -->
+        <div style="margin: 2rem 0; padding: 1.5rem; border-radius: 16px; border: 1px solid rgba(139, 92, 246, 0.15); background: rgba(139, 92, 246, 0.03);">
+          <h3 style="margin: 0 0 0.5rem; font-size: 0.85rem; font-weight: 800; letter-spacing: 1px; color: #94a3b8; text-transform: uppercase;">🧠 Inteligência de RAG</h3>
+          <p style="color: var(--p-text-dim); font-size: 0.8rem; margin-bottom: 1rem; line-height: 1.5;">
+            Escolha o cérebro que analisa suas notas e extrai o Grafo de Conhecimento.
+          </p>
+
+          <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+            <!-- Card NUVEM (Gemini) -->
+            <div 
+              @click="store.config.rag_provider = 'gemini'; save()"
+              style="flex: 1; min-width: 200px; padding: 1.2rem; border-radius: 14px; cursor: pointer; transition: all 0.3s; border: 2px solid; display: flex; flex-direction: column; gap: 8px;"
+              :style="store.config.rag_provider === 'gemini' 
+                ? 'border-color: #8b5cf6; background: rgba(139, 92, 246, 0.1); box-shadow: 0 0 20px rgba(139, 92, 246, 0.15);' 
+                : 'border-color: rgba(255,255,255,0.06); background: rgba(0,0,0,0.2);'"
+            >
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 1.5rem;">🌌</span>
+                <div>
+                  <div style="font-weight: 900; font-size: 0.9rem; color: #fff;">Gemini (Nuvem)</div>
+                  <div style="font-size: 0.7rem; color: #94a3b8;">Flash Lite 3.1 · Híbrido · Rápido</div>
+                </div>
+              </div>
+              <div v-if="store.config.rag_provider === 'gemini'" style="font-size: 0.65rem; font-weight: 900; color: #8b5cf6; letter-spacing: 1px;">✓ ATIVO</div>
+            </div>
+
+            <!-- Card HÍBRIDO LOCAL (Native) -->
+            <div 
+              @click="store.config.rag_provider = 'native'; save()"
+              style="flex: 1; min-width: 200px; padding: 1.2rem; border-radius: 14px; cursor: pointer; transition: all 0.3s; border: 2px solid; display: flex; flex-direction: column; gap: 8px;"
+              :style="store.config.rag_provider === 'native' 
+                ? 'border-color: #ec4899; background: rgba(236, 72, 153, 0.1); box-shadow: 0 0 20px rgba(236, 72, 153, 0.15);' 
+                : 'border-color: rgba(255,255,255,0.06); background: rgba(0,0,0,0.2);'"
+            >
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 1.5rem;">🛰️</span>
+                <div>
+                  <div style="font-weight: 900; font-size: 0.9rem; color: #fff;">Híbrido Local (Lumaestro)</div>
+                  <div style="font-size: 0.7rem; color: #94a3b8;">Qwen 3.6 Distilled (Extraction) + Gemma 4 (Chat)</div>
+                </div>
+              </div>
+              <div v-if="store.config.rag_provider === 'native'" style="font-size: 0.65rem; font-weight: 900; color: #ec4899; letter-spacing: 1px;">✓ MODO EXPERT ATIVO</div>
+            </div>
+          </div>
         </div>
 
         <div v-if="store.config.rag_provider === 'lmstudio'" class="premium-form-group" style="margin-bottom: 2rem;">

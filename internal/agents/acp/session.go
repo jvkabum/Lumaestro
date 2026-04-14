@@ -56,6 +56,11 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		args = []string{"run", "./cmd/lmstudio-acp"}
 	}
 
+	if agent == "native" {
+		binaryPath = "go"
+		args = []string{"run", "./cmd/lmstudio-acp"}
+	}
+
 	// 1. Tenta binário global (LookPath)
 	if globalPath, errGL := exec.LookPath(binaryPath); errGL == nil {
 		binaryPath = globalPath
@@ -144,6 +149,12 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 	if agent == "lmstudio" && cfgLoaded != nil {
 		cmd.Env = append(cmd.Env, "LUMAESTRO_LMSTUDIO_URL="+cfgLoaded.LMStudioURL)
 		cmd.Env = append(cmd.Env, "LUMAESTRO_LMSTUDIO_MODEL="+cfgLoaded.LMStudioModel)
+	}
+
+	if agent == "native" {
+		// No modo Cloud-Local, o agente 'native' (chat) é desativado para economizar VRAM.
+		// O usuário deve usar Gemini ou Claude para o chat/ACP.
+		return fmt.Errorf("o motor de chat nativo (8087) foi desativado em favor do modo Híbrido Cloud-Local. Use Gemini ou Claude")
 	}
 
 	cmd.Env = append(cmd.Env, "GEMINI_TELEMETRY_ENABLED=true")
@@ -276,7 +287,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 	methodId := "oauth-personal"
 	shouldAuthenticate := true
 
-	if agent == "lmstudio" {
+	if agent == "lmstudio" || agent == "native" {
 		methodId = "lmstudio-local"
 	} else if cfgLoaded != nil && cfgLoaded.UseGeminiAPIKey {
 		methodId = "gemini-api-key"

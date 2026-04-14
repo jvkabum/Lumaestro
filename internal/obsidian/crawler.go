@@ -573,10 +573,16 @@ func (c *Crawler) processFile(ctx context.Context, path string, info os.FileInfo
 		links = extractLinks(textContent)
 
 		// 🧠 Extração de Triplas: Pula para notas muito pequenas (< 100 chars)
-		// Notas curtas como lembretes não produzem triplas úteis e gastam cota.
+		// Para notas gigantes, trunca para evitar estouro de contexto (Erro 500)
 		if len(textContent) >= 100 {
-			contextHint := fmt.Sprintf("Arquivo: %s. Contexto inicial: %s", nodeName, firstLines(textContent, 500))
-			triples, err = c.Ontology.ExtractTriples(ctx, textContent, contextHint)
+			// Truncamento de Segurança para Lógica (Max 6k chars no Qwen)
+			safeText := textContent
+			if len(safeText) > 6000 {
+				safeText = safeText[:6000]
+			}
+			
+			contextHint := fmt.Sprintf("Arquivo: %s. Contexto inicial: %s", nodeName, firstLines(safeText, 500))
+			triples, err = c.Ontology.ExtractTriples(ctx, safeText, contextHint)
 			if err != nil {
 				fmt.Printf("[Crawler] ⚠️ Erro ao extrair triplas de %s: %s\n", nodeName, utils.FormatGenAIError(err))
 			} else {
@@ -626,7 +632,13 @@ func (c *Crawler) processFile(ctx context.Context, path string, info os.FileInfo
 		if isPDF { mimeType = "application/pdf" }
 		vector, err = c.Embedder.GenerateMultimodalEmbedding(ctx, rawContent, mimeType, false)
 	} else {
-		vector, err = c.Embedder.GenerateEmbedding(ctx, textContent, false)
+		// Truncamento de Segurança para Embeddings (Max 2k chars)
+		// Nota: Idealmente faríamos chunk-averaging, mas truncar previne o Erro 500 no llama-server.
+		safeEmbedText := textContent
+		if len(safeEmbedText) > 2000 {
+			safeEmbedText = safeEmbedText[:2000]
+		}
+		vector, err = c.Embedder.GenerateEmbedding(ctx, safeEmbedText, false)
 	}
 
 	if err != nil {

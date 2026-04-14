@@ -425,8 +425,11 @@ func (c *QdrantClient) checkResponse(resp *http.Response) error {
 		errMsg = resp.Status
 	}
 
-	// Log de emergência para o terminal do desenvolvedor
-	fmt.Printf("[DEBUG-QDRANT] ❌ ERRO DO SERVIDOR (Status %d): %s\n", resp.StatusCode, errMsg)
+	// 🤫 Silêncio Estratégico: 404 (Not Found) é esperado se as coleções ainda não foram criadas.
+	// Não poluímos o terminal com logs vermelhos para este caso específico.
+	if resp.StatusCode != http.StatusNotFound {
+		fmt.Printf("[DEBUG-QDRANT] ❌ ERRO DO SERVIDOR (Status %d): %s\n", resp.StatusCode, errMsg)
+	}
 
 	return fmt.Errorf("falha no servidor Qdrant (Status %d): %s", resp.StatusCode, errMsg)
 }

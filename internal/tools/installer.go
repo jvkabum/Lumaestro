@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 )
 
 // Installer gerencia a instalação de ferramentas externas com streaming de logs.
@@ -127,6 +128,19 @@ func (i *Installer) InstallClaude() error {
 	return i.runStreaming("npm", "install", "-g", "@anthropic-ai/claude-code@latest", "--force")
 }
 
+// InstallLlamaCPP instala o motor de inferência local (llama-server).
+func (i *Installer) InstallLlamaCPP() error {
+	i.LogChan <- "📦 Instalando motor local (llama.cpp) para RAG nativo..."
+	if runtime.GOOS == "windows" {
+		i.LogChan <- "⏳ Executando winget install llama.cpp... (Aceite os termos se solicitado)"
+		return i.runStreaming("powershell", "-Command", "winget install llama.cpp --accept-source-agreements --accept-package-agreements")
+	} else if runtime.GOOS == "darwin" {
+		i.LogChan <- "⏳ Executando brew install llama.cpp..."
+		return i.runStreaming("brew", "install", "llama.cpp")
+	}
+	return fmt.Errorf("instalação automática do llama.cpp não suportada para %s. Instale manualmente.", runtime.GOOS)
+}
+
 // SyncPath injeta caminhos comuns (Claude e NPM) no PATH do processo atual.
 // Isso garante que o app encontre as ferramentas mesmo que o PATH global esteja desatualizado.
 func (i *Installer) SyncPath() {
@@ -135,9 +149,20 @@ func (i *Installer) SyncPath() {
 	
 	// Caminhos prováveis
 	paths := []string{
-		filepath.Join(home, ".local", "bin"),       // Claude Code
-		filepath.Join(appData, "npm"),              // Gemini CLI (NPM Global)
-		filepath.Join(home, "AppData", "Roaming", "npm"), // Fallback NPM
+		filepath.Join(home, ".local", "bin"),         // Claude Code
+		filepath.Join(appData, "npm"),                // Gemini CLI (NPM Global)
+		filepath.Join(home, "AppData", "Roaming", "npm"),   // Fallback NPM
+		`C:\Program Files\llama.cpp`,                // Winget padrão (Admin)
+	}
+
+	// 🔍 Busca dinâmica pelo diretório do WinGet (Portátil)
+	winGetDir := filepath.Join(home, "AppData", "Local", "Microsoft", "WinGet", "Packages")
+	if entries, err := os.ReadDir(winGetDir); err == nil {
+		for _, entry := range entries {
+			if entry.IsDir() && strings.Contains(strings.ToLower(entry.Name()), "llamacpp") {
+				paths = append(paths, filepath.Join(winGetDir, entry.Name()))
+			}
+		}
 	}
 
 	currentPath := os.Getenv("PATH")
@@ -199,6 +224,18 @@ func (i *Installer) FixClaudePath() error {
 	}
 	
 	return nil
+}
+
+// KillOrphans encerra qualquer instância pendente do llama-server para evitar conflitos de porta e leak de memória.
+func (i *Installer) KillOrphans() {
+	if runtime.GOOS == "windows" {
+		fmt.Println("[Installer] 🧹 Limpando processos zumbis do llama-server...")
+		exec.Command("taskkill", "/F", "/IM", "llama-server.exe", "/T").Run()
+	} else {
+		exec.Command("pkill", "-9", "llama-server").Run()
+	}
+	// Pequena pausa para garantir que o SO liberou os sockets
+	time.Sleep(1 * time.Second)
 }
 
 // InstallObsidian via Powershell.

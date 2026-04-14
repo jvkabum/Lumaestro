@@ -27,9 +27,9 @@ func (a *App) ScanVault() string {
 	if a.crawler == nil {
 		runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
 			"source":  "SYSTEM",
-			"content": "⚠️ Sync Obsidian 3D bloqueado: sem motor de embeddings ativo. Configure Gemini API Key (aba CHAVES) para habilitar indexação vetorial.",
+			"content": "⚠️ Sync Obsidian 3D bloqueado: sem motor de embeddings ativo. Verifique se o seu provedor (Local, Gemini ou Claude) está configurado e online.",
 		})
-		return "⚠️ Sync Obsidian 3D bloqueado: sem motor de embeddings ativo. Configure Gemini API Key para liberar indexação vetorial."
+		return "⚠️ Sync Obsidian 3D bloqueado: sem motor de embeddings ativo. Garanta que o motor selecionado nas configurações está respondendo."
 	}
 
 	// 🕵️⚡ RAG em Segundo Plano: Previne travamento total da UI e do Chat

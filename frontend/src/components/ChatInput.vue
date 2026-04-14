@@ -106,6 +106,15 @@
             >
               <span class="dot lmstudio"></span> LM Studio
             </button>
+
+            <button 
+              type="button" 
+              class="agent-pill native-pill"
+              :class="{ active: selectedAgent === 'native' }" 
+              @click="selectedAgent = 'native'"
+            >
+              <span class="dot native"></span> Nativo
+            </button>
           </div>
         </div>
 
@@ -465,10 +474,17 @@ const sendMessage = () => {
   box-shadow: 0 4px 15px rgba(234, 179, 8, 0.2);
 }
 
+.agent-pill.active.native-pill {
+  background: rgba(236, 72, 153, 0.15);
+  border-color: rgba(236, 72, 153, 0.3);
+  box-shadow: 0 4px 15px rgba(236, 72, 153, 0.2);
+}
+
 .dot { width: 5px; height: 5px; border-radius: 50%; }
 .dot.gemini { background: #60a5fa; box-shadow: 0 0 6px #3b82f6; }
 .dot.claude { background: #34d399; box-shadow: 0 0 6px #10b981; }
 .dot.lmstudio { background: #facc15; box-shadow: 0 0 6px #eab308; }
+.dot.native { background: #f472b6; box-shadow: 0 0 6px #ec4899; }
 
 /* Dropdown Menu Premium */
 .model-dropdown-menu {
