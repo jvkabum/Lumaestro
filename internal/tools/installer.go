@@ -249,7 +249,9 @@ func (i *Installer) KillOrphans() {
 					$conns | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue };
 				}
 			}
-			Get-Process -Name "llama-server" -ErrorAction SilentlyContinue | Where-Object { $_.Id -ne $currentPid } | Stop-Process -Force -ErrorAction SilentlyContinue;
+			@("llama-server", "lumaestro-embedder", "lumaestro-specialist") | ForEach-Object {
+				Get-Process -Name $_ -ErrorAction SilentlyContinue | Where-Object { $_.Id -ne $currentPid } | Stop-Process -Force -ErrorAction SilentlyContinue;
+			}
 		`, currentPid)
 		exec.Command("powershell", "-Command", script).Run()
 	} else {

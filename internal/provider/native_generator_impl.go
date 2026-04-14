@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"sync" // Adicionado para proteção de concorrência
 	"syscall"
 	"time"
 )
@@ -25,6 +26,7 @@ type NativeGenerator struct {
 	port        int
 	cmd         *exec.Cmd
 	client      *http.Client
+	mu          sync.Mutex // Mutex para evitar sobrecarga no motor especialista
 	OnLog       func(string) // Callback para progresso (download/hf)
 }
 
@@ -58,14 +60,27 @@ func (n *NativeGenerator) Start() error {
 		return fmt.Errorf("llama-server não encontrado. Instale com 'winget install llama.cpp'")
 	}
 
+	// Cria alias descritivo para o Gerenciador de Tarefas
+	finalBin = createProcessAlias(finalBin, "lumaestro-specialist")
+
 	// Argumentos otimizados para Chat/RAG
 	args := []string{
 		"--port", fmt.Sprintf("%d", n.port),
-		"-hf", n.hfModel,
-		"--ctx-size", "8192", // Contexto maior para ler notas do Obsidian
-		"--n-gpu-layers", "-1", // Tenta usar GPU máxima se disponível
-		// --log-disable removido para permitir captura de progresso de download
 	}
+
+	// 🛠️ Proteção Hugging Face: Mapeador Inteligente de Repositório e Arquivo
+	// Se houver ":", separamos precisamente para o llama-server não se perder (Evita erro 404)
+	if parts := strings.Split(n.hfModel, ":"); len(parts) == 2 {
+		args = append(args, "--hf-repo", parts[0], "--hf-file", parts[1])
+	} else {
+		args = append(args, "-hf", n.hfModel)
+	}
+
+	// Anexamos os argumentos de CPU/GPU
+	args = append(args,
+		"--ctx-size", "4096", // Contexto reduzido de 8k para 4k para poupar compute e dobrar o TPS inicial
+		"--n-gpu-layers", "-1", // Tenta usar GPU máxima se disponível
+	)
 
 	fmt.Printf("[%s] 🚀 Iniciando Gerador Local: %s %v\n", n.displayName, finalBin, args)
 
@@ -128,6 +143,10 @@ func (n *NativeGenerator) waitForReady() error {
 }
 
 func (n *NativeGenerator) GenerateText(ctx context.Context, prompt string) (string, error) {
+	// 🔒 Proteção: enfileira requisições para evitar erro de conexão/timeout na GPU
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
 	url := fmt.Sprintf("http://localhost:%d/v1/chat/completions", n.port)
 
 	payload := map[string]interface{}{

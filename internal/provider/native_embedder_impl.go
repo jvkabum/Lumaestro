@@ -8,9 +8,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
+	"sync" // Adicionado para proteção de concorrência
 	"syscall"
 	"time"
 )
@@ -25,6 +28,7 @@ type NativeEmbedder struct {
 	port    int
 	cmd     *exec.Cmd
 	client  *http.Client
+	mu      sync.Mutex // Mutex para evitar que o llama-server receba chamadas paralelas
 	OnLog   func(string) // Callback para progresso (download/hf)
 }
 
@@ -55,17 +59,32 @@ func (n *NativeEmbedder) Start() error {
 		)
 	}
 
+	// Cria um alias com nome descritivo para aparecer no Gerenciador de Tarefas
+	finalBin = createProcessAlias(finalBin, "lumaestro-embedder")
+
 	// 2. Monta os argumentos usando -hf (download automático do HuggingFace)
 	//    Na primeira execução, o modelo será baixado e cacheado automaticamente.
 	//    Nas próximas, ele usa o cache local — instantâneo.
 	args := []string{
 		"--port", fmt.Sprintf("%d", n.port),
-		"-hf", n.hfModel,
+	}
+
+	// 🛠️ Proteção Hugging Face: Mapeador Inteligente de Repositório e Arquivo
+	// Se houver ":", separamos precisamente (--hf-repo e --hf-file)
+	if parts := strings.Split(n.hfModel, ":"); len(parts) == 2 {
+		args = append(args, "--hf-repo", parts[0], "--hf-file", parts[1])
+	} else {
+		args = append(args, "-hf", n.hfModel)
+	}
+
+	args = append(args,
 		"--embedding",
 		"--pooling", "cls",
 		"--ctx-size", "2048",
-		// --log-disable removido para permitir captura de progresso de download
-	}
+		"--n-gpu-layers", "0", // Não joga camadas na GPU
+		"--device", "none", // Bate a porta da GPU (não cria instâncias Vulkan)
+		"--no-op-offload",  // Impede que operações de tensores da CPU vazem para a GPU
+	)
 
 	fmt.Printf("[NativeEngine] 🚀 Iniciando: %s %v\n", finalBin, args)
 
@@ -128,10 +147,21 @@ func (n *NativeEmbedder) waitForReady() error {
 }
 
 func (n *NativeEmbedder) GenerateEmbedding(ctx context.Context, text string, fastTrack bool) ([]float32, error) {
+	// 🔒 Proteção: enfileira requisições. O llama-server nativo (CPU) não lida bem com paralelo.
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
 	url := fmt.Sprintf("http://localhost:%d/embedding", n.port)
 
+	// Truncamento de segurança: garante que o texto caiba no ctx-size de 2048 tokens
+	// (~4 chars/token, com margem de segurança: max 1500 chars ≈ 375 tokens)
+	safeText := text
+	if len(safeText) > 1500 {
+		safeText = safeText[:1500]
+	}
+
 	payload := map[string]interface{}{
-		"content": text,
+		"content": safeText,
 	}
 
 	body, _ := json.Marshal(payload)
@@ -148,16 +178,33 @@ func (n *NativeEmbedder) GenerateEmbedding(ctx context.Context, text string, fas
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("erro no motor nativo: status %d", resp.StatusCode)
+		// Captura a mensagem de erro real do servidor para facilitar debug
+		errBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("erro no motor nativo: status %d — %s", resp.StatusCode, string(errBody)[:min(len(errBody), 300)])
 	}
 
-	// Lógica flexível: o llama-server pode retornar {"embedding": [...]} ou direto o array [...]
+	// Lógica flexível: o llama-server retorna em múltiplos formatos dependendo da versão
 	resBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("falha ao ler corpo da resposta: %w", err)
 	}
 
-	// Tenta formato Objeto 1 (Standard OpenAI/Legacy)
+	// Formato 1 (REAL llama-server /embedding): [{"index":0,"embedding":[[0.01,0.02,...]]}]
+	// O embedding é uma array 2D! Precisamos pegar o primeiro sub-array.
+	var nativeResult []struct {
+		Index     int         `json:"index"`
+		Embedding [][]float64 `json:"embedding"`
+	}
+	if err := json.Unmarshal(resBytes, &nativeResult); err == nil && len(nativeResult) > 0 && len(nativeResult[0].Embedding) > 0 && len(nativeResult[0].Embedding[0]) > 0 {
+		raw := nativeResult[0].Embedding[0]
+		result := make([]float32, len(raw))
+		for i, v := range raw {
+			result[i] = float32(v)
+		}
+		return result, nil
+	}
+
+	// Formato 2: Objeto simples {"embedding": [...]} (Legacy)
 	var objResult struct {
 		Embedding []float32 `json:"embedding"`
 	}
@@ -165,13 +212,31 @@ func (n *NativeEmbedder) GenerateEmbedding(ctx context.Context, text string, fas
 		return objResult.Embedding, nil
 	}
 
-	// Tenta formato Array Direto (Novo padrão detectado)
+	// Formato 3: Array de objetos com embedding 1D [{"embedding": [...]}]
+	var arrayObjResult []struct {
+		Embedding []float32 `json:"embedding"`
+	}
+	if err := json.Unmarshal(resBytes, &arrayObjResult); err == nil && len(arrayObjResult) > 0 && len(arrayObjResult[0].Embedding) > 0 {
+		return arrayObjResult[0].Embedding, nil
+	}
+
+	// Formato 4: OpenAI Compatible {"data": [{"embedding": [...]}]} (/v1/embeddings)
+	var openAIResult struct {
+		Data []struct {
+			Embedding []float32 `json:"embedding"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(resBytes, &openAIResult); err == nil && len(openAIResult.Data) > 0 && len(openAIResult.Data[0].Embedding) > 0 {
+		return openAIResult.Data[0].Embedding, nil
+	}
+
+	// Formato 5: Array direto de floats [0.1, 0.2, ...]
 	var arrayResult []float32
 	if err := json.Unmarshal(resBytes, &arrayResult); err == nil && len(arrayResult) > 0 {
 		return arrayResult, nil
 	}
 
-	return nil, fmt.Errorf("formato de resposta de embedding desconhecido ou vazio")
+	return nil, fmt.Errorf("formato de resposta de embedding desconhecido. Raw: %.300s", string(resBytes))
 }
 
 func (n *NativeEmbedder) GenerateMultimodalEmbedding(ctx context.Context, data []byte, mimeType string, fastTrack bool) ([]float32, error) {
@@ -183,4 +248,34 @@ func (n *NativeEmbedder) Stop() {
 		fmt.Println("[NativeEngine] 🛑 Encerrando motor nativo...")
 		n.cmd.Process.Kill()
 	}
+}
+
+// createProcessAlias cria um hard link do binário com um nome descritivo NA MESMA PASTA do original.
+// Isso faz com que o processo apareça no Gerenciador de Tarefas com um nome identificável
+// (ex: "lumaestro-embedder" ao invés de "llama-server"), e garante acesso às DLLs companheiras.
+func createProcessAlias(originalBin, aliasName string) string {
+	if runtime.GOOS != "windows" {
+		return originalBin // Em Linux/macOS, não é necessário
+	}
+
+	// Cria o alias na MESMA pasta do binário original (essencial para DLLs do llama.cpp)
+	aliasDir := filepath.Dir(originalBin)
+	aliasPath := filepath.Join(aliasDir, aliasName+".exe")
+
+	// Se o alias já existe e é válido, usa direto
+	if info, err := os.Stat(aliasPath); err == nil && info.Size() > 0 {
+		return aliasPath
+	}
+
+	// Remove alias antigo/corrompido se existir
+	os.Remove(aliasPath)
+
+	// Tenta criar hard link (sem duplicar espaço em disco)
+	if err := os.Link(originalBin, aliasPath); err != nil {
+		fmt.Printf("[Alias] ⚠️ Não foi possível criar alias '%s': %v\n", aliasName, err)
+		return originalBin
+	}
+
+	fmt.Printf("[Alias] ✅ Processo '%s' registrado como '%s'\n", filepath.Base(originalBin), aliasName)
+	return aliasPath
 }

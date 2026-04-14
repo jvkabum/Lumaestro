@@ -341,17 +341,21 @@ func (a *App) initServices() error {
 		} else if ragProvider == "native" {
 			a.emitBoot("expert", "🧩", "Iniciando Especialista Claude-Distilled (Lógica Elite)...")
 
-			// --- TIME DE ELITE 2026 ---
-			// OPÇÃO A: O Especialista (Qwen 3.5 4B destilado do Claude 4.6 Opus - 262k Context)
-			qwenModel := "Jackrong/Qwen3.5-4B-Claude-4.6-Opus-Reasoning-Distilled-v2-GGUF:Q5_K_M"
-
-			// OPÇÕES RESERVA (Fallback):
-			// qwenModel := "Jackrong/Qwen3.5-4B-Claude-4.6-Opus-Reasoning-Distilled-v2-GGUF:Qwen3.5-4B.Q5_K_M.gguf"
-			// qwenModel := "khazarai/Qwen3-4B-Qwen3.6-plus-Reasoning-Distilled-GGUF:Q4_1"
+			// --- TIME DE ELITE 2026 (Modelos Especialistas em Extração RAG) ---
+			
+			// [ OPÇÕES OTIMIZADAS PARA PLACAS ANTIGAS / RX 580 ]
+			// qwenModel := "mradermacher/Qwen3.5-4B-Claude-4.6-Opus-Reasoning-Distilled-v2-heretic-GGUF:Qwen3.5-4B-Claude-4.6-Opus-Reasoning-Distilled-v2-heretic.IQ4_XS.gguf" // (Matriz de Importância - Ultra Leve 2.5GB)
 			// qwenModel := "mradermacher/Qwen3-4B-Qwen3.6-plus-Reasoning-Slerp-i1-GGUF:Qwen3-4B-Qwen3.6-plus-Reasoning-Slerp.i1-Q4_K_M.gguf"
+			// qwenModel := "khazarai/Qwen3-4B-Qwen3.6-plus-Reasoning-Distilled-GGUF:Q4_1"
+			
+			// [ OPÇÕES PESADAS / ORIGINAIS (Alta Resolução Lógica) ]
+			// qwenModel := "Jackrong/Qwen3.5-4B-Claude-4.6-Opus-Reasoning-Distilled-v2-GGUF:Qwen3.5-4B.Q5_K_M.gguf"
 
-			a.emitBoot("expert", "🧪", "Lançando Especialista de Lógica (Claude 4.6 Distilled na 8086)...")
-			nativeExtraction := provider.NewNativeGenerator(qwenModel, 8086, "QWEN-CLAUDE")
+			// --- [ ATIVO ] Padrão de Ouro RX 580 (Equilíbrio Inteligência e Velocidade Vulkan) ---
+			qwenModel := "mradermacher/Qwen3.5-4B-Claude-4.6-Opus-Reasoning-Distilled-v2-heretic-GGUF:Qwen3.5-4B-Claude-4.6-Opus-Reasoning-Distilled-v2-heretic.Q4_K_M.gguf"
+
+			a.emitBoot("expert", "🧪", "Lançando Especialista de Lógica Slerp (Alta Velocidade na 8086)...")
+			nativeExtraction := provider.NewNativeGenerator(qwenModel, 8086, "QWEN-SLERP")
 			nativeExtraction.OnLog = func(line string) {
 				a.emitBoot("expert", "⏳", "Baixando Especialista: "+line)
 			}
