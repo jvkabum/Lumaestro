@@ -83,7 +83,7 @@ type Config struct {
 	HybridFailoverEnabled bool     `json:"hybrid_failover_enabled"`
 	FailoverPriority      []string `json:"failover_priority"` // Ex: ["groq", "gemini", "native"]
 	GeminiModel           string   `json:"gemini_model"`      // Modelo padrão para chat (auto, 2.5-flash, etc)
-	GroqModel             string   `json:"groq_model"`        // Modelo padrão para Groq (ex: llama-3.3-70b-versatile)
+	GroqModel             string   `json:"groq_model"`        // Modelo padrão para Groq (ex: qwen/qwen3-32b)
 }
 
 // NormalizeProviders garante defaults seguros para o pool de provedores e motores.

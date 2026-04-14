@@ -7,18 +7,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"Lumaestro/internal/config"
 )
 
 func (a *App) emitAgentStatus(agent string, action string, kind string) {
-	if a.ctx == nil || strings.TrimSpace(action) == "" {
+	if strings.TrimSpace(action) == "" {
 		return
 	}
 	if strings.TrimSpace(kind) == "" {
 		kind = "status"
 	}
-	runtime.EventsEmit(a.ctx, "agent:status", map[string]string{
+	a.emitEvent("agent:status", map[string]string{
 		"agent":  agent,
 		"action": action,
 		"kind":   kind,
@@ -43,13 +42,18 @@ func (a *App) AskAgent(agentName string, prompt string) string {
 	}
 
 	go func() {
+		ctx := a.ctx // Ancoragem de segurança
 		fmt.Printf("[BACKEND] Iniciando chamada de Chat para: %s\n", agentName)
 		a.emitAgentStatus(agentName, "Orquestrando contexto e intenção do usuário", "status")
+		
+		// 🛡️ Prevenção contra contexto nulo ou cancelado
+		if ctx == nil { return }
+
 		// Usamos "default" como sessionID para manter o histórico em memória nesta sessão do app.
-		response, err := a.chat.Ask(a.ctx, agentName, "default", prompt)
+		response, err := a.chat.Ask(ctx, agentName, "default", prompt)
 		if err != nil {
 			fmt.Printf("[BACKEND] ERRO no Chat: %v\n", err)
-			runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+			a.emitEvent("agent:log", map[string]string{
 				"source":  "ERROR",
 				"content": "❌ Falha na Sinfonia: " + err.Error(),
 			})
@@ -60,16 +64,16 @@ func (a *App) AskAgent(agentName string, prompt string) string {
 		a.emitAgentStatus(agentName, "Encaminhando plano para o agente ativo", "status")
 
 		// Injeta a pergunta (prompt completo com RAG e histórico) na sessão ACP ativa
-		// O executor cuidará de enviar via StdIn seguindo o protocolo ndJSON
 		err = a.executor.SendInput(agentName, response, nil)
 		if err != nil {
 			fmt.Printf("[BACKEND] ERRO ao enviar para o agente: %v\n", err)
-			runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+			a.emitEvent("agent:log", map[string]string{
 				"source":  "ERROR",
 				"content": "❌ Falha ao comunicar com o agente: " + err.Error(),
 			})
 			return
 		}
+		_ = ctx // Mantém referência viva
 	}()
 
 	return "Orquestrando..."
@@ -153,7 +157,7 @@ func (a *App) SendAgentInput(agent string, input string, images []map[string]str
 		profileName = "Gemini"
 	}
 
-	runtime.EventsEmit(a.ctx, "agent:profile", map[string]string{
+	a.emitEvent("agent:profile", map[string]string{
 		"name":   profileName,
 		"engine": agentName,
 	})
@@ -176,7 +180,7 @@ func (a *App) SendAgentInput(agent string, input string, images []map[string]str
 	fmt.Printf("[App] ✅ Sinfonia roteada para %s com sucesso via JSON-RPC!\n", agent)
 
 	// 📡 Feedback Imediato: Reseta o timer do frontend e avisa que o processamento começou
-	runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+	a.emitEvent("agent:log", map[string]string{
 		"source":  "SYSTEM",
 		"content": "🧠 Maestro processando sinapses e raciocinando...",
 		"type":    "progress",
@@ -227,7 +231,7 @@ func (a *App) SetAgentModel(agent string, model string) error {
 			
 			if errRPC == nil {
 				fmt.Printf("[App] ✅ Troca dinâmica concluída com sucesso para %s!\n", model)
-				runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+				a.emitEvent("agent:log", map[string]string{
 					"source":  "SYSTEM",
 					"content": "⚡ Modelo alterado dinamicamente para: " + model,
 				})
@@ -242,7 +246,7 @@ func (a *App) SetAgentModel(agent string, model string) error {
 				}
 				delete(a.executor.ActiveSessions, agent)
 				
-				runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+				a.emitEvent("agent:log", map[string]string{
 					"source":  "SYSTEM",
 					"content": "🔄 Reiniciando motor para aplicar novo modelo: " + model,
 				})
@@ -284,12 +288,12 @@ func (a *App) ResolveConflict(decision string, subject string, predicate string,
 
 		a.qdrant.UpsertPoint("knowledge_graph", newID, vector, payload)
 
-		runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+		a.emitEvent("agent:log", map[string]string{
 			"source":  "RESOLVER",
 			"content": fmt.Sprintf("✅ Conflito resolvido: '%s' agora é a verdade sobre '%s'.", newValue, subject),
 		})
 	} else {
-		runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+		a.emitEvent("agent:log", map[string]string{
 			"source":  "RESOLVER",
 			"content": "🗺️ Conflito resolvido: Mantida a informação histórica para '" + subject + "'.",
 		})

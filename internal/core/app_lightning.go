@@ -1,4 +1,4 @@
-﻿package core
+package core
 
 import (
 	"Lumaestro/internal/lightning"
@@ -9,8 +9,6 @@ import (
 	"regexp"
 	"strings"
 	"time"
-
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // --- ⚡ MÓDULO LIGHTNING (DASHBOARD ANALÍTICO) ---
@@ -62,20 +60,24 @@ func (a *App) TriggerReflection(rolloutID string) string {
 
 // startAPOWorker monitora o desempenho do enxame e sugere otimizações (APO).
 func (a *App) startAPOWorker() {
-	ticker := time.NewTicker(2 * time.Minute)
-	defer ticker.Stop()
+	go func() {
+		ctx := a.ctx // 🛡️ Ancoragem de segurança
+		ticker := time.NewTicker(2 * time.Minute)
+		defer ticker.Stop()
 
-	for {
-		select {
-		case <-a.ctx.Done():
-			return
-		case <-ticker.C:
-			if a.LStore == nil || a.LOptimizer == nil { continue }
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if a.LStore == nil || a.LOptimizer == nil {
+					continue
+				}
 
-			// 1. Identificar agentes con "Dopamina Crítica" (Média < -0.2 nos últimos rollouts)
-			var agentIDStr string
-			var avgReward float64
-			err := a.LStore.GetDB().QueryRow(`
+				// 1. Identificar agentes con "Dopamina Crítica" (Média < -0.2 nos últimos rollouts)
+				var agentIDStr string
+				var avgReward float64
+				err := a.LStore.GetDB().QueryRow(`
 				SELECT agent_name, avg(reward) as avg_r 
 				FROM rewards r
 				JOIN spans s ON r.rollout_id = s.rollout_id
@@ -84,59 +86,62 @@ func (a *App) startAPOWorker() {
 				LIMIT 1
 			`).Scan(&agentIDStr, &avgReward)
 
-			if err == nil && agentIDStr != "" {
-				fmt.Printf("[🧠 APO Cortex] Desempenho crítico para %s (RR: %.2f). Iniciando Evolução...\n", agentIDStr, avgReward)
-				
-				// 2. Obter o prompt atual (do config ou do DB)
-				currentPrompt := "Você é o Maestro, um assistente técnico de elite."
-				if latest, err := a.LStore.GetLatestPrompt(agentIDStr); err == nil && latest != "" {
-					currentPrompt = latest
-				}
+				if err == nil && agentIDStr != "" {
+					fmt.Printf("[🧠 APO Cortex] Desempenho crítico para %s (RR: %.2f). Iniciando Evolução...\n", agentIDStr, avgReward)
 
-				// 3. Gerar a Crítica APO
-				criticInput, failures, err := a.LOptimizer.RefinePrompt(a.ctx, agentIDStr, currentPrompt)
-				if err != nil || failures == "Nenhuma falha crítica detectada." { continue }
-
-				// 4. Chamar o LLM para gerar o FEIXE de 3 candidatos (Com Resiliência Automática)
-				fmt.Println("[🧠 APO Beam] Gerando 3 variantes de evolução estratégica com Escudo de Resiliência...")
-				beamOutput, provider, err := a.LRouter.ExecuteWithFallback(a.ctx, "", criticInput)
-				if err == nil && beamOutput != "" {
-					fmt.Printf("[🕵️ RESILIÊNCIA] Variantes geradas via: %s\n", provider)
-					// 5. Novo: Loop de Regressão Gold
-					goldSamples, _ := a.LStore.GetGoldSamples(agentIDStr)
-					
-					re := regexp.MustCompile(`(?s)<variant name="([^"]+)">\s*<critique>(.*?)</critique>\s*<prompt>(.*?)</prompt>\s*</variant>`)
-					matches := re.FindAllStringSubmatch(beamOutput, -1)
-
-					for _, m := range matches {
-						name, critique, content := m[1], m[2], m[3]
-						
-						// Calcular Acurácia contra os "Gold Samples"
-						accuracy := 100.0
-						if len(goldSamples) > 0 {
-							hits := 0
-							for _, gs := range goldSamples {
-								// Executa o novo prompt contra o input de ouro (Com Fallback)
-								fmt.Printf("[🕵️ TEST] Validando variante '%s' contra Caso de Ouro (Manto Ativo)...\n", name)
-								testOutput, _, err := a.LRouter.ExecuteWithFallback(a.ctx, content, gs["input"])
-								if err == nil && strings.Contains(strings.ToLower(testOutput), strings.ToLower(gs["output"])) {
-									hits++
-								}
-							}
-							accuracy = (float64(hits) / float64(len(goldSamples))) * 100.0
-						}
-
-						a.LStore.InsertCandidate(agentIDStr, name, content, critique, accuracy)
+					// 2. Obter o prompt atual (do config ou do DB)
+					currentPrompt := "Você é o Maestro, um assistente técnico de elite."
+					if latest, err := a.LStore.GetLatestPrompt(agentIDStr); err == nil && latest != "" {
+						currentPrompt = latest
 					}
 
-					if len(matches) > 0 {
-						fmt.Printf("[⭐ BEAM SUCCESS] %d candidatos validados (Gold Check) para %s!\n", len(matches), agentIDStr)
-						runtime.EventsEmit(a.ctx, "lightning:beam_ready", agentIDStr)
+					// 3. Gerar a Crítica APO
+					criticInput, failures, err := a.LOptimizer.RefinePrompt(ctx, agentIDStr, currentPrompt)
+					if err != nil || failures == "Nenhuma falha crítica detectada." {
+						continue
+					}
+
+					// 4. Chamar o LLM para gerar o FEIXE de 3 candidatos (Com Resiliência Automática)
+					fmt.Println("[🧠 APO Beam] Gerando 3 variantes de evolução estratégica com Escudo de Resiliência...")
+					beamOutput, provider, err := a.LRouter.ExecuteWithFallback(ctx, "", criticInput)
+					if err == nil && beamOutput != "" {
+						fmt.Printf("[🕵️ RESILIÊNCIA] Variantes geradas via: %s\n", provider)
+						// 5. Novo: Loop de Regressão Gold
+						goldSamples, _ := a.LStore.GetGoldSamples(agentIDStr)
+
+						re := regexp.MustCompile(`(?s)<variant name="([^"]+)">\s*<critique>(.*?)</critique>\s*<prompt>(.*?)</prompt>\s*</variant>`)
+						matches := re.FindAllStringSubmatch(beamOutput, -1)
+
+						for _, m := range matches {
+							name, critique, content := m[1], m[2], m[3]
+
+							// Calcular Acurácia contra os "Gold Samples"
+							accuracy := 100.0
+							if len(goldSamples) > 0 {
+								hits := 0
+								for _, gs := range goldSamples {
+									// Executa o novo prompt contra o input de ouro (Com Fallback)
+									fmt.Printf("[🕵️ TEST] Validando variante '%s' contra Caso de Ouro (Manto Ativo)...\n", name)
+									testOutput, _, err := a.LRouter.ExecuteWithFallback(ctx, content, gs["input"])
+									if err == nil && strings.Contains(strings.ToLower(testOutput), strings.ToLower(gs["output"])) {
+										hits++
+									}
+								}
+								accuracy = (float64(hits) / float64(len(goldSamples))) * 100.0
+							}
+
+							a.LStore.InsertCandidate(agentIDStr, name, content, critique, accuracy)
+						}
+
+						if len(matches) > 0 {
+							fmt.Printf("[⭐ BEAM SUCCESS] %d candidatos validados (Gold Check) para %s!\n", len(matches), agentIDStr)
+							a.emitEvent("lightning:beam_ready", agentIDStr)
+						}
 					}
 				}
 			}
 		}
-	}
+	}()
 }
 
 // GetLatestSpans retorna os últimos traces analíticos do DuckDB para o Dashboard.

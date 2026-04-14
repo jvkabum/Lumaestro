@@ -4,8 +4,6 @@ import (
 	"Lumaestro/internal/rag"
 	"fmt"
 	"strings"
-
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // ============================================================
@@ -119,13 +117,18 @@ func (a *App) AnalyzeGraphHealth() (map[string]interface{}, error) {
 
 // WeaveNeuralLinks percorre o grafo e cria conexões por similaridade (brain mapping).
 func (a *App) WeaveNeuralLinks(limit int) {
-	// 0. Safety Check: Evita panics se os serviços forem reiniciados em paralelo.
-	if a.qdrant == nil || a.embedder == nil || a.ctx == nil {
+	// ⚡ Captura local de referências (Escudo Anti-Panic)
+	// Isso evita que o sistema quebre se os motores forem reiniciados durante a execução
+	qdrant := a.qdrant
+	embedder := a.embedder
+	ctx := a.ctx
+
+	if qdrant == nil || embedder == nil || ctx == nil {
 		return
 	}
 
 	// 1. Busca as notas (as 50 mais recentes + uma amostra aleatória se possível)
-	notes, err := a.qdrant.Search("obsidian_knowledge", nil, limit)
+	notes, err := qdrant.Search("obsidian_knowledge", nil, limit)
 	if err != nil || len(notes) == 0 {
 		return
 	}
@@ -137,14 +140,21 @@ func (a *App) WeaveNeuralLinks(limit int) {
 			continue
 		}
 
+		// 🛡️ Health Check antes de processar cada nota (caso o contexto tenha sido cancelado)
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
 		// 2. Usamos o embedding para encontrar vizinhos próximos
-		vector, err := a.embedder.GenerateEmbedding(a.ctx, content, false)
+		vector, err := embedder.GenerateEmbedding(ctx, content, false)
 		if err != nil {
 			continue
 		}
 
 		// 3. Busca os 5 vizinhos mais próximos (aumentado de 3 para 5)
-		similars, err := a.qdrant.SearchWithScores("obsidian_knowledge", vector, 6)
+		similars, err := qdrant.SearchWithScores("obsidian_knowledge", vector, 6)
 		if err != nil {
 			continue
 		}
@@ -159,7 +169,7 @@ func (a *App) WeaveNeuralLinks(limit int) {
 			}
 
 			// Emite link visual (Peso maior para similaridade alta)
-			runtime.EventsEmit(a.ctx, "graph:edge", map[string]interface{}{
+			a.emitEvent("graph:edge", map[string]interface{}{
 				"source": strings.ToLower(name),
 				"target": strings.ToLower(targetName),
 				"weight": int(score * 6), // Reforço visual
@@ -177,7 +187,7 @@ func (a *App) HandleNodeClick(nodeID string) {
 	if a.ranker != nil {
 		a.ranker.Reinforce(nodeID)
 
-		runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+		a.emitEvent("agent:log", map[string]string{
 			"source":  "NEURAL",
 			"content": fmt.Sprintf("🧠 Reforço sináptico aplicado ao nó: %s", nodeID),
 		})
@@ -219,7 +229,7 @@ func (a *App) RunReconScan() string {
 	for _, p := range proposals {
 		if !p.Auto {
 			count++
-			runtime.EventsEmit(a.ctx, "agent:proposal", p)
+			a.emitEvent("agent:proposal", p)
 		}
 	}
 

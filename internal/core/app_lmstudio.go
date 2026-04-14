@@ -8,8 +8,6 @@ import (
 
 	"Lumaestro/internal/config"
 	"Lumaestro/internal/provider"
-
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 func (a *App) ensureLMStudioClient() (*provider.LMStudioClient, *config.Config, error) {
@@ -121,7 +119,7 @@ func (a *App) TestLMStudioModel(url string, model string) map[string]interface{}
 func (a *App) lmStudioChat(sessionID string, prompt string) {
 	client, cfg, err := a.ensureLMStudioClient()
 	if err != nil {
-		runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+		a.emitEvent("agent:log", map[string]string{
 			"source":  "LMSTUDIO",
 			"content": "❌ LM Studio indisponível: " + err.Error(),
 		})
@@ -146,14 +144,14 @@ func (a *App) lmStudioChat(sessionID string, prompt string) {
 	ctx, cancel := context.WithTimeout(a.ctx, 120*time.Second)
 	defer cancel()
 
-	runtime.EventsEmit(a.ctx, "agent:profile", map[string]string{
+	a.emitEvent("agent:profile", map[string]string{
 		"name":   "LM Studio",
 		"engine": "lmstudio",
 	})
 
 	response, err := client.Chat(ctx, model, sysprompt, prompt)
 	if err != nil {
-		runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+		a.emitEvent("agent:log", map[string]string{
 			"source":  "LMSTUDIO",
 			"content": "❌ Erro no LM Studio: " + err.Error(),
 		})
@@ -161,12 +159,12 @@ func (a *App) lmStudioChat(sessionID string, prompt string) {
 	}
 
 	// Emite a resposta completa (sem streaming nativo, pois LM Studio não requer SSE aqui)
-	runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+	a.emitEvent("agent:log", map[string]string{
 		"source":  "LMSTUDIO",
 		"content": response,
 	})
-	runtime.EventsEmit(a.ctx, "agent:turn_complete", "lmstudio")
-	runtime.EventsEmit(a.ctx, "agent:done", map[string]string{
+	a.emitEvent("agent:turn_complete", "lmstudio")
+	a.emitEvent("agent:done", map[string]string{
 		"session": sessionID,
 	})
 }

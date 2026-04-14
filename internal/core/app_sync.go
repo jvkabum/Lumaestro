@@ -25,7 +25,7 @@ func (a *App) ScanVault() string {
 	}
 
 	if a.crawler == nil {
-		runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+		a.emitEvent("agent:log", map[string]string{
 			"source":  "SYSTEM",
 			"content": "⚠️ Sync Obsidian 3D bloqueado: sem motor de embeddings ativo. Verifique se o seu provedor (Local, Gemini ou Claude) está configurado e online.",
 		})
@@ -34,16 +34,21 @@ func (a *App) ScanVault() string {
 
 	// 🕵️⚡ RAG em Segundo Plano: Previne travamento total da UI e do Chat
 	go func() {
+		// ⚡ Captura local de referências (Escudo Anti-Panic)
+		crawler := a.crawler
+		ctx := a.ctx
+		qdrant := a.qdrant
+
 		// 1. Verificação Crítica de Motor e Contexto
-		if a.crawler == nil || a.ctx == nil || a.qdrant == nil {
+		if crawler == nil || ctx == nil || qdrant == nil {
 			fmt.Println("[BACKEND] ⏳ Scan ABORTADO: Motores em transição ou offline.")
 			return
 		}
 
-		err := a.crawler.IndexVault(a.ctx)
+		err := crawler.IndexVault(ctx)
 		if err != nil {
 			fmt.Printf("[BACKEND] Erro na Indexação do Vault: %v\n", err)
-			runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+			a.emitEvent("agent:log", map[string]string{
 				"source":  "ERROR",
 				"content": "❌ Erro na Indexação do Obsidian: " + err.Error(),
 			})
@@ -53,7 +58,7 @@ func (a *App) ScanVault() string {
 		// 2. Indexar a documentação do projeto (Lumaestro Core)
 		// Isso garante que o conhecimento 'RAG' do sistema também esteja disponível.
 		fmt.Println("[BACKEND] Indexando documentos internos do sistema...")
-		err = a.crawler.IndexSystemDocs(a.ctx, "./")
+		err = crawler.IndexSystemDocs(ctx, "./")
 		if err != nil {
 			fmt.Printf("[BACKEND] Aviso: Erro ao indexar docs do sistema: %v\n", err)
 		}
@@ -177,7 +182,7 @@ func (a *App) ResetQdrantDB() string {
 	}
 
 	// 4. Notifica o Frontend
-	runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+	a.emitEvent("agent:log", map[string]string{
 		"source":  "SYSTEM",
 		"content": "☢️ RESET COMPLETO: Banco de dados Qdrant e cache local foram expurgados.",
 	})
@@ -312,7 +317,7 @@ func (a *App) SyncAllNodes() {
 			"weight": weight,
 		}
 		edgesBatch = append(edgesBatch, edge)
-		runtime.EventsEmit(a.ctx, "graph:edge", edge)
+		a.emitEvent("graph:edge", edge)
 	}
 
 	for _, p := range points {
@@ -409,14 +414,16 @@ func (a *App) SyncAllNodes() {
 	a.saveTopologyCache(nodesBatch, edgesBatch)
 
 	// Emite o pacote completo de nós de uma só vez
-	runtime.EventsEmit(a.ctx, "graph:nodes:batch", nodesBatch)
+	a.emitEvent("graph:nodes:batch", nodesBatch)
 	fmt.Printf("[Sync] ✅ %d nós e %d arestas sincronizados e cacheados.\n", len(nodesBatch), len(edgesBatch))
 
 	// 🐝 Automação: Dispara saúde e tecelagem automaticamente após o Sync
 	go func() {
+		ctx := a.ctx // Ancoragem de segurança
 		time.Sleep(500 * time.Millisecond) // Pequeno respiro para o motor físico
 		stats, _ := a.AnalyzeGraphHealth()
-		runtime.EventsEmit(a.ctx, "graph:health:update", stats)
+		a.emitEvent("graph:health:update", stats)
+		_ = ctx // Mantém a referência viva
 	}()
 }
 

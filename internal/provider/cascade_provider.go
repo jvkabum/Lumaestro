@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -38,6 +39,7 @@ func (c *CascadeProvider) GenerateText(ctx context.Context, prompt string) (stri
 			continue
 		}
 
+		fmt.Printf("[Cascade] 🚀 Tentando motor: %s...\n", c.Names[i])
 		res, err := gen.GenerateText(ctx, prompt)
 		if err == nil {
 			return res, nil
@@ -52,6 +54,7 @@ func (c *CascadeProvider) GenerateText(ctx context.Context, prompt string) (stri
 			if c.OnFailover != nil {
 				c.OnFailover(c.Names[i], c.Names[i+1], err.Error())
 			}
+			fmt.Printf("[Cascade] 🔄 FAILOVER disparado: %s falhou ➔ Tentando %s (Motivo: %v)\n", c.Names[i], c.Names[i+1], err)
 			// Pequeno cooldown antes de tentar o próximo para estabilizar a rede
 			time.Sleep(500 * time.Millisecond)
 			continue

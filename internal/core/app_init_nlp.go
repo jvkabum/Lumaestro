@@ -24,6 +24,7 @@ func (a *App) initNLPEngine(cfg *config.Config) (provider.ContentGenerator, erro
 	if ragProvider == "" {
 		ragProvider = "gemini"
 	}
+	fmt.Printf("[NLP] 🔍 Inicializando motores... RAG Alvo: %s | Embeddings Alvo: %s\n", ragProvider, embProvider)
 
 	// ─── Motor de Embeddings ──────────────────────────────────────────────────
 	if embProvider == "lmstudio" && cfg.LMStudioEnabled && cfg.LMStudioURL != "" {
@@ -108,14 +109,30 @@ func (a *App) initNLPEngine(cfg *config.Config) (provider.ContentGenerator, erro
 	// ─── Motor de RAG/Ontologia (Geração de Conteúdo) ─────────────────────────
 	var contentGen provider.ContentGenerator
 	if a.embedder != nil {
+		fmt.Printf("[NLP] 🛡️ Verificando Modo Sobrevivência (Failover)... Alvo: %s\n", ragProvider)
 		if cfg.HybridFailoverEnabled && len(cfg.FailoverPriority) > 0 {
 			a.emitBoot("expert", "🛡️", "Modo Sobrevivência ATIVO: Inicializando Cascata de Resiliência...")
 			
 			cascade := provider.NewCascadeProvider(func(from, to, reason string) {
-				a.emitBoot("expert", "⚠️", fmt.Sprintf("Failover disparado: %s ➔ %s (Motivo: %s)", from, to, reason))
+				fmt.Printf("[RAG] ⚠️ FAILOVER: %s ➡ %s (Motivo: %s)\n", from, to, reason)
+				a.emitBoot("expert", "⚠️", fmt.Sprintf("Failover disparado: %s ➤ %s (Motivo: %s)", from, to, reason))
 			})
 
-			for _, provName := range cfg.FailoverPriority {
+			// 🎯 Respeita a escolha do usuário: rag_provider é SEMPRE o primeiro da cascata
+			priority := cfg.FailoverPriority
+			if ragProvider != "" {
+				// Garante que o provedor selecionado está no topo
+				reordered := []string{ragProvider}
+				for _, p := range priority {
+					if strings.ToLower(strings.TrimSpace(p)) != ragProvider {
+						reordered = append(reordered, p)
+					}
+				}
+				priority = reordered
+				a.emitBoot("expert", "🎯", fmt.Sprintf("Cascata reordenada: %s é o motor principal (seleção do usuário)", strings.ToUpper(ragProvider)))
+			}
+
+			for _, provName := range priority {
 				pName := strings.ToLower(strings.TrimSpace(provName))
 				switch pName {
 				case "groq":
@@ -159,6 +176,7 @@ func (a *App) initNLPEngine(cfg *config.Config) (provider.ContentGenerator, erro
 				}
 			}
 			contentGen = cascade
+			fmt.Printf("[RAG] 🎯 Cascata final: %v (Motor principal: %s)\n", cascade.Names, strings.ToUpper(ragProvider))
 		} else if ragProvider == "lmstudio" && cfg.LMStudioEnabled && cfg.LMStudioURL != "" {
 			ragModel := cfg.RAGModel
 			if ragModel == "" {

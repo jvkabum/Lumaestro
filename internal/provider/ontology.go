@@ -42,23 +42,35 @@ func NewOntologyService(ctx context.Context, embedder ContentGenerator) *Ontolog
 
 // ExtractTriples extrai fatos estruturados usando a API oficial do GenAI (bypassando o frágil CLI).
 func (s *OntologyService) ExtractTriples(ctx context.Context, text string, contextHint string) ([]Triple, error) {
-	prompt := fmt.Sprintf(`Extraia triplas semânticas (Sujeito-Predicado-Objeto) do texto abaixo.
-Retorne APENAS um ARRAY JSON puro. NÃO use tags de markdown e NÃO use wrappers como {"triples": [...]}.
-Exemplo exato do formato esperado:
-[
-  {"subject": "Lumaestro", "predicate": "uses", "object": "Qdrant"}
- ]
+	prompt := fmt.Sprintf(`=== EXTRATOR DE CONHECIMENTO NEURO-SIMBÓLICO (RAG) ===
 
-## DICA DE CONTEXTO GLOBAL:
-Use esta informação para resolver pronomes como "ele", "ela", "o projeto", "a empresa": 
+Você é o Córtex Analítico do sistema Lumaestro. Sua tarefa é extrair fatos lógicos estruturados (Triplas: Sujeito-Predicado-Objeto) para alimentar uma Rede Neural (Knowledge Graph).
+
+📌 CONTEXTO GLOBAL DO DOCUMENTO:
+Use a informação abaixo para resolver conexões e pronomes genéricos (ex: "ele", "o aplicativo"): 
 > %s
 
-## BLUEPRINT OBRIGATÓRIO:
-1. CLASSES: [Person, Project, Task, Concept, Technology, Milestone, Bug, Decision]
-2. RELAÇÕES: [is_part_of, works_on, uses, defines, explains, mentions, created, resolved, depends_on]
-3. REGRA: Use apenas os termos acima. Atomize os fatos.
+BLUEPRINT OBRIGATÓRIO (Restrições de Vocabulário):
+1. CLASSES VÁLIDAS: [Person, Project, Task, Concept, Technology, Milestone, Bug, Decision]
+2. RELAÇÕES (Predicados permitidos): [is_part_of, works_on, uses, defines, explains, mentions, created, resolved, depends_on]
 
-Texto:
+FORMATO DE SAÍDA (ARRAY JSON OBRIGATÓRIO):
+Você DEVE retornar APENAS um objeto JSON correspondendo a esta estrutura.
+[
+  {
+    "subject": "Entidade A (Curta e Direta)",
+    "predicate": "relation_from_blueprint",
+    "object": "Entidade B (Curta e Direta)"
+  }
+]
+
+=== DIRETRIZES TÉCNICAS (SOBREVIVÊNCIA) ===
+1. Atomização: Quebre as informações em relações atômicas verdadeiras.
+2. Formato Puro: NÃO RETORNE tags markdown. NÃO justifique. NÃO emita pensamentos (ex: <thought>). Apenas Inicie com '[' e termine com ']'.
+3. Evasiva (Null Output): Se o texto não contiver fatos úteis, lógicos ou técnicos (Ex: Contrato de Licença, Código Base inoperante, Interface vazia), RETORNE ESTRITAMENTE:
+[]
+
+=== TEXTO PARA ANALISAR ===
 %s`, contextHint, text)
 
 	if s.Embedder == nil {
@@ -136,12 +148,35 @@ Formato:
 }
 
 func parseTriples(rawJSON string) ([]Triple, error) {
-	rawJSON = strings.TrimPrefix(rawJSON, "```json")
-	rawJSON = strings.TrimPrefix(rawJSON, "```")
-	rawJSON = strings.TrimSuffix(rawJSON, "```")
-	rawJSON = strings.TrimSpace(rawJSON)
+	// 🛡️ Blindagem contra modelos reasoning que usam preambles como <thought>
+	startIndex := strings.Index(rawJSON, "[")
+	endIndex := strings.LastIndex(rawJSON, "]")
+
+	if startIndex != -1 && endIndex != -1 && endIndex > startIndex {
+		rawJSON = rawJSON[startIndex : endIndex+1]
+	} else {
+		// A Inteligência não gerou nenhum array (provável recusa de leitura do documento)
+		rawLog := rawJSON
+		if len(rawLog) > 100 {
+			rawLog = rawLog[:100] + "..."
+		}
+		fmt.Printf("[RAG] 🛡️ Modelo recusou formatação JSON ou não encontrou fatos. RAW: %s\n", rawLog)
+		return nil, fmt.Errorf("ausência de array JSON na resposta do gerador")
+	}
 
 	var triples []Triple
 	err := json.Unmarshal([]byte(rawJSON), &triples)
-	return triples, err
+	if err != nil {
+		fmt.Printf("[RAG] ⚠️ IA alucinou texto que não é JSON: %s\n", rawJSON[:minCustom(len(rawJSON), 60)])
+		return nil, nil // Silencia o erro, tratando como arquivo sem triplas extraíveis úteis
+	}
+	return triples, nil
+}
+
+// Helper min() tolerante a versões de compilador antigas.
+func minCustom(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

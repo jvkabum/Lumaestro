@@ -19,7 +19,7 @@ type GroqProvider struct {
 
 func NewGroqProvider(apiKey, model string) *GroqProvider {
 	if model == "" {
-		model = "llama-3.3-70b-versatile"
+		model = "qwen/qwen3-32b"
 	}
 	return &GroqProvider{
 		model: model,
@@ -82,11 +82,13 @@ func (g *GroqProvider) GenerateText(ctx context.Context, prompt string) (string,
 		}
 
 		if resp.StatusCode != http.StatusOK {
+			fmt.Printf("[Groq] ❌ Erro de API (%d): %s\n", resp.StatusCode, string(respBody))
 			return "", fmt.Errorf("Groq API retornou %d: %s", resp.StatusCode, string(respBody))
 		}
 
 		var chatResp lmChatResponse
 		if err := json.Unmarshal(respBody, &chatResp); err != nil {
+			fmt.Printf("[Groq] ⚠️ Recebido documento não-JSON (Status %d). Primeiros 200 chars: %s\n", resp.StatusCode, string(respBody)[:min(len(respBody), 200)])
 			return "", fmt.Errorf("erro ao parsear resposta da Groq: %v", err)
 		}
 

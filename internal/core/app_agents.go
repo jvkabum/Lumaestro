@@ -6,7 +6,6 @@ import (
 	"os/exec"
 
 	"github.com/google/uuid"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // StartLoginSession inicia uma sessão de terminal interativa interna para login.
@@ -19,7 +18,7 @@ func (a *App) StartLoginSession(agent string) string {
 		return "Erro ao iniciar sessão de login: " + err.Error()
 	}
 
-	runtime.EventsEmit(a.ctx, "terminal:started", map[string]interface{}{
+	a.emitEvent("terminal:started", map[string]interface{}{
 		"agent":     agent,
 		"mode":      "Configuração/Login",
 		"isRealPTY": true,
@@ -117,7 +116,7 @@ func (a *App) StopAgentSession(agent string) error {
 		return fmt.Errorf("nenhuma sessão ativa ACP encontrada para %s", agent)
 	}
 
-	runtime.EventsEmit(a.ctx, "terminal:closed", agent)
+	a.emitEvent("terminal:closed", agent)
 	return nil
 }
 

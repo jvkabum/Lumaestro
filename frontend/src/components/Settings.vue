@@ -880,7 +880,8 @@ watch(() => store.activeTab, (tab) => {
           </p>
 
           <!-- DISPLAY DINÂMICO DE CASCATA -->
-          <div v-if="store.config.hybrid_failover_enabled" style="margin-top: 1.5rem;">
+          <div style="margin-top: 1.5rem; transition: opacity 0.3s;" 
+               :style="!store.config.hybrid_failover_enabled ? 'opacity: 0.4; pointer-events: none; filter: grayscale(0.5);' : ''">
              <div style="font-size: 0.7rem; color: #64748b; font-weight: 800; letter-spacing: 1px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
                <span style="display: inline-block; width: 8px; height: 1px; background: #334155;"></span>
                CONFIGURAR PRIORIDADE DE RESILIÊNCIA
