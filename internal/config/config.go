@@ -46,6 +46,8 @@ type Config struct {
 	GeminiAccounts      []GeminiAccount `json:"gemini_accounts"`  // 🌟 Nova lista de contas
 	ClaudeAPIKey        string          `json:"claude_api_key"`
 	UseClaudeAPIKey     bool            `json:"use_claude_api_key"`
+	GroqAPIKey          string          `json:"groq_api_key"`
+	GroqKeyIndex        int             `json:"groq_key_index"` // Índice da chave ativa no pool Groq
 	ActiveAgent         string          `json:"active_agent"`
 	AutoStartAgents     []string        `json:"auto_start_agents"`
 	AgentLanguage       string          `json:"agent_language"`
@@ -76,9 +78,12 @@ type Config struct {
 	EmbeddingDimension int    `json:"embedding_dimension"` // 3072 para Gemini, 768 para nomic, etc.
 
 	// 🧠 Motor de RAG/Ontologia (geração textual para extração de triplas e chat semântico)
-	RAGProvider string `json:"rag_provider"` // "gemini", "lmstudio", "claude" ou "native"
-	RAGModel    string `json:"rag_model"`    // Ex: "google/gemma-4-26b-a4b", "claude-3-5-sonnet-latest"
-	GeminiModel string `json:"gemini_model"` // Modelo padrão para chat (auto, 2.5-flash, etc)
+	RAGProvider           string   `json:"rag_provider"` // "gemini", "lmstudio", "claude" ou "native"
+	RAGModel              string   `json:"rag_model"`    // Ex: "google/gemma-4-26b-a4b", "claude-3-5-sonnet-latest"
+	HybridFailoverEnabled bool     `json:"hybrid_failover_enabled"`
+	FailoverPriority      []string `json:"failover_priority"` // Ex: ["groq", "gemini", "native"]
+	GeminiModel           string   `json:"gemini_model"`      // Modelo padrão para chat (auto, 2.5-flash, etc)
+	GroqModel             string   `json:"groq_model"`        // Modelo padrão para Groq (ex: llama-3.3-70b-versatile)
 }
 
 // NormalizeProviders garante defaults seguros para o pool de provedores e motores.
@@ -88,7 +93,7 @@ func (c *Config) NormalizeProviders() {
 	}
 
 	if len(c.ActiveModelProviders) == 0 {
-		c.ActiveModelProviders = []string{"gemini", "claude", "lmstudio", "native"}
+		c.ActiveModelProviders = []string{"gemini", "claude", "lmstudio", "native", "groq"}
 	}
 
 	if strings.TrimSpace(c.PrimaryProvider) == "" {
@@ -109,8 +114,15 @@ func (c *Config) NormalizeProviders() {
 		}
 	}
 
-	if strings.TrimSpace(c.RAGProvider) == "" {
+	if c.RAGProvider == "" {
 		c.RAGProvider = "gemini"
+	}
+	if len(c.FailoverPriority) == 0 {
+		c.FailoverPriority = []string{"groq", "gemini", "native"}
+	}
+
+	if strings.TrimSpace(c.GroqModel) == "" {
+		c.GroqModel = "llama-3.3-70b-versatile"
 	}
 }
 
@@ -123,6 +135,7 @@ func (c *Config) GetActiveProviders() []string {
 		"claude":   true,
 		"lmstudio": true,
 		"native":   true,
+		"groq":     true,
 	}
 	seen := map[string]bool{}
 	providers := make([]string, 0, len(c.ActiveModelProviders))
@@ -186,6 +199,49 @@ func (c *Config) RotateGeminiKey() string {
 // GeminiKeyCount retorna quantas chaves estão no pool.
 func (c *Config) GeminiKeyCount() int {
 	return len(c.GetGeminiKeys())
+}
+
+// GetGroqKeys retorna a lista de chaves API da Groq (split por vírgula).
+func (c *Config) GetGroqKeys() []string {
+	raw := strings.TrimSpace(c.GroqAPIKey)
+	if raw == "" {
+		return nil
+	}
+	var keys []string
+	for _, k := range strings.Split(raw, ",") {
+		k = strings.TrimSpace(k)
+		if k != "" {
+			keys = append(keys, k)
+		}
+	}
+	return keys
+}
+
+// GetActiveGroqKey retorna a chave API ativa do pool Groq.
+func (c *Config) GetActiveGroqKey() string {
+	keys := c.GetGroqKeys()
+	if len(keys) == 0 {
+		return ""
+	}
+	idx := c.GroqKeyIndex % len(keys)
+	return keys[idx]
+}
+
+// RotateGroqKey avança para a próxima chave no pool Groq e persiste.
+func (c *Config) RotateGroqKey() string {
+	keys := c.GetGroqKeys()
+	if len(keys) <= 1 {
+		return c.GetActiveGroqKey()
+	}
+	c.GroqKeyIndex = (c.GroqKeyIndex + 1) % len(keys)
+	Save(*c)
+	fmt.Printf("[GroqPool] 🔄 Rotação de chave: Agora usando chave #%d de %d\n", c.GroqKeyIndex+1, len(keys))
+	return keys[c.GroqKeyIndex]
+}
+
+// GroqKeyCount retorna quantas chaves estão no pool Groq.
+func (c *Config) GroqKeyCount() int {
+	return len(c.GetGroqKeys())
 }
 
 func getConfigPath() string {

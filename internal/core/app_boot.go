@@ -5,8 +5,6 @@ import (
 	"Lumaestro/internal/provider"
 	"fmt"
 	"time"
-
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // bootSequence executa a inicialização dos motores em background. (DNA 1:1)
@@ -35,7 +33,7 @@ func (a *App) bootSequence() {
 				go func(agentName string) {
 					if err := a.StartAgentSession(agentName); err == nil {
 						time.Sleep(1 * time.Second)
-						runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+						a.emitEvent("agent:log", map[string]string{
 							"source": "SYSTEM", "type": "system",
 							"content": "🟢 Sessão '" + agentName + "' pronta.",
 						})

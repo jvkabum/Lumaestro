@@ -35,16 +35,10 @@ func (a *App) ScanVault() string {
 	// 🕵️⚡ RAG em Segundo Plano: Previne travamento total da UI e do Chat
 	go func() {
 		// 1. Verificação Crítica de Motor e Contexto
-		if a.crawler == nil || a.ctx == nil {
-			fmt.Println("[BACKEND] ⏳ Scan ADIADO: Aguardando prontidão dos motores...")
+		if a.crawler == nil || a.ctx == nil || a.qdrant == nil {
+			fmt.Println("[BACKEND] ⏳ Scan ABORTADO: Motores em transição ou offline.")
 			return
 		}
-
-		// 2. Mensagem silenciada no chat UI para respeitar o ambiente Black/Background
-		// runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
-		// 	"source":  "CRAWLER",
-		// 	"content": "🚀 Iniciando Sincronização Semântica Completa em background...",
-		// })
 
 		err := a.crawler.IndexVault(a.ctx)
 		if err != nil {
@@ -236,7 +230,8 @@ func (a *App) loadTopologyCache() *TopologyCache {
 
 // SyncAllNodes percorre o banco de dados e emite cada nota para o visualizador 3D.
 func (a *App) SyncAllNodes() {
-	if a.qdrant == nil || a.ctx == nil {
+	if a.qdrant == nil || a.ctx == nil || a.GEngine == nil {
+		fmt.Println("[Sync] ⚠️ Sincronização cancelada: Motores vitais indisponíveis.")
 		return
 	}
 

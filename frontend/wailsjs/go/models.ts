@@ -97,6 +97,8 @@ export namespace config {
 	    gemini_accounts: GeminiAccount[];
 	    claude_api_key: string;
 	    use_claude_api_key: boolean;
+	    groq_api_key: string;
+	    groq_key_index: number;
 	    active_agent: string;
 	    auto_start_agents: string[];
 	    agent_language: string;
@@ -119,7 +121,10 @@ export namespace config {
 	    embedding_dimension: number;
 	    rag_provider: string;
 	    rag_model: string;
+	    hybrid_failover_enabled: boolean;
+	    failover_priority: string[];
 	    gemini_model: string;
+	    groq_model: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Config(source);
@@ -136,6 +141,8 @@ export namespace config {
 	        this.gemini_accounts = this.convertValues(source["gemini_accounts"], GeminiAccount);
 	        this.claude_api_key = source["claude_api_key"];
 	        this.use_claude_api_key = source["use_claude_api_key"];
+	        this.groq_api_key = source["groq_api_key"];
+	        this.groq_key_index = source["groq_key_index"];
 	        this.active_agent = source["active_agent"];
 	        this.auto_start_agents = source["auto_start_agents"];
 	        this.agent_language = source["agent_language"];
@@ -158,7 +165,10 @@ export namespace config {
 	        this.embedding_dimension = source["embedding_dimension"];
 	        this.rag_provider = source["rag_provider"];
 	        this.rag_model = source["rag_model"];
+	        this.hybrid_failover_enabled = source["hybrid_failover_enabled"];
+	        this.failover_priority = source["failover_priority"];
 	        this.gemini_model = source["gemini_model"];
+	        this.groq_model = source["groq_model"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

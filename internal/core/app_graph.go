@@ -63,6 +63,9 @@ func (a *App) GetNeuralNodeContext(nodeID string) (map[string]interface{}, error
 func (a *App) AnalyzeGraphHealth() (map[string]interface{}, error) {
 	fmt.Println("[Audit] Analisando saúde do Grafo de Contexto...")
 
+	if a.qdrant == nil {
+		return nil, fmt.Errorf("banco vetorial offline")
+	}
 	obsidianCount, err := a.qdrant.CountPoints("obsidian_knowledge")
 	if err != nil {
 		return nil, err
@@ -116,7 +119,10 @@ func (a *App) AnalyzeGraphHealth() (map[string]interface{}, error) {
 
 // WeaveNeuralLinks percorre o grafo e cria conexões por similaridade (brain mapping).
 func (a *App) WeaveNeuralLinks(limit int) {
-	fmt.Printf("[Neural] Tecendo pontes em lote de %d notas...\n", limit)
+	// 0. Safety Check: Evita panics se os serviços forem reiniciados em paralelo.
+	if a.qdrant == nil || a.embedder == nil || a.ctx == nil {
+		return
+	}
 
 	// 1. Busca as notas (as 50 mais recentes + uma amostra aleatória se possível)
 	notes, err := a.qdrant.Search("obsidian_knowledge", nil, limit)

@@ -108,7 +108,58 @@ func (a *App) initNLPEngine(cfg *config.Config) (provider.ContentGenerator, erro
 	// ─── Motor de RAG/Ontologia (Geração de Conteúdo) ─────────────────────────
 	var contentGen provider.ContentGenerator
 	if a.embedder != nil {
-		if ragProvider == "lmstudio" && cfg.LMStudioEnabled && cfg.LMStudioURL != "" {
+		if cfg.HybridFailoverEnabled && len(cfg.FailoverPriority) > 0 {
+			a.emitBoot("expert", "🛡️", "Modo Sobrevivência ATIVO: Inicializando Cascata de Resiliência...")
+			
+			cascade := provider.NewCascadeProvider(func(from, to, reason string) {
+				a.emitBoot("expert", "⚠️", fmt.Sprintf("Failover disparado: %s ➔ %s (Motivo: %s)", from, to, reason))
+			})
+
+			for _, provName := range cfg.FailoverPriority {
+				pName := strings.ToLower(strings.TrimSpace(provName))
+				switch pName {
+				case "groq":
+					activeKey := cfg.GetActiveGroqKey()
+					if activeKey != "" {
+						groq := provider.NewGroqProvider(activeKey, cfg.GroqModel)
+						cascade.Add("GROQ", groq)
+						a.emitBoot("expert", "🏎️", "Cascata: Groq LPU adicionada ao pool.")
+					}
+				case "gemini":
+					if gemEmb, ok := a.embedder.(*provider.EmbeddingService); ok {
+						cascade.Add("GEMINI", gemEmb)
+						a.emitBoot("expert", "⚡", "Cascata: Gemini adicionado ao pool.")
+					} else {
+						gemSvc, err := provider.NewEmbeddingService(a.ctx, cfg.GetActiveGeminiKey())
+						if err == nil {
+							cascade.Add("GEMINI", gemSvc)
+							a.emitBoot("expert", "⚡", "Cascata: Gemini (serviço dedicado) adicionado.")
+						}
+					}
+				case "native":
+					qwenModel := "mradermacher/Qwen3.5-4B-Claude-4.6-Opus-Reasoning-Distilled-v2-heretic-GGUF:Qwen3.5-4B-Claude-4.6-Opus-Reasoning-Distilled-v2-heretic.Q4_K_M.gguf"
+					a.emitBoot("expert", "🧩", "Cascata: Preparando motor Local (Standby)...")
+					nativeExtraction := provider.NewNativeGenerator(qwenModel, 8086, "QWEN-LOCAL")
+					nativeExtraction.OnLog = func(line string) {
+						a.emitBoot("expert", "⏳", "Especialista: "+line)
+					}
+					if err := nativeExtraction.Start(); err == nil {
+						a.nativeExtraction = nativeExtraction
+						cascade.Add("NATIVE", nativeExtraction)
+						a.emitBoot("expert", "✅", "Cascata: Motor Local ONLINE (Especialista pronto).")
+					}
+				case "lmstudio":
+					if cfg.LMStudioEnabled && cfg.LMStudioURL != "" {
+						ragModel := cfg.RAGModel
+						if ragModel == "" { ragModel = cfg.LMStudioModel }
+						lms := provider.NewLMStudioEmbedder(cfg.LMStudioURL, "", ragModel)
+						cascade.Add("LMSTUDIO", lms)
+						a.emitBoot("expert", "🤖", "Cascata: LM Studio adicionado ao pool.")
+					}
+				}
+			}
+			contentGen = cascade
+		} else if ragProvider == "lmstudio" && cfg.LMStudioEnabled && cfg.LMStudioURL != "" {
 			ragModel := cfg.RAGModel
 			if ragModel == "" {
 				ragModel = cfg.LMStudioModel
@@ -138,8 +189,6 @@ func (a *App) initNLPEngine(cfg *config.Config) (provider.ContentGenerator, erro
 			}
 
 			// --- CHAT & ORQUESTRAÇÃO ---
-			// Agora focado 100% no Modo ACP Cloud (Gemini/Claude via CLI) para economizar RAM.
-			// Se quiser reativar o motor local de chat, descomente as linhas abaixo:
 			/*
 				gemmaModel := "unsloth/gemma-4-E4B-it-GGUF:gemma-4-E4B-it-Q4_K_M.gguf"
 				a.emitBoot("rag", "🧪", "Lançando Revisor Linguístico (Gemma 4 na 8087)...")
@@ -157,6 +206,18 @@ func (a *App) initNLPEngine(cfg *config.Config) (provider.ContentGenerator, erro
 				a.emitBoot("expert", "✅", "Especialista Claude-Distilled (Qwen 3.5 Q5) ONLINE")
 				a.nativeExtraction = nativeExtraction
 				contentGen = nativeExtraction
+			}
+		} else if ragProvider == "groq" {
+			activeKey := cfg.GetActiveGroqKey()
+			if activeKey == "" {
+				a.emitBoot("expert", "⚠️", "Chave API Groq ausente ou vazia. Por favor, insira nas configurações.")
+			} else {
+				groqModel := cfg.GroqModel
+				if groqModel == "" {
+					groqModel = "llama-3.3-70b-versatile"
+				}
+				contentGen = provider.NewGroqProvider(activeKey, groqModel)
+				a.emitBoot("expert", "✅", fmt.Sprintf("Especialista Groq LPU (%s) ONLINE (Key #%d)", groqModel, cfg.GroqKeyIndex+1))
 			}
 		} else if ragProvider == "gemini" || ragProvider == "" {
 			if gemEmb, ok := a.embedder.(*provider.EmbeddingService); ok {

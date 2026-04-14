@@ -18,6 +18,7 @@ func (a *App) GetToolsStatus() map[string]bool {
 		"obsidian":    a.installer.CheckStatus("obsidian"),
 		"claude_auth": a.installer.CheckClaudeAuth(),
 		"gemini_auth": a.installer.CheckGeminiAuth(),
+		"groq":        a.config != nil && a.config.GroqAPIKey != "",
 	}
 }
 

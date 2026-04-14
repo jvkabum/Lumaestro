@@ -16,6 +16,8 @@ export const useSettingsStore = defineStore('settings', () => {
     gemini_accounts: [],
     claude_api_key: '',
     use_claude_api_key: false,
+    groq_api_key: '',
+    groq_model: 'llama-3.3-70b-versatile',
     active_agent: 'gemini',
     auto_start_agents: [],
     agent_language: 'Português do Brasil',
@@ -38,7 +40,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
     // Pool de motores ativos (blend entre provedores)
     blend_active_models: true,
-    active_model_providers: ['gemini', 'claude', 'lmstudio'],
+    active_model_providers: ['gemini', 'claude', 'lmstudio', 'groq', 'native'],
     primary_provider: 'gemini',
 
     // Motor de Embeddings (vetores semânticos para Qdrant)
@@ -49,6 +51,8 @@ export const useSettingsStore = defineStore('settings', () => {
     // Motor de RAG/Ontologia (geração textual para triplas e chat semântico)
     rag_provider: 'gemini',            // 'gemini', 'lmstudio' ou 'claude'
     rag_model: '',                     // Ex: 'google/gemma-4-26b-a4b', 'claude-3-5-sonnet-latest'
+    hybrid_failover_enabled: false,
+    failover_priority: ['groq', 'gemini', 'native']
   })
 
   // ── Status de Ferramentas ──
@@ -59,7 +63,8 @@ export const useSettingsStore = defineStore('settings', () => {
       claude: false,
       obsidian: false,
       claude_auth: false,
-      gemini_auth: false
+      gemini_auth: false,
+      groq: false
     }
   })
 
@@ -110,6 +115,12 @@ export const useSettingsStore = defineStore('settings', () => {
     return raw.split(',').filter(k => k.trim() !== '').length
   })
 
+  const groqKeyCount = computed(() => {
+    const raw = (config.value.groq_api_key || '').trim()
+    if (!raw) return 0
+    return raw.split(',').filter(k => k.trim() !== '').length
+  })
+
   return {
     config, status,
     installLogs, installStatus, logContainer,
@@ -121,6 +132,6 @@ export const useSettingsStore = defineStore('settings', () => {
     newAccName,
     repoPathInput, coreNodeInput, includeCodeToggle, repoStatusMsg,
     lmModels, lmTesting, lmTestResult, lmLoadingModels,
-    geminiKeyCount
+    geminiKeyCount, groqKeyCount
   }
 })
