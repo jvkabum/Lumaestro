@@ -26,8 +26,14 @@ func NewInstaller() *Installer {
 
 // CheckStatus verifica se um comando está disponível no PATH do sistema.
 func (i *Installer) CheckStatus(name string) bool {
-	// Prioridade total para o PATH do sistema agora que usamos -g
-	_, err := exec.LookPath(name)
+	// No Windows, tenta com .exe se não houver extensão
+	searchName := name
+	if runtime.GOOS == "windows" && !strings.HasSuffix(strings.ToLower(name), ".exe") {
+		searchName = name + ".exe"
+	}
+
+	// Prioridade total para o PATH do sistema
+	_, err := exec.LookPath(searchName)
 	if err == nil {
 		return true
 	}
@@ -226,16 +232,31 @@ func (i *Installer) FixClaudePath() error {
 	return nil
 }
 
-// KillOrphans encerra qualquer instância pendente do llama-server para evitar conflitos de porta e leak de memória.
+// KillOrphans encerra qualquer instância pendente de serviços (por porta e nome) para evitar conflitos.
 func (i *Installer) KillOrphans() {
 	if runtime.GOOS == "windows" {
-		fmt.Println("[Installer] 🧹 Limpando processos zumbis do llama-server...")
-		exec.Command("taskkill", "/F", "/IM", "llama-server.exe", "/T").Run()
+		// Obtém o PID atual para evitar que o Maestro se encerre sozinho!
+		currentPid := os.Getpid()
+		fmt.Printf("[Installer] 🧹 Limpeza Profunda (PID Local %d): Encerrando instâncias zumbis nas portas 8001, 8085, 8086...\n", currentPid)
+		
+		// Script PowerShell robusto que ignora o processo atual
+		script := fmt.Sprintf(`
+			$currentPid = %d;
+			$ports = @(8001, 8085, 8086, 8087);
+			foreach ($p in $ports) {
+				$conns = Get-NetTCPConnection -LocalPort $p -ErrorAction SilentlyContinue | Where-Object { $_.OwningProcess -ne $currentPid };
+				if ($conns) {
+					$conns | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue };
+				}
+			}
+			Get-Process -Name "llama-server" -ErrorAction SilentlyContinue | Where-Object { $_.Id -ne $currentPid } | Stop-Process -Force -ErrorAction SilentlyContinue;
+		`, currentPid)
+		exec.Command("powershell", "-Command", script).Run()
 	} else {
 		exec.Command("pkill", "-9", "llama-server").Run()
 	}
-	// Pequena pausa para garantir que o SO liberou os sockets
-	time.Sleep(1 * time.Second)
+	// Pausa tática para o SO liberar os sockets e arquivos
+	time.Sleep(2 * time.Second)
 }
 
 // InstallObsidian via Powershell.

@@ -92,17 +92,27 @@ onMounted(async () => {
       bootError.value = data.message
       return
     }
-    // Evita duplicatas no HMR
-    if (!bootStages.value.find(s => s.stage === data.stage)) {
+    // REATIVIDADE FORÇADA: Atualiza estágio existente ou adiciona um novo
+    const index = bootStages.value.findIndex(s => s.stage === data.stage)
+    if (index !== -1) {
+      // Usar atribuição direta para garantir que o Vue 3 detecte a mudança na propriedade do objeto
+      bootStages.value[index].message = data.message
+      bootStages.value[index].icon = data.icon
+    } else {
       bootStages.value.push({ ...data, done: false })
     }
-    // Marca estágio anterior como concluído
-    if (bootStages.value.length > 1) {
-      bootStages.value[bootStages.value.length - 2].done = true
-    }
+    
+    // Marca estágios anteriores como concluídos
+    bootStages.value.forEach((s, i) => {
+      if (i < bootStages.value.length - 1) {
+        s.done = true
+      }
+    })
+
     // Quando o backend reporta 'ready', fecha o overlay com animação
     if (data.stage === 'ready') {
-      bootStages.value[bootStages.value.length - 1].done = true
+      const readyIdx = bootStages.value.findIndex(s => s.stage === 'ready')
+      if (readyIdx !== -1) bootStages.value[readyIdx].done = true
       setTimeout(() => { isBooting.value = false }, 1500)
     }
   })

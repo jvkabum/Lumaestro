@@ -97,6 +97,8 @@ func (n *NativeGenerator) Start() error {
 				if strings.Contains(lLine, "download") || 
 				   strings.Contains(lLine, "progress") || 
 				   strings.Contains(lLine, "%") || 
+				   strings.Contains(lLine, "failed") || 
+				   strings.Contains(lLine, "status") || 
 				   strings.Contains(lLine, "error") {
 					n.OnLog(line)
 				}

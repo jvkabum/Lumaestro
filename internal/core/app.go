@@ -202,6 +202,9 @@ func (a *App) initServices() error {
 	a.muInit.Lock()
 	defer a.muInit.Unlock()
 
+	// 🧹 LIMPEZA PRÉVIA: Mata motores órfãos de sessões ANTERIORES antes de iniciar os nossos
+	a.installer.KillOrphans()
+
 	// ─── LM Studio (sempre atualizado, independente dos outros motores) ───
 	cfg0, _ := config.Load()
 	if cfg0 != nil {
@@ -305,11 +308,7 @@ func (a *App) initServices() error {
 		a.emitBoot("embeddings", "🧩", "Iniciando motor nativo (llama.cpp)...")
 		native := provider.NewNativeEmbedder("")
 		native.OnLog = func(line string) {
-			a.emitBoot("embeddings", "⏳", "Baixando Gráfico: "+line)
-			runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
-				"source":  "NATIVE-EMB",
-				"content": "📥 " + line,
-			})
+			a.emitBoot("embeddings", "⏳", "Baixando Memória: "+line)
 		}
 		if err := native.Start(); err != nil {
 			a.emitBoot("embeddings", "⚠️", "Falha ao iniciar motor nativo: "+err.Error())
@@ -340,47 +339,44 @@ func (a *App) initServices() error {
 			contentGen = provider.NewLMStudioEmbedder(cfg.LMStudioURL, "", ragModel)
 			a.emitBoot("rag", "✅", "Motor RAG/Ontologia: LM Studio ("+ragModel+")")
 		} else if ragProvider == "native" {
-			a.emitBoot("rag", "🧩", "Iniciando Cérebro Colaborativo (Qwen + Gemma)...")
+			a.emitBoot("expert", "🧩", "Iniciando Especialista Claude-Distilled (Lógica Elite)...")
 
 			// --- TIME DE ELITE 2026 ---
 			// OPÇÃO A: O Especialista (Qwen 3.5 4B destilado do Claude 4.6 Opus - 262k Context)
-			qwenModel := "Jackrong/Qwen3.5-4B-Claude-4.6-Opus-Reasoning-Distilled-v2-GGUF:Qwen3.5-4B.Q5_K_M.gguf"
-			
-			// OPÇÕES RESERVA (Fallback):
-			// qwenModel := "mradermacher/Qwen3-4B-Qwen3.6-plus-Reasoning-Slerp-i1-GGUF:Qwen3-4B-Qwen3.6-plus-Reasoning-Slerp.i1-Q4_K_M.gguf"
-			// qwenModel := "khazarai/Qwen3-4B-Qwen3.6-plus-Reasoning-Distilled-GGUF:Q4_1" 
+			qwenModel := "Jackrong/Qwen3.5-4B-Claude-4.6-Opus-Reasoning-Distilled-v2-GGUF:Q5_K_M"
 
-			a.emitBoot("rag", "🧪", "Lançando Especialista de Lógica (Claude 4.6 Distilled na 8086)...")
+			// OPÇÕES RESERVA (Fallback):
+			// qwenModel := "Jackrong/Qwen3.5-4B-Claude-4.6-Opus-Reasoning-Distilled-v2-GGUF:Qwen3.5-4B.Q5_K_M.gguf"
+			// qwenModel := "khazarai/Qwen3-4B-Qwen3.6-plus-Reasoning-Distilled-GGUF:Q4_1"
+			// qwenModel := "mradermacher/Qwen3-4B-Qwen3.6-plus-Reasoning-Slerp-i1-GGUF:Qwen3-4B-Qwen3.6-plus-Reasoning-Slerp.i1-Q4_K_M.gguf"
+
+			a.emitBoot("expert", "🧪", "Lançando Especialista de Lógica (Claude 4.6 Distilled na 8086)...")
 			nativeExtraction := provider.NewNativeGenerator(qwenModel, 8086, "QWEN-CLAUDE")
 			nativeExtraction.OnLog = func(line string) {
-				a.emitBoot("rag", "⏳", "Baixando Especialista: "+line)
-				runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
-					"source":  "QWEN-CLAUDE",
-					"content": "📥 " + line,
-				})
+				a.emitBoot("expert", "⏳", "Baixando Especialista: "+line)
 			}
-			
+
 			// --- CHAT & ORQUESTRAÇÃO ---
 			// Agora focado 100% no Modo ACP Cloud (Gemini/Claude via CLI) para economizar RAM.
 			// Se quiser reativar o motor local de chat, descomente as linhas abaixo:
 			/*
-			gemmaModel := "unsloth/gemma-4-E4B-it-GGUF:gemma-4-E4B-it-Q4_K_M.gguf"
-			a.emitBoot("rag", "🧪", "Lançando Revisor Linguístico (Gemma 4 na 8087)...")
-			nativeGeneral := provider.NewNativeGenerator(gemmaModel, 8087, "GEMMA-4")
-			nativeGeneral.OnLog = func(line string) {
-				a.emitBoot("rag", "⏳", "Baixando Linguística: "+line)
-				runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
-					"source":  "GEMMA-4",
-					"content": "📥 " + line,
-				})
-			}
+				gemmaModel := "unsloth/gemma-4-E4B-it-GGUF:gemma-4-E4B-it-Q4_K_M.gguf"
+				a.emitBoot("rag", "🧪", "Lançando Revisor Linguístico (Gemma 4 na 8087)...")
+				nativeGeneral := provider.NewNativeGenerator(gemmaModel, 8087, "GEMMA-4")
+				nativeGeneral.OnLog = func(line string) {
+					a.emitBoot("rag", "⏳", "Baixando Linguística: "+line)
+					runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+						"source":  "GEMMA-4",
+						"content": "📥 " + line,
+					})
+				}
 			*/
 
 			errQ := nativeExtraction.Start()
 			// errG := nativeGeneral.Start()
 
 			if errQ == nil {
-				a.emitBoot("rag", "✅", "Motor Nativo (Especialista Claude-Distilled) ONLINE")
+				a.emitBoot("expert", "✅", "Especialista Claude-Distilled (Qwen 3.5 Q5) ONLINE")
 				a.nativeExtraction = nativeExtraction
 				contentGen = nativeExtraction
 			}
@@ -406,7 +402,7 @@ func (a *App) initServices() error {
 	}
 
 	a.emitBoot("neon", "🧠", "Sincronizando Córtex Neural...")
-	
+
 	search := rag.NewSearchService(a.qdrant, a.ranker)
 	a.navigator = rag.NewGraphNavigator(a.qdrant, a.ranker)
 	if a.embedder != nil && a.ontology != nil {
@@ -476,10 +472,7 @@ func (a *App) resetServicesForReload() {
 
 // injectContexts garante que todos os motores de RAG tenham o contexto oficial.
 func (a *App) injectContexts() {
-	// 1. Limpeza de Memória: Mata motores órfãos de sessões anteriores
-	a.installer.KillOrphans()
-
-	// 2. Garante que os diretórios de cache existam
+	// Garante que os diretórios de cache existam
 	os.MkdirAll(".context", 0755)
 
 	if a.ctx == nil {
