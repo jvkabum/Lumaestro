@@ -153,7 +153,7 @@ func (n *NativeGenerator) GenerateText(ctx context.Context, prompt string) (stri
 		"messages": []map[string]string{
 			{"role": "user", "content": prompt},
 		},
-		"temperature": 0.2, // Baixa temperatura para RAG (mais factual)
+		"temperature": 0.0, // Baixa temperatura para RAG (mais factual e determinístico)
 	}
 
 	body, _ := json.Marshal(payload)

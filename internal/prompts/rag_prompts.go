@@ -4,7 +4,8 @@ import "fmt"
 
 // GetNeuroSymbolicExtractorPrompt gera o prompt mestre para extração de triplas lógicas (RAG).
 func GetNeuroSymbolicExtractorPrompt(contextHint, text string) string {
-	return fmt.Sprintf(`=== EXTRATOR DE CONHECIMENTO NEURO-SIMBÓLICO (RAG) ===
+	return fmt.Sprintf(`/no_thinking
+=== EXTRATOR DE CONHECIMENTO NEURO-SIMBÓLICO (RAG) ===
 
 Você é o Córtex Analítico do sistema Lumaestro. Sua tarefa é extrair fatos lógicos estruturados (Triplas: Sujeito-Predicado-Objeto) para alimentar uma Rede Neural (Knowledge Graph).
 

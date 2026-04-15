@@ -32,6 +32,10 @@ func NewGroqProvider(apiKey, model string) *GroqProvider {
 func (g *GroqProvider) GenerateText(ctx context.Context, prompt string) (string, error) {
 	url := "https://api.groq.com/openai/v1/chat/completions"
 
+	maxRetries := 5
+	retryCount := 0
+	backoffSec := 22
+
 	for {
 		cfg, _ := config.Load()
 		if cfg == nil {
@@ -46,9 +50,12 @@ func (g *GroqProvider) GenerateText(ctx context.Context, prompt string) (string,
 		payload := map[string]interface{}{
 			"model": g.model,
 			"messages": []map[string]string{
-				{"role": "user", "content": prompt},
+				// /no_think: diretiva oficial Qwen3 para desativar raciocínio interno
+				// nesta tarefa (extração JSON estruturada), pensar demais prejudica o formato.
+				{"role": "user", "content": "/no_think\n" + prompt},
 			},
-			"temperature": 0.2,
+			"temperature": 0.0,
+			"max_tokens":  4096, // Garante que arrays longos de triplas não sejam cortados
 		}
 
 		body, err := json.Marshal(payload)
@@ -77,13 +84,19 @@ func (g *GroqProvider) GenerateText(ctx context.Context, prompt string) (string,
 			if cfg.GroqKeyCount() > 1 {
 				fmt.Printf("[GroqPool] ⚠️ Rate Limit na Chave #%d. Rotacionando...\n", cfg.GroqKeyIndex+1)
 				cfg.RotateGroqKey()
-				continue // Roteador assume próxima chave
-			} else {
-				// Se tivermos apenas 1 chave, precisamos domar o Crawler e usar o freio-motor
-				fmt.Printf("[GroqPool] ⏳ Limite de %d RPM estourado! Acionando Backoff. O Crawler vai entrar em hibernação por 22 segundos...\n", 6000)
-				time.Sleep(22 * time.Second)
-				continue // Tenta de novo após o cooldown
+				retryCount = 0 // Reseta contador ao trocar de chave
+				continue
 			}
+			// Backoff exponencial com limite de tentativas
+			retryCount++
+			if retryCount > maxRetries {
+				return "", fmt.Errorf("[GroqPool] Limite de %d tentativas de backoff atingido. Abortando para não travar o Crawler", maxRetries)
+			}
+			sleep := time.Duration(backoffSec) * time.Second
+			fmt.Printf("[GroqPool] ⏳ Rate Limit (%d/%d). Hibernando %ds...\n", retryCount, maxRetries, backoffSec)
+			time.Sleep(sleep)
+			backoffSec = min(backoffSec+10, 60) // Cresce até máx 60s
+			continue
 		} else if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusUnauthorized {
 			if cfg.GroqKeyCount() > 1 {
 				fmt.Printf("[GroqPool] ⚠️ Chave #%d Expirada/Inválida. Rotacionando...\n", cfg.GroqKeyIndex+1)

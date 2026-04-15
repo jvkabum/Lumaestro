@@ -127,7 +127,7 @@ func (c *LMStudioClient) Chat(ctx context.Context, model, systemPrompt, userMess
 	payload := lmChatRequest{
 		Model:       model,
 		Messages:    messages,
-		Temperature: 0.7,
+		Temperature: 0.0,
 		Stream:      false,
 	}
 

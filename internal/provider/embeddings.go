@@ -206,7 +206,12 @@ func (s *EmbeddingService) GenerateContentWithRetry(ctx context.Context, content
 
 				fmt.Printf("[ResilienceFleet] 🚀 Tentando modelo: %s (Chave %d/%d)\n", model, i+1, len(s.keys))
 
-				resp, err := client.Models.GenerateContent(ctx, model, contents, nil)
+				temp := float32(0.0)
+				config := &genai.GenerateContentConfig{
+					Temperature: &temp,
+				}
+
+				resp, err := client.Models.GenerateContent(ctx, model, contents, config)
 				if err == nil {
 					// Sincroniza a chave de sucesso no estado do serviço para próximas chamadas rápidas
 					s.Mu.Lock()

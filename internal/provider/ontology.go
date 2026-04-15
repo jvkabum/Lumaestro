@@ -112,8 +112,11 @@ Formato:
 
 func repairJSON(s string) string {
 	// Remove blocos <thought>, <think>, etc (comuns no Qwen3/DeepSeek)
-	s = regexp.MustCompile(`(?s)<thought>.*?</thought>`).ReplaceAllString(s, "")
-	s = regexp.MustCompile(`(?s)<think>.*?</think>`).ReplaceAllString(s, "")
+	s = regexp.MustCompile(`(?s)<(thought|think|reasoning)>.*?</(thought|think|reasoning)>`).ReplaceAllString(s, "")
+	// Caso a tag não tenha sido fechada (corte de contexto)
+	s = regexp.MustCompile(`(?s)<(thought|think|reasoning)>.*$`).ReplaceAllString(s, "")
+	s = regexp.MustCompile(`(?s)^.*?</(thought|think|reasoning)>`).ReplaceAllString(s, "")
+	 s = regexp.MustCompile(`(?s)^.*<think>`).ReplaceAllString(s, "")
 	
 	// Converte aspas simples para duplas (RE2 compatível, sem lookarounds)
 	// Captura o texto interno $1 e o caractere delimitador (+ espaços) $2
@@ -129,20 +132,34 @@ func parseTriples(rawJSON string) ([]Triple, error) {
 	// 🛡️ Limpeza Avançada: Regex repair para remover thoughts e consertar varreduras ruidosas
 	rawJSON = repairJSON(rawJSON)
 
-	// 🛡️ Blindagem contra modelos reasoning que usam preambles
-	startIndex := strings.Index(rawJSON, "[")
-	endIndex := strings.LastIndex(rawJSON, "]")
-
-	if startIndex != -1 && endIndex != -1 && endIndex > startIndex {
-		rawJSON = rawJSON[startIndex : endIndex+1]
-	} else {
-		// A Inteligência não gerou nenhum array (provável recusa de leitura do documento)
-		rawLog := rawJSON
-		if len(rawLog) > 100 {
-			rawLog = rawLog[:100] + "..."
+	// 🛡️ Blindagem: Localiza o array que realmente contém objetos de triplas
+	// Procuramos por um '[' seguido de um '{' em algum lugar, ignorando arrays simples de strings (echo do prompt)
+	dataIndex := strings.Index(rawJSON, "[{")
+	if dataIndex == -1 {
+		// Fallback para array vazio ou erro de formatação
+		if strings.Contains(rawJSON, "[]") {
+			return nil, nil
 		}
-		fmt.Printf("[RAG] 🛡️ Modelo recusou formatação JSON ou não encontrou fatos. RAW: %s\n", rawLog)
-		return nil, fmt.Errorf("ausência de array JSON na resposta do gerador")
+		
+		startIndex := strings.Index(rawJSON, "[")
+		endIndex := strings.LastIndex(rawJSON, "]")
+		
+		// 🛠️ Recuperação de Desastre: Se não houver ']', mas houver '[{', tentamos fechar o JSON manualmente.
+		if startIndex != -1 && endIndex == -1 && strings.Contains(rawJSON, "[{") {
+			rawJSON = rawJSON[startIndex:] + "}]" 
+			fmt.Printf("[RAG] 🩹 JSON truncado detectado. Tentando auto-reparo...\n")
+		} else if startIndex != -1 && endIndex != -1 && endIndex > startIndex {
+			rawJSON = rawJSON[startIndex : endIndex+1]
+		} else {
+			fmt.Printf("[RAG] 🛡️ Modelo recusou formatação JSON. RAW (parcial): %s\n", rawJSON[:minCustom(len(rawJSON), 50)])
+			return nil, fmt.Errorf("ausência de array JSON na resposta")
+		}
+	} else {
+		// Encontrou o início de um array de objetos
+		endIndex := strings.LastIndex(rawJSON, "]")
+		if endIndex > dataIndex {
+			rawJSON = rawJSON[dataIndex : endIndex+1]
+		}
 	}
 
 	var triples []Triple
@@ -151,7 +168,29 @@ func parseTriples(rawJSON string) ([]Triple, error) {
 		fmt.Printf("[RAG] ⚠️ IA alucinou texto que não é JSON: %s\n", rawJSON[:minCustom(len(rawJSON), 60)])
 		return nil, nil // Silencia o erro, tratando como arquivo sem triplas extraíveis úteis
 	}
-	return triples, nil
+
+	// 🛡️ JSON Schema Validation (Validação Estrutural Lógica)
+	// Garante que só injerimos no Knowledge Graph atributos válidos que formem uma aresta viável.
+	var validTriples []Triple
+	for _, t := range triples {
+		subject := strings.TrimSpace(t.Subject)
+		predicate := strings.TrimSpace(t.Predicate)
+		obj := strings.TrimSpace(t.Object)
+		// Impede nós "fantasmas"
+		if subject != "" && predicate != "" && obj != "" {
+			validTriples = append(validTriples, Triple{
+				Subject:   subject,
+				Predicate: predicate,
+				Object:    obj,
+			})
+		}
+	}
+
+	if len(validTriples) == 0 && len(triples) > 0 {
+		fmt.Printf("[RAG] ⚠️ Validação de Schema: Os objetos retornados não continham schema correto (ausência de sujeito, predicado ou objeto).\n")
+	}
+
+	return validTriples, nil
 }
 
 // Helper min() tolerante a versões de compilador antigas.
