@@ -81,9 +81,7 @@ func (n *NativeEmbedder) Start() error {
 		"--embedding",
 		"--pooling", "cls",
 		"--ctx-size", "2048",
-		"--n-gpu-layers", "0", // Não joga camadas na GPU
-		"--device", "none", // Bate a porta da GPU (não cria instâncias Vulkan)
-		"--no-op-offload",  // Impede que operações de tensores da CPU vazem para a GPU
+		"--n-gpu-layers", "-1", // -1 delega 100% das camadas que couberem na VRAM para a Placa de Vídeo; o resto fica na CPU.
 	)
 
 	fmt.Printf("[NativeEngine] 🚀 Iniciando: %s %v\n", finalBin, args)

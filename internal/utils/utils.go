@@ -233,7 +233,7 @@ func FormatGenAIError(err error) string {
 
 	// Limpeza de URLs e metadados brutos (Details: [map...])
 	// Focamos no que importa para o usuário
-	return fmt.Sprintf("[Gemini 429] Cota excedida para '%s'.%s", model, retry)
+	return fmt.Sprintf("[Cloud API 429] Cota excedida para '%s'.%s", model, retry)
 }
 
 // EncodeBase64 converte bytes para string base64.

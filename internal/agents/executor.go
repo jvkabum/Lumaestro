@@ -10,7 +10,9 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+
 	"Lumaestro/internal/config"
+	"Lumaestro/internal/prompts"
 )
 
 // ExecutionLog representa uma linha de saída do agente.
@@ -367,7 +369,7 @@ func (e *Executor) monitorSession(s *CLISession, stdout, stderr io.ReadCloser, a
 // ExecuteCLI roda o binário do agente para uma tarefa única (como Scan do Obsidian).
 // Este método NÃO usa ConPTY — é one-shot puro via StdoutPipe.
 func (e *Executor) ExecuteCLI(ctx context.Context, agent string, contextData string, query string) (string, error) {
-	fullPrompt := fmt.Sprintf("CONTEXTO DO OBSIDIAN:\n%s\n\nPERGUNTA DO USUÁRIO:\n%s", contextData, query)
+	fullPrompt := prompts.GetOneShotRAGPrompt(contextData, query)
 
 	var cmd *exec.Cmd
 	cwd, _ := os.Getwd()

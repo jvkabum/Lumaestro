@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
+
+	"Lumaestro/internal/prompts"
 )
 
 // Triple representa a unidade básica de conhecimento semântico.
@@ -42,36 +45,7 @@ func NewOntologyService(ctx context.Context, embedder ContentGenerator) *Ontolog
 
 // ExtractTriples extrai fatos estruturados usando a API oficial do GenAI (bypassando o frágil CLI).
 func (s *OntologyService) ExtractTriples(ctx context.Context, text string, contextHint string) ([]Triple, error) {
-	prompt := fmt.Sprintf(`=== EXTRATOR DE CONHECIMENTO NEURO-SIMBÓLICO (RAG) ===
-
-Você é o Córtex Analítico do sistema Lumaestro. Sua tarefa é extrair fatos lógicos estruturados (Triplas: Sujeito-Predicado-Objeto) para alimentar uma Rede Neural (Knowledge Graph).
-
-📌 CONTEXTO GLOBAL DO DOCUMENTO:
-Use a informação abaixo para resolver conexões e pronomes genéricos (ex: "ele", "o aplicativo"): 
-> %s
-
-BLUEPRINT OBRIGATÓRIO (Restrições de Vocabulário):
-1. CLASSES VÁLIDAS: [Person, Project, Task, Concept, Technology, Milestone, Bug, Decision]
-2. RELAÇÕES (Predicados permitidos): [is_part_of, works_on, uses, defines, explains, mentions, created, resolved, depends_on]
-
-FORMATO DE SAÍDA (ARRAY JSON OBRIGATÓRIO):
-Você DEVE retornar APENAS um objeto JSON correspondendo a esta estrutura.
-[
-  {
-    "subject": "Entidade A (Curta e Direta)",
-    "predicate": "relation_from_blueprint",
-    "object": "Entidade B (Curta e Direta)"
-  }
-]
-
-=== DIRETRIZES TÉCNICAS (SOBREVIVÊNCIA) ===
-1. Atomização: Quebre as informações em relações atômicas verdadeiras.
-2. Formato Puro: NÃO RETORNE tags markdown. NÃO justifique. NÃO emita pensamentos (ex: <thought>). Apenas Inicie com '[' e termine com ']'.
-3. Evasiva (Null Output): Se o texto não contiver fatos úteis, lógicos ou técnicos (Ex: Contrato de Licença, Código Base inoperante, Interface vazia), RETORNE ESTRITAMENTE:
-[]
-
-=== TEXTO PARA ANALISAR ===
-%s`, contextHint, text)
+	prompt := prompts.GetNeuroSymbolicExtractorPrompt(contextHint, text)
 
 	if s.Embedder == nil {
 		return nil, fmt.Errorf("serviço de motor generativo (Embedder) indisponível")
@@ -90,18 +64,7 @@ Você DEVE retornar APENAS um objeto JSON correspondendo a esta estrutura.
 
 // ValidateConflict decide entre informações contraditórias usando API nativa GenAI.
 func (s *OntologyService) ValidateConflict(ctx context.Context, oldFact, newFact, contextStr string) (string, error) {
-	prompt := fmt.Sprintf(`Você é o Agente Validador de Verdade.
-Detectamos um conflito no Grafo de Conhecimento.
-
-FATO ANTIGO: %s
-FATO NOVO: %s
-CONTEXTO RECENTE: %s
-
-Sua tarefa:
-Responda APENAS "UPDATE" se o Fato Novo for claramente uma atualização ou correção válida.
-Responda APENAS "CONFLICT" se houver dúvida real.
-
-Decisão:`, oldFact, newFact, contextStr)
+	prompt := prompts.GetConflictValidatorPrompt(oldFact, newFact, contextStr)
 
 	if s.Embedder == nil {
 		return "CONFLICT", fmt.Errorf("motor generativo indisponível")
@@ -147,8 +110,26 @@ Formato:
 	return description, triples, nil
 }
 
+func repairJSON(s string) string {
+	// Remove blocos <thought>, <think>, etc (comuns no Qwen3/DeepSeek)
+	s = regexp.MustCompile(`(?s)<thought>.*?</thought>`).ReplaceAllString(s, "")
+	s = regexp.MustCompile(`(?s)<think>.*?</think>`).ReplaceAllString(s, "")
+	
+	// Converte aspas simples para duplas (RE2 compatível, sem lookarounds)
+	// Captura o texto interno $1 e o caractere delimitador (+ espaços) $2
+	s = regexp.MustCompile(`'([^']*)'(\s*[:,}\]])`).ReplaceAllString(s, `"$1"$2`)
+	
+	// Remove vírgulas trailing antes de ] ou } que quebram o Go JSON
+	s = regexp.MustCompile(`,(\s*[\]}])`).ReplaceAllString(s, "$1")
+	
+	return strings.TrimSpace(s)
+}
+
 func parseTriples(rawJSON string) ([]Triple, error) {
-	// 🛡️ Blindagem contra modelos reasoning que usam preambles como <thought>
+	// 🛡️ Limpeza Avançada: Regex repair para remover thoughts e consertar varreduras ruidosas
+	rawJSON = repairJSON(rawJSON)
+
+	// 🛡️ Blindagem contra modelos reasoning que usam preambles
 	startIndex := strings.Index(rawJSON, "[")
 	endIndex := strings.LastIndex(rawJSON, "]")
 

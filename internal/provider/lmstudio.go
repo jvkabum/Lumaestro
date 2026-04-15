@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"Lumaestro/internal/prompts"
 )
 
 // LMStudioClient é um cliente HTTP para o servidor LM Studio (API OpenAI-compatível).
@@ -226,8 +228,8 @@ func (c *LMStudioClient) TestModel(ctx context.Context, model string) LMTestResu
 	start := time.Now()
 
 	// 1. Teste de seguimento de instrução + saída JSON estruturada
-	systemPrompt := `You are a JSON API. You MUST respond ONLY with a valid JSON object, no prose, no markdown code blocks, no extra text. The JSON must have exactly these keys: "status" (string "ok"), "capability" (string describing what you can do in one sentence), "language" (string, the language of this prompt).`
-	userMessage := `Respond in JSON format as instructed by the system prompt.`
+	systemPrompt := prompts.GetLMStudioTestSystemPrompt()
+	userMessage := prompts.GetLMStudioTestUserPrompt()
 
 	response, err := c.Chat(ctx, model, systemPrompt, userMessage)
 	result.LatencyMs = time.Since(start).Milliseconds()

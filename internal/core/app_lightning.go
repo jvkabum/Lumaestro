@@ -2,6 +2,7 @@ package core
 
 import (
 	"Lumaestro/internal/lightning"
+	"Lumaestro/internal/prompts"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -90,7 +91,7 @@ func (a *App) startAPOWorker() {
 					fmt.Printf("[🧠 APO Cortex] Desempenho crítico para %s (RR: %.2f). Iniciando Evolução...\n", agentIDStr, avgReward)
 
 					// 2. Obter o prompt atual (do config ou do DB)
-					currentPrompt := "Você é o Maestro, um assistente técnico de elite."
+					currentPrompt := prompts.GetAPODefaultPrompt()
 					if latest, err := a.LStore.GetLatestPrompt(agentIDStr); err == nil && latest != "" {
 						currentPrompt = latest
 					}
@@ -261,7 +262,7 @@ func (a *App) ExportRLHFDataset() string {
 
 			entry := map[string]interface{}{
 				"messages": []map[string]string{
-					{"role": "system", "content": "Você é o agente " + agent + " do enxame Lumaestro."},
+					{"role": "system", "content": prompts.GetSwarmAgentSystemPrompt(agent)},
 					{"role": "user", "content": in},
 					{"role": "assistant", "content": out},
 				},
@@ -284,7 +285,7 @@ func (a *App) SendMessageToSwarm(agentName, message string) string {
 	fmt.Printf("[🕵️‍♂️ COMANDO] Enviando ordem para %s: %s\n", agentName, message)
 	
 	// Executa a ordem com resiliência total
-	response, provider, err := a.LRouter.ExecuteWithFallback(a.ctx, "Você é o Maestro do enxame Lumaestro. Responda à ordem do Comandante de forma executiva.", message)
+	response, provider, err := a.LRouter.ExecuteWithFallback(a.ctx, prompts.GetSwarmCommandPrompt(), message)
 	if err != nil { return "🔴 Falha no comando: " + err.Error() }
 	
 	return fmt.Sprintf("💎 [%s] Resposta do Enxame: %s", provider, response)

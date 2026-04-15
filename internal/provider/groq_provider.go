@@ -72,13 +72,26 @@ func (g *GroqProvider) GenerateText(ctx context.Context, prompt string) (string,
 
 		respBody, _ := io.ReadAll(resp.Body)
 
-		// 🔄 Lógica de Rotação (Rate Limit ou Forbidden/Expired)
-		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusUnauthorized {
+		// 🔄 Lógica de Rotação & Backoff Inteligente (Rate Limit ou Forbidden)
+		if resp.StatusCode == http.StatusTooManyRequests {
 			if cfg.GroqKeyCount() > 1 {
-				fmt.Printf("[GroqPool] ⚠️ Chave #%d falhou (Status %d). Rotacionando...\n", cfg.GroqKeyIndex+1, resp.StatusCode)
+				fmt.Printf("[GroqPool] ⚠️ Rate Limit na Chave #%d. Rotacionando...\n", cfg.GroqKeyIndex+1)
 				cfg.RotateGroqKey()
-				continue // Tenta novamente com a próxima chave
+				continue // Roteador assume próxima chave
+			} else {
+				// Se tivermos apenas 1 chave, precisamos domar o Crawler e usar o freio-motor
+				fmt.Printf("[GroqPool] ⏳ Limite de %d RPM estourado! Acionando Backoff. O Crawler vai entrar em hibernação por 22 segundos...\n", 6000)
+				time.Sleep(22 * time.Second)
+				continue // Tenta de novo após o cooldown
 			}
+		} else if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusUnauthorized {
+			if cfg.GroqKeyCount() > 1 {
+				fmt.Printf("[GroqPool] ⚠️ Chave #%d Expirada/Inválida. Rotacionando...\n", cfg.GroqKeyIndex+1)
+				cfg.RotateGroqKey()
+				continue
+			}
+			// Se for 401/403 com 1 chave só, quebra o loop senão roda infinito
+			return "", fmt.Errorf("Erro fatal 401/403: Chave Groq inválida ou sem saldo")
 		}
 
 		if resp.StatusCode != http.StatusOK {

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"Lumaestro/internal/config"
+	"Lumaestro/internal/prompts"
 	"Lumaestro/internal/provider"
 )
 
@@ -126,13 +127,12 @@ func (a *App) lmStudioChat(sessionID string, prompt string) {
 		return
 	}
 
-	sysprompt := fmt.Sprintf(
-		"You are a powerful AI assistant integrated into Lumaestro. Answer in %s. Be concise and helpful.",
+	sysprompt := prompts.GetLMStudioSystemPrompt(
 		func() string {
 			if cfg != nil && cfg.AgentLanguage != "" {
 				return cfg.AgentLanguage
 			}
-			return "Português do Brasil"
+			return ""
 		}(),
 	)
 

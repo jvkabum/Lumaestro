@@ -3,6 +3,7 @@ package core
 import (
 	"Lumaestro/internal/db"
 	"Lumaestro/internal/orchestration"
+	"Lumaestro/internal/prompts"
 	"fmt"
 	"strings"
 
@@ -77,9 +78,9 @@ func (a *App) handleAgentWakeUp(agent db.Agent, runID uuid.UUID) {
 
 	prompt := ""
 	if isNewTask {
-		prompt = fmt.Sprintf("Você é o agente corporativo %s (Cargo: %s). Você acaba de assumir a tarefa: %s\nDescrição: %s\nInicie o trabalho imediatamente. Use as ferramentas de 'Lumaestro/' para Handoff ou Conclusão se necessário.", agent.Name, agent.Role, issue.Title, issue.Description)
+		prompt = prompts.GetSwarmNewTaskPrompt(agent.Name, agent.Role, issue.Title, issue.Description)
 	} else {
-		prompt = fmt.Sprintf("Você é o agente corporativo %s (Cargo: %s). Continuando tarefa: %s\nHistórico recente:\n%s\nPor favor, prossiga com os próximos passos.", agent.Name, agent.Role, issue.Title, historyStr)
+		prompt = prompts.GetSwarmContinuePrompt(agent.Name, agent.Role, issue.Title, historyStr)
 	}
 
 	// 3. Injetar Pulso de Inteligência no Agente Concorrente

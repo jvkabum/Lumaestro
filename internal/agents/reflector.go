@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"Lumaestro/internal/prompts"
 	"google.golang.org/genai"
 )
 
@@ -27,14 +28,7 @@ type ReflectResult struct {
 
 // Reflect analisa uma interação e decide se o sistema deve aprender algo novo.
 func (r *Reflector) Reflect(ctx context.Context, query, response string) (*ReflectResult, error) {
-	prompt := fmt.Sprintf(`Como especialista em qualidade de agentes de IA, analise a interação abaixo.
-Pergunta: %s
-Resposta: %s
-
-O orquestrador foi preciso? Responda no formato:
-SUCCESS: true/false
-LEARNING: {descrição de como melhorar o contexto ou a estratégia}
-NEW_SKILL: {se necessário, descreva uma nova regra de busca ou comportamento}`, query, response)
+	prompt := prompts.GetReflectorPrompt(query, response)
 
 	res, err := r.GenAI.Models.GenerateContent(ctx, "gemini-2.0-flash", genai.Text(prompt), nil)
 	if err != nil {
