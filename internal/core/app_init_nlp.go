@@ -142,15 +142,12 @@ func (a *App) initNLPEngine(cfg *config.Config) (provider.ContentGenerator, erro
 						a.emitBoot("expert", "🏎️", "Cascata: Groq LPU adicionada ao pool.")
 					}
 				case "gemini":
-					if gemEmb, ok := a.embedder.(*provider.EmbeddingService); ok {
-						cascade.Add("GEMINI", gemEmb)
-						a.emitBoot("expert", "⚡", "Cascata: Gemini adicionado ao pool.")
+					gemProv, err := provider.NewGoogleProvider(a.ctx, cfg.GetActiveGeminiKey())
+					if err == nil {
+						cascade.Add("GEMINI", gemProv)
+						a.emitBoot("expert", "⚡", "Cascata: Google Resilience Fleet adicionada.")
 					} else {
-						gemSvc, err := provider.NewEmbeddingService(a.ctx, cfg.GetActiveGeminiKey())
-						if err == nil {
-							cascade.Add("GEMINI", gemSvc)
-							a.emitBoot("expert", "⚡", "Cascata: Gemini (serviço dedicado) adicionado.")
-						}
+						a.emitBoot("expert", "⚠️", "Falha ao iniciar Google Fleet: "+err.Error())
 					}
 				case "native":
 					qwenModel := "mradermacher/Qwen3.5-4B-Claude-4.6-Opus-Reasoning-Distilled-v2-heretic-GGUF:Qwen3.5-4B-Claude-4.6-Opus-Reasoning-Distilled-v2-heretic.Q4_K_M.gguf"
@@ -237,15 +234,12 @@ func (a *App) initNLPEngine(cfg *config.Config) (provider.ContentGenerator, erro
 				a.emitBoot("expert", "✅", fmt.Sprintf("Especialista Groq LPU (%s) ONLINE (Key #%d)", groqModel, cfg.GroqKeyIndex+1))
 			}
 		} else if ragProvider == "gemini" || ragProvider == "" {
-			if gemEmb, ok := a.embedder.(*provider.EmbeddingService); ok {
-				contentGen = gemEmb
-				a.emitBoot("rag", "✅", "Motor RAG/Ontologia: Gemini (cascata)")
-			} else if ragProvider == "gemini" {
-				gemSvc, err := provider.NewEmbeddingService(a.ctx, cfg.GetActiveGeminiKey())
-				if err == nil {
-					contentGen = gemSvc
-					a.emitBoot("rag", "✅", "Motor RAG/Ontologia: Gemini (serviço dedicado)")
-				}
+			gemProv, err := provider.NewGoogleProvider(a.ctx, cfg.GetActiveGeminiKey())
+			if err == nil {
+				contentGen = gemProv
+				a.emitBoot("rag", "✅", "Motor RAG/Ontologia: Google Resilience Fleet (Gemini/Gemma)")
+			} else {
+				a.emitBoot("rag", "⚠️", "Falha ao iniciar motor Google: "+err.Error())
 			}
 		}
 	}
