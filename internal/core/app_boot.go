@@ -72,7 +72,8 @@ func (a *App) initServices() error {
 
 	cfg, err := config.Load()
 	if err != nil || cfg == nil {
-		return nil
+		fmt.Printf("⚠️ Erro ao carregar configuraçao. Usando estado base para permitir recuperaçao: %v\n", err)
+		cfg = &config.Config{}
 	}
 	a.config = cfg
 

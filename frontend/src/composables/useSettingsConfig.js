@@ -28,7 +28,7 @@ export function useSettingsConfig() {
         console.warn("Nenhuma config carregada do backend. Usando defaults.")
       }
     } catch (e) {
-      alert("ERRO RARO DE COMUNICAÇÃO: " + e)
+      store.notify("ERRO DE COMUNICAÇÃO: " + e, 'error')
     }
 
     // Inicializa o estado do modo de exploração
@@ -42,10 +42,10 @@ export function useSettingsConfig() {
   const save = async () => {
     try {
       const res = await SaveConfig(store.config)
-      alert(res)
+      store.notify(res, 'success')
       refreshStatus()
     } catch (err) {
-      alert("Erro na comunicação Wails ao salvar: " + err)
+      store.notify("Erro ao salvar: " + err, 'error')
     }
   }
 
@@ -96,11 +96,11 @@ export function useSettingsConfig() {
     store.isResetting = true
     try {
       const res = await ResetQdrantDB()
-      alert(res)
+      store.notify(res, 'success')
       store.showResetModal = false
       refreshStatus()
     } catch (e) {
-      alert("Erro ao resetar banco: " + e)
+      store.notify("Erro ao resetar banco: " + e, 'error')
     } finally {
       store.isResetting = false
     }

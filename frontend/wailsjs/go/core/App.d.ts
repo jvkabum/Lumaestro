@@ -10,9 +10,9 @@ export function AddComment(arg1:string,arg2:string):Promise<string>;
 
 export function AddExternalProject(arg1:string,arg2:string,arg3:boolean):Promise<Record<string, any>>;
 
-export function AddGeminiAccount(arg1:string):Promise<void>;
-
 export function AddGoldSample(arg1:string,arg2:string,arg3:string):Promise<string>;
+
+export function AddIdentity(arg1:string,arg2:string):Promise<void>;
 
 export function AddMCPServer(arg1:string,arg2:string):Promise<string>;
 
@@ -104,7 +104,7 @@ export function ListMCPServers():Promise<string>;
 
 export function LoadAgentSession(arg1:string,arg2:string):Promise<void>;
 
-export function LoginGeminiAccount(arg1:string):Promise<void>;
+export function LoginIdentity(arg1:string,arg2:string):Promise<void>;
 
 export function NewAgentSession(arg1:string):Promise<void>;
 
@@ -117,6 +117,8 @@ export function PurgeCache():Promise<string>;
 export function ReadGeminiConfig():Promise<string>;
 
 export function RejectAction(arg1:string,arg2:string):Promise<string>;
+
+export function RemoveIdentity(arg1:string,arg2:string):Promise<void>;
 
 export function ResetQdrantDB():Promise<string>;
 
@@ -164,7 +166,7 @@ export function StopAgentSession(arg1:string):Promise<void>;
 
 export function SubmitReview(arg1:string,arg2:boolean):Promise<void>;
 
-export function SwitchGeminiAccount(arg1:string):Promise<void>;
+export function SwitchIdentity(arg1:string,arg2:string):Promise<void>;
 
 export function SyncAllNodes():Promise<void>;
 

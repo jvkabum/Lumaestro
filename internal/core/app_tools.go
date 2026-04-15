@@ -143,97 +143,129 @@ func (a *App) ListMCPServers() string {
 	return string(output)
 }
 
-// AddGeminiAccount adiciona uma nova conta e prepara seu diretório de sessão
-func (a *App) AddGeminiAccount(name string) error {
+// AddIdentity adiciona uma nova identidade para o provedor especificado
+func (a *App) AddIdentity(provider, name string) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return err
 	}
 
-	cwd, _ := os.Getwd()
-	accountPath := filepath.Join(cwd, ".gemini_accounts", name)
-
-	// Cria o diretório de sessão se não existir
-	if err := os.MkdirAll(accountPath, 0755); err != nil {
-		return fmt.Errorf("falha ao criar pasta de conta: %w", err)
+	homeDir := ""
+	if provider == "google" {
+		cwd, _ := os.Getwd()
+		homeDir = filepath.Join(cwd, ".gemini_accounts", name)
+		// Cria o diretório de sessão se não existir
+		if err := os.MkdirAll(homeDir, 0755); err != nil {
+			return fmt.Errorf("falha ao criar pasta de conta: %w", err)
+		}
 	}
 
 	// Verifica se já existe na config
-	for i := range cfg.GeminiAccounts {
-		if cfg.GeminiAccounts[i].Name == name {
-			cfg.GeminiAccounts[i].HomeDir = accountPath
+	for i := range cfg.Identities {
+		if cfg.Identities[i].Provider == provider && cfg.Identities[i].Name == name {
+			cfg.Identities[i].HomeDir = homeDir
 			return config.Save(*cfg)
 		}
 	}
 
-	cfg.GeminiAccounts = append(cfg.GeminiAccounts, config.GeminiAccount{
-		Name:    name,
-		HomeDir: accountPath,
-		Active:  false,
+	cfg.Identities = append(cfg.Identities, config.Identity{
+		Provider: provider,
+		Name:     name,
+		HomeDir:  homeDir,
+		Active:   false,
 	})
 
 	return config.Save(*cfg)
 }
 
-// LoginGeminiAccount abre um terminal para realizar o login OAuth em uma conta específica
-func (a *App) LoginGeminiAccount(name string) error {
+// LoginIdentity abre um terminal para realizar o login (específico para provedores com OAuth/CLI)
+func (a *App) LoginIdentity(provider, name string) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return err
 	}
 
 	var targetDir string
-	for _, acc := range cfg.GeminiAccounts {
-		if acc.Name == name {
-			targetDir = acc.HomeDir
+	for _, id := range cfg.Identities {
+		if id.Provider == provider && id.Name == name {
+			targetDir = id.HomeDir
 			break
 		}
 	}
 
-	if targetDir == "" {
-		return fmt.Errorf("conta '%s' não encontrada ou sem diretório configurado", name)
+	if provider == "google" {
+		if targetDir == "" {
+			return fmt.Errorf("identidade '%s' no Google não encontrada ou sem diretório configurado", name)
+		}
+
+		// Comando para abrir o terminal com GEMINI_CLI_HOME isolado
+		binaryPath := "gemini"
+		if _, err := exec.LookPath("gemini"); err != nil {
+			cwd, _ := os.Getwd()
+			binaryPath = filepath.Join(cwd, "node_modules", ".bin", "gemini.cmd")
+		}
+
+		script := fmt.Sprintf(`$env:GEMINI_CLI_HOME='%s'; & '%s'`, targetDir, binaryPath)
+		fmt.Printf("[Maestro] 🔑 Iniciando fluxo de Login OAuth para: %s (%s)\n", name, provider)
+		return exec.Command("cmd", "/c", "start", "powershell", "-NoExit", "-Command", script).Run()
 	}
 
-	// Comando para abrir o terminal com GEMINI_CLI_HOME isolado
-	binaryPath := "gemini"
-	if _, err := exec.LookPath("gemini"); err != nil {
-		cwd, _ := os.Getwd()
-		binaryPath = filepath.Join(cwd, "node_modules", ".bin", "gemini.cmd")
-	}
-
-	// Script para o PowerShell forçar o ambiente de sessão desta conta.
-	// NOTA: Removemos NO_BROWSER para permitir o fluxo visual de login no navegador.
-	script := fmt.Sprintf(`$env:GEMINI_CLI_HOME='%s'; & '%s'`, targetDir, binaryPath)
-
-	fmt.Printf("[Maestro] 🔑 Iniciando fluxo de Login OAuth para: %s\n", name)
-	return exec.Command("cmd", "/c", "start", "powershell", "-NoExit", "-Command", script).Run()
+	return fmt.Errorf("o provedor '%s' não exige login via terminal (use chaves de API)", provider)
 }
 
-// SwitchGeminiAccount alterna a conta ativa do Gemini e reinicia a sessão
-func (a *App) SwitchGeminiAccount(name string) error {
+// SwitchIdentity alterna a identidade ativa de um provedor e reinicia a sessão (se necessário)
+func (a *App) SwitchIdentity(provider, name string) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return err
 	}
 
 	found := false
-	for i := range cfg.GeminiAccounts {
-		if cfg.GeminiAccounts[i].Name == name {
-			cfg.GeminiAccounts[i].Active = true
-			found = true
-		} else {
-			cfg.GeminiAccounts[i].Active = false
+	for i := range cfg.Identities {
+		if cfg.Identities[i].Provider == provider {
+			if cfg.Identities[i].Name == name {
+				cfg.Identities[i].Active = true
+				found = true
+			} else {
+				cfg.Identities[i].Active = false
+			}
 		}
 	}
 
 	if !found {
-		return fmt.Errorf("conta '%s' não encontrada", name)
+		return fmt.Errorf("identidade '%s' para o provedor '%s' não encontrada", name, provider)
 	}
 
 	if err := config.Save(*cfg); err != nil {
 		return err
 	}
 
-	fmt.Printf("[Maestro] 🔄 Trocando para sessão de login: %s\n", name)
-	return a.StartAgentSession("gemini")
+	fmt.Printf("[Maestro] 🔄 Trocando para identidade: %s (%s)\n", name, provider)
+
+	// Se for Google, precisamos reiniciar a sessão do agente CLI
+	if provider == "google" {
+		return a.StartAgentSession("gemini")
+	}
+	return nil
+}
+
+// RemoveIdentity exclui uma identidade do registro
+func (a *App) RemoveIdentity(provider, name string) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+
+	newIdentities := make([]config.Identity, 0, len(cfg.Identities))
+	for _, id := range cfg.Identities {
+		if id.Provider == provider && id.Name == name {
+			// Se for Google, poderíamos opcionalmente apagar a pasta HomeDir, 
+			// mas por segurança vamos apenas remover o registro.
+			continue
+		}
+		newIdentities = append(newIdentities, id)
+	}
+
+	cfg.Identities = newIdentities
+	return config.Save(*cfg)
 }

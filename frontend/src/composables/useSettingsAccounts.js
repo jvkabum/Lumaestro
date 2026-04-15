@@ -1,29 +1,36 @@
-import { GetConfig, AddGeminiAccount, SwitchGeminiAccount, LoginGeminiAccount } from '../../wailsjs/go/core/App'
+import { GetConfig, AddIdentity, SwitchIdentity, LoginIdentity, RemoveIdentity } from '../../wailsjs/go/core/App'
 import { useSettingsStore } from '../stores/settings'
 
 /**
- * 👥 useSettingsAccounts — Multi-Conta Gemini (OAuth)
+ * 👥 useSettingsAccounts — Gestão Universal de Identidades (Multi-Provedor)
  */
 export function useSettingsAccounts() {
   const store = useSettingsStore()
 
-  const handleAddAccount = async () => {
+  const handleAddAccount = async (provider) => {
     if (!store.newAccName) return
-    await AddGeminiAccount(store.newAccName)
+    await AddIdentity(provider, store.newAccName)
     store.newAccName = ''
     const cfg = await GetConfig()
     if (cfg) store.config = cfg
   }
 
-  const handleLoginAccount = async (name) => {
-    await LoginGeminiAccount(name)
+  const handleLoginAccount = async (provider, name) => {
+    await LoginIdentity(provider, name)
   }
 
-  const handleSwitchAccount = async (name) => {
-    await SwitchGeminiAccount(name)
+  const handleSwitchAccount = async (provider, name) => {
+    await SwitchIdentity(provider, name)
     const cfg = await GetConfig()
     if (cfg) store.config = cfg
   }
 
-  return { handleAddAccount, handleLoginAccount, handleSwitchAccount }
+  const handleRemoveAccount = async (provider, name) => {
+    if (!confirm(`Deseja realmente remover a identidade "${name}"?`)) return
+    await RemoveIdentity(provider, name)
+    const cfg = await GetConfig()
+    if (cfg) store.config = cfg
+  }
+
+  return { handleAddAccount, handleLoginAccount, handleSwitchAccount, handleRemoveAccount }
 }

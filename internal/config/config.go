@@ -20,12 +20,14 @@ type SecurityConfig struct {
 	Workspaces        []string `json:"workspaces"`          // Lista de pastas autorizadas (Whitelist)
 }
 
-// GeminiAccount representa um perfil de login do Gemini
-type GeminiAccount struct {
-	Name      string `json:"name"`
-	HomeDir   string `json:"home_dir"` // Caminho da pasta de sessão (.gemini_accounts/nome)
-	Active    bool   `json:"active"`
-	Exhausted bool   `json:"exhausted"`
+// Identity representa um perfil de usuário para um provedor específico
+type Identity struct {
+	Provider  string `json:"provider"`  // "google", "claude", "openai", "qwen"
+	Name      string `json:"name"`      // Nome amigável (ex: "Trabalho", "Pessoal")
+	HomeDir   string `json:"home_dir"`  // Caminho da pasta de sessão (específico para Google/OAuth)
+	APIKey    string `json:"api_key"`   // Chave individual desta identidade (opcional)
+	Active    bool   `json:"active"`    // Se esta identidade é a ativa para o seu provedor
+	Exhausted bool   `json:"exhausted"` // Flag de cota estourada
 }
 
 // ProjectScan mapeia uma pasta que serve como repositório secundário (satélite/aglomerado)
@@ -43,7 +45,8 @@ type Config struct {
 	GeminiAPIKey        string          `json:"gemini_api_key"` // Aceita múltiplas chaves separadas por vírgula
 	UseGeminiAPIKey     bool            `json:"use_gemini_api_key"`
 	GeminiKeyIndex      int             `json:"gemini_key_index"` // Índice da chave ativa no pool
-	GeminiAccounts      []GeminiAccount `json:"gemini_accounts"`  // 🌟 Nova lista de contas
+	Identities          []Identity      `json:"identities"`       // 🎭 Nova lista universal de identidades
+	GeminiAccounts      []Identity      `json:"gemini_accounts,omitempty"` // ⚠️ Legado (apenas para migração)
 	ClaudeAPIKey        string          `json:"claude_api_key"`
 	UseClaudeAPIKey     bool            `json:"use_claude_api_key"`
 	GroqAPIKey          string          `json:"groq_api_key"`
@@ -84,6 +87,8 @@ type Config struct {
 	FailoverPriority      []string `json:"failover_priority"` // Ex: ["groq", "gemini", "native"]
 	GeminiModel           string   `json:"gemini_model"`      // Modelo padrão para chat (auto, 2.5-flash, etc)
 	GroqModel             string   `json:"groq_model"`        // Modelo padrão para Groq (ex: qwen/qwen3-32b)
+	ActiveGroqModels      []string `json:"active_groq_models"` // 🚀 Lista de modelos ativos na Frota de Resiliência Groq
+	ActiveGoogleModels    []string `json:"active_google_models"` // 🌟 Lista de modelos ativos na Frota de Resiliência Google
 }
 
 // NormalizeProviders garante defaults seguros para o pool de provedores e motores.
@@ -123,6 +128,31 @@ func (c *Config) NormalizeProviders() {
 
 	if strings.TrimSpace(c.GroqModel) == "" {
 		c.GroqModel = "llama-3.3-70b-versatile"
+	}
+	if len(c.ActiveGroqModels) == 0 {
+		c.ActiveGroqModels = []string{
+			"llama-3.3-70b-versatile",
+			"openai/gpt-oss-120b",
+			"qwen/qwen3-32b",
+			"moonshotai/kimi-k2-instruct",
+			"moonshotai/kimi-k2-instruct-0905",
+			"meta-llama/llama-4-scout-17b-16e-instruct",
+			"openai/gpt-oss-20b",
+			"allam-2-7b",
+			"llama-3.1-8b-instant",
+			"groq/compound",
+			"groq/compound-mini",
+		}
+	}
+	if len(c.ActiveGoogleModels) == 0 {
+		c.ActiveGoogleModels = []string{
+			"gemini-3.1-flash-lite-preview",
+			"gemini-2.5-flash",
+			"gemini-3-flash-preview",
+			"gemini-2.5-flash-lite",
+			"gemma-4-31b-it",
+			"gemma-4-26b-a4b-it",
+		}
 	}
 }
 
@@ -288,15 +318,45 @@ func Load() (*Config, error) {
 
 	var cfg Config
 	if err := json.Unmarshal(data, &cfg); err != nil {
-		// Se falhar o parse, tentamos uma última vez após um sono maior
-		time.Sleep(200 * time.Millisecond)
-		data, _ = os.ReadFile(path)
-		if errRetry := json.Unmarshal(data, &cfg); errRetry == nil {
-			return &cfg, nil
-		}
-		fmt.Printf("[Config] ERRO CRITICO Parse JSON: %v\n", err)
+		fmt.Printf("[Config] ❌ ERRO de Parse JSON em %s: %v\n", path, err)
+		fmt.Printf("[Config] Dados brutos capturados (%d bytes)\n", len(data))
 		return nil, err
 	}
+	
+	// Garantir que arrays não sejam nulos para o frontend
+	if cfg.Identities == nil {
+		cfg.Identities = []Identity{}
+	}
+	if cfg.ActiveModelProviders == nil {
+		cfg.ActiveModelProviders = []string{"gemini"}
+	}
+	if cfg.ActiveGroqModels == nil {
+		cfg.ActiveGroqModels = []string{}
+	}
+	if cfg.ActiveGoogleModels == nil {
+		cfg.ActiveGoogleModels = []string{}
+	}
+	if cfg.ExternalProjects == nil {
+		cfg.ExternalProjects = []ProjectScan{}
+	}
+
 	cfg.NormalizeProviders()
+
+	// 🕵️ Motor de Migração: GeminiAccount (Legado) -> Identity (Universal)
+	if len(cfg.Identities) == 0 && len(cfg.GeminiAccounts) > 0 {
+		fmt.Printf("[Config] 🔄 Iniciando migração de %d contas Gemini para Identidades Universais...\n", len(cfg.GeminiAccounts))
+		for _, old := range cfg.GeminiAccounts {
+			cfg.Identities = append(cfg.Identities, Identity{
+				Provider:  "google",
+				Name:      old.Name,
+				HomeDir:   old.HomeDir,
+				Active:    old.Active,
+				Exhausted: old.Exhausted,
+			})
+		}
+		cfg.GeminiAccounts = nil // Limpa o legado para não salvar de volta
+		Save(cfg)
+	}
+
 	return &cfg, nil
 }

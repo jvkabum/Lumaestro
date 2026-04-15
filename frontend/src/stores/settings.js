@@ -13,7 +13,7 @@ export const useSettingsStore = defineStore('settings', () => {
     gemini_api_key: '',
     use_gemini_api_key: false,
     gemini_model: 'auto-gemini-2.5',
-    gemini_accounts: [],
+    identities: [],
     claude_api_key: '',
     use_claude_api_key: false,
     groq_api_key: '',
@@ -52,7 +52,10 @@ export const useSettingsStore = defineStore('settings', () => {
     rag_provider: 'gemini',            // 'gemini', 'lmstudio' ou 'claude'
     rag_model: '',                     // Ex: 'google/gemma-4-26b-a4b', 'claude-3-5-sonnet-latest'
     hybrid_failover_enabled: false,
-    failover_priority: ['groq', 'gemini', 'native']
+    failover_priority: ['groq', 'gemini', 'native'],
+    active_groq_models: [],            // 🚀 Frota de Resiliência Groq
+    active_google_models: [],          // 🌟 Frota de Resiliência Google
+    external_projects: []              // 🪐 Projetos Satélite
   })
 
   // ── Status de Ferramentas ──
@@ -121,6 +124,15 @@ export const useSettingsStore = defineStore('settings', () => {
     return raw.split(',').filter(k => k.trim() !== '').length
   })
 
+  // ── Notificações (Toast) ──
+  const toast = ref({ message: '', show: false, type: 'info' })
+  const notify = (message, type = 'info') => {
+    toast.value = { message, type, show: true }
+    setTimeout(() => {
+      toast.value.show = false
+    }, 4000)
+  }
+
   return {
     config, status,
     installLogs, installStatus, logContainer,
@@ -132,6 +144,7 @@ export const useSettingsStore = defineStore('settings', () => {
     newAccName,
     repoPathInput, coreNodeInput, includeCodeToggle, repoStatusMsg,
     lmModels, lmTesting, lmTestResult, lmLoadingModels,
-    geminiKeyCount, groqKeyCount
+    geminiKeyCount, groqKeyCount,
+    toast, notify
   }
 })

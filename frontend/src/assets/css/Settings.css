@@ -8,6 +8,12 @@
   --p-text: #f8fafc;
   --p-text-dim: #94a3b8;
   --p-error: #ef4444;
+  
+  /* Brand Tokens */
+  --brand-google: #4285f4;
+  --brand-claude: #d97706;
+  --brand-openai: #10a37f;
+  --brand-qwen: #8b5cf6;
 
   padding: 2rem 4rem; 
   color: var(--p-text); 
@@ -782,4 +788,201 @@ input:checked + .m-slider::before { transform: translateX(20px); background: #ff
   word-break: break-all;
   display: flex;
   align-items: center;
+}
+
+/* --- IDENTITY HUB PREMIER (NEXUS DESIGN) --- */
+.provider-selector-wrap {
+  display: flex;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 8px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  width: fit-content;
+  margin-bottom: 2.5rem;
+}
+
+.provider-pill {
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 10px 20px;
+  border-radius: 12px;
+  color: var(--p-text-dim);
+  font-weight: 800;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  letter-spacing: 0.5px;
+}
+
+.provider-pill:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+}
+
+.provider-pill.active {
+  background: var(--brand-color, var(--p-accent));
+  color: #fff;
+  box-shadow: 0 8px 20px -5px var(--brand-glow, var(--p-accent-glow));
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.identity-creation-nexus {
+  display: flex;
+  gap: 12px;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 12px;
+  border-radius: 20px;
+  border: 1px solid var(--p-border);
+  margin-bottom: 3rem;
+  transition: border-color 0.3s;
+}
+
+.identity-creation-nexus:focus-within {
+  border-color: var(--brand-color, var(--p-accent));
+  box-shadow: 0 0 25px -10px var(--brand-glow, var(--p-accent-glow));
+}
+
+.nexus-input {
+  flex: 1;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  font-size: 1rem !important;
+  padding: 8px 16px !important;
+}
+
+.btn-nexus-create {
+  background: var(--brand-color, var(--p-accent));
+  color: #fff;
+  border: none;
+  border-radius: 14px;
+  padding: 0 24px;
+  font-weight: 900;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: 0.3s;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.btn-nexus-create:hover {
+  filter: brightness(1.2);
+  transform: scale(1.02);
+}
+
+.identity-profile-card {
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.01) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 28px;
+  padding: 2rem;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.identity-profile-card:hover {
+  transform: translateY(-8px);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 30px 60px -20px rgba(0, 0, 0, 0.5);
+}
+
+.identity-profile-card.is-active {
+  border-color: var(--brand-color);
+  background: linear-gradient(165deg, var(--brand-alpha, rgba(255, 255, 255, 0.05)) 0%, rgba(0, 0, 0, 0.2) 100%);
+}
+
+.active-aura {
+  position: absolute;
+  top: -100px; right: -100px;
+  width: 250px; height: 250px;
+  background: radial-gradient(circle, var(--brand-glow) 0%, transparent 70%);
+  opacity: 0.15;
+  pointer-events: none;
+  animation: pulse-aura 4s infinite alternate;
+}
+
+@keyframes pulse-aura {
+  0% { transform: scale(1); opacity: 0.1; }
+  100% { transform: scale(1.2); opacity: 0.2; }
+}
+
+.nexus-avatar {
+  width: 64px; height: 64px;
+  border-radius: 20px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.5rem; font-weight: 900;
+  color: #fff;
+  background: linear-gradient(135deg, var(--brand-color), #000);
+  box-shadow: 0 10px 25px -5px var(--brand-glow);
+  margin-bottom: 1.5rem;
+}
+
+.nexus-meta h4 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: 0.5px;
+}
+
+.nexus-status {
+  font-size: 0.65rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-top: 6px;
+  display: inline-block;
+}
+
+.nexus-footer {
+  margin-top: auto;
+  padding-top: 1.5rem;
+  display: flex;
+  gap: 12px;
+}
+
+.btn-nexus-action {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #fff;
+  padding: 12px;
+  border-radius: 14px;
+  font-weight: 800;
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: 0.3s;
+  text-transform: uppercase;
+}
+
+.btn-nexus-action:hover {
+  background: #fff;
+  color: #000;
+  transform: scale(1.05);
+}
+
+.btn-nexus-action.primary {
+  background: var(--brand-color);
+  border-color: transparent;
+  color: #fff;
+}
+
+.btn-nexus-action.danger {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+  flex: 0 0 50px;
+}
+
+.btn-nexus-action.danger:hover {
+  background: #ef4444;
+  color: #fff;
 }

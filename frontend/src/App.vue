@@ -9,6 +9,7 @@ import Settings from './components/Settings.vue'
 import DocViewer from './components/DocViewer.vue'
 import SwarmDashboard from './components/SwarmDashboard.vue'
 import AgentTerminal from './components/AgentTerminal.vue'
+import ReposManager from './components/ReposManager.vue'
 import { useOrchestratorStore } from './stores/orchestrator'
 import { GetProjectDoc } from '../wailsjs/go/core/App'
 
@@ -118,19 +119,32 @@ onMounted(async () => {
   })
 
   // Verificar conexão inicial com diagnóstico visual
-  try {
-    isOnline.value = await CheckConnection()
-    if (isOnline.value) {
-      connectionError.value = "Maestro Online (Backend e Motor Vetorial Ativos)"
-      // Se já estava online (HMR/reload), pula o overlay
-      isBooting.value = false
-    } else {
-      connectionError.value = "Backend respondeu, mas Qdrant ou Configuração falharam. Verifique as configurações."
+  const tryConnect = async () => {
+    try {
+      isOnline.value = await CheckConnection()
+      if (isOnline.value) {
+        connectionError.value = "Maestro Online (Backend e Motor Vetorial Ativos)"
+        isBooting.value = false
+      } else {
+        connectionError.value = "Backend respondeu, mas Qdrant ou Configuração falharam. Verifique as configurações."
+      }
+    } catch(e) {
+      isOnline.value = false
+      connectionError.value = "Erro Wails IPC: Falha Crítica de Comunicação com o Backend Go. (" + String(e) + ")"
     }
-  } catch(e) {
-    isOnline.value = false
-    connectionError.value = "Erro Wails IPC: Falha Crítica de Comunicação com o Backend Go. (" + String(e) + ")"
   }
+
+  await tryConnect()
+  
+  // 🔄 Heartbeat: Tenta reconectar a cada 5 segundos se estiver offline
+  const connInterval = setInterval(() => {
+    if (!isOnline.value) tryConnect()
+  }, 5000)
+
+  // 🛡️ Fail-safe: Força o fim do boot após 4 segundos para evitar bloqueio total da UI
+  setTimeout(() => {
+    if (isBooting.value) isBooting.value = false
+  }, 4000)
   
   // Escuta troca de visualização remota (ex: vindo das Settings)
   EventsOn('view:change', (view) => {
@@ -199,6 +213,7 @@ onMounted(async () => {
       <nav>
         <button @click="currentView = 'orchestrator'" :class="{ active: currentView === 'orchestrator' }" title="Cérebro & Grafo">🧠</button>
         <button @click="currentView = 'swarm'" :class="{ active: currentView === 'swarm' }" title="Painel de Comando Executivo">🏛️</button>
+        <button @click="currentView = 'repos'" :class="{ active: currentView === 'repos' }" title="Gerenciar Repositórios (RAG Radial)">📂</button>
         
         <div class="sidebar-divider"></div>
         
@@ -308,6 +323,10 @@ onMounted(async () => {
 
       <template v-else-if="currentView === 'settings'">
         <Settings />
+      </template>
+
+      <template v-else-if="currentView === 'repos'">
+        <ReposManager />
       </template>
     </main>
 

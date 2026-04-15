@@ -18,9 +18,9 @@ func (a *App) Startup(ctx context.Context) {
 	}
 
 	a.ctx = ctx
-
-	// Sincroniza o PATH imediatamente (Garante que claude/gemini sejam encontrados)
-	a.installer.SyncPath()
+	
+	// Sincroniza o PATH em background para não bloquear o handshake do Wails (runtime:ready)
+	go a.installer.SyncPath()
 
 	// Iniciar a Escuta de Logs e Terminal (não depende dos motores)
 	go a.listenForLogs()

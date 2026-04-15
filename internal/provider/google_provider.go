@@ -55,14 +55,20 @@ func NewGoogleProvider(ctx context.Context, apiKey string) (*GoogleProvider, err
 
 // GenerateContentWithRetry é o motor generativo unificado com Cascata de Modelos (Gemini -> Gemma) e Rotação de Chaves.
 func (p *GoogleProvider) GenerateContentWithRetry(ctx context.Context, contents []*genai.Content) (*genai.GenerateContentResponse, error) {
-	// Super Frota Atualizada (Padrão Junho/2026): Resiliência Extrema
-	models := []string{
-		"gemini-3.1-flash-lite-preview", // 🚀 Velocidade de Triplas (Lite 3.1)
-		"gemini-2.5-flash",              // 🏆 Capitão Confirmado (Flash 2.5)
-		"gemini-3-flash-preview",        // ⚖️ Moderno (Flash 3)
-		"gemini-2.5-flash-lite",         // 📦 Escala de Volume
-		"gemma-4-31b-it",                // 🛡️ O Tanque (Resiliência)
-		"gemma-4-26b-a4b-it",            // 🐘 Reserva Tática
+	// Super Frota Dinâmica (Lê os modelos ativos da configuração do Maestro)
+	cfg, _ := config.Load()
+	models := cfg.ActiveGoogleModels
+
+	// Fallback de Segurança caso a lista esteja vazia
+	if len(models) == 0 {
+		models = []string{
+			"gemini-3.1-flash-lite-preview", // 🚀 Velocidade de Triplas (Lite 3.1)
+			"gemini-2.5-flash",              // 🏆 Capitão Confirmado (Flash 2.5)
+			"gemini-3-flash-preview",        // ⚖️ Moderno (Flash 3)
+			"gemini-2.5-flash-lite",         // 📦 Escala de Volume
+			"gemma-4-31b-it",                // 🛡️ O Tanque (Resiliência)
+			"gemma-4-26b-a4b-it",            // 🐘 Reserva Tática
+		}
 	}
 
 	if len(p.keys) == 0 {

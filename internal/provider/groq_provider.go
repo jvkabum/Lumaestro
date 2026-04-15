@@ -34,19 +34,25 @@ func NewGroqProvider(apiKey, model string) *GroqProvider {
 func (g *GroqProvider) GenerateText(ctx context.Context, prompt string) (string, error) {
 	url := "https://api.groq.com/openai/v1/chat/completions"
 
-	// 🚀 FROTA GROQ 'GUERRA TOTAL' (Maximiza Cotas Diárias percorrendo todos os modelos de texto)
-	fleet := []string{
-		"llama-3.3-70b-versatile",                  // 🧠 Cérebro Superior
-		"openai/gpt-oss-120b",                      // 🐘 Gigante OSS (120B)
-		"qwen/qwen3-32b",                           // 💎 Especialista JSON / Reasoning
-		"moonshotai/kimi-k2-instruct",              // 🧠 Raciocínio de Contexto Longo
-		"moonshotai/kimi-k2-instruct-0905",         // 🧠 Cota Extra Kimi (+1K RPD)
-		"meta-llama/llama-4-scout-17b-16e-instruct", // 🐎 Cavalo de Batalha (Alto Volume)
-		"openai/gpt-oss-20b",                       // 🛡️ Reserva de Elite
-		"allam-2-7b",                               // 📦 Volume Adicional (7B)
-		"llama-3.1-8b-instant",                      // ⚡ Fast Fallback (14.4K RPD)
-		"groq/compound",                            // 🧪 Reserva Extra (Experimental)
-		"groq/compound-mini",                       // 🧪 Reserva Extra (Experimental)
+	// 🚀 FROTA GROQ DINÂMICA (Lê os modelos ativos da configuração do Maestro)
+	cfg, _ := config.Load()
+	fleet := cfg.ActiveGroqModels
+
+	// Fallback de Segurança caso a lista esteja vazia
+	if len(fleet) == 0 {
+		fleet = []string{
+			"llama-3.3-70b-versatile",
+			"openai/gpt-oss-120b",
+			"qwen/qwen3-32b",
+			"moonshotai/kimi-k2-instruct",
+			"moonshotai/kimi-k2-instruct-0905",
+			"meta-llama/llama-4-scout-17b-16e-instruct",
+			"openai/gpt-oss-20b",
+			"allam-2-7b",
+			"llama-3.1-8b-instant",
+			"groq/compound",
+			"groq/compound-mini",
+		}
 	}
 
 	maxFleetCycles := 3
@@ -55,12 +61,6 @@ func (g *GroqProvider) GenerateText(ctx context.Context, prompt string) (string,
 	for {
 		cycles++
 		for _, modelName := range fleet {
-			// Tenta todas as chaves disponíveis para este modelo específico
-			cfg, _ := config.Load()
-			if cfg == nil {
-				return "", fmt.Errorf("falha ao carregar config")
-			}
-			
 			keyCount := cfg.GroqKeyCount()
 			if keyCount == 0 {
 				return "", fmt.Errorf("nenhuma chave Groq no pool")
@@ -141,7 +141,7 @@ func (g *GroqProvider) GenerateText(ctx context.Context, prompt string) (string,
 		}
 
 		if cycles >= maxFleetCycles {
-			return "", fmt.Errorf("falha catastrófica: Frota Groq (4 modelos em cascata) exausta após %d ciclos", maxFleetCycles)
+			return "", fmt.Errorf("falha catastrófica: Frota Groq (%d modelos em cascata) exausta após %d ciclos", len(fleet), maxFleetCycles)
 		}
 
 		fmt.Println("⏳ [GroqResilience] 🚨 Toda a frota Groq falhou! Hibernação tática de 30s... 😴")

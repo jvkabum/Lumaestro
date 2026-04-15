@@ -1,11 +1,10 @@
 <script setup>
-import { onMounted, ref, watch } from 'vue'
+import { onMounted, ref, watch, computed } from 'vue'
 import { useSettingsStore } from '../stores/settings'
 import { useSettingsConfig } from '../composables/useSettingsConfig'
 import { useSettingsTools } from '../composables/useSettingsTools'
 import { useSettingsMCP } from '../composables/useSettingsMCP'
 import { useSettingsAccounts } from '../composables/useSettingsAccounts'
-import { useSettingsProjects } from '../composables/useSettingsProjects'
 
 // ── Store Pinia ──
 const store = useSettingsStore()
@@ -19,8 +18,21 @@ const {
 
 const { install, setup } = useSettingsTools()
 const { addMCPServer, listMCPServers } = useSettingsMCP()
-const { handleAddAccount, handleLoginAccount, handleSwitchAccount } = useSettingsAccounts()
-const { handleAddProject, handleSelectDirectory } = useSettingsProjects()
+const { handleAddAccount, handleLoginAccount, handleSwitchAccount, handleRemoveAccount } = useSettingsAccounts()
+
+// ── IDENTIDADE MULTI-PROVEDOR ──
+const selectedAccountProvider = ref('google')
+const accountProviders = [
+  { id: 'google', label: 'Google (Gemini)', icon: '💎', color: '#3b82f6' },
+  { id: 'claude', label: 'Claude', icon: '🟠', color: '#f97316' },
+  { id: 'openai', label: 'OpenAI (GPT)', icon: '🟢', color: '#10b981' },
+  { id: 'qwen', label: 'Qwen', icon: '🟣', color: '#8b5cf6' }
+]
+
+const filteredIdentities = computed(() => {
+  if (!store.config || !store.config.identities) return []
+  return store.config.identities.filter(id => id.provider === selectedAccountProvider.value)
+})
 
 // ── LM Studio ──
 const pickDefaultEmbeddingModel = (models) => {
@@ -39,10 +51,10 @@ const detectEmbeddingDimension = async () => {
     if (Number(dim) > 0) {
       store.config.embedding_dimension = Number(dim)
     } else {
-      alert(`O modelo "${model}" nao respondeu no endpoint de embeddings do LM Studio. Use um modelo de embedding (ex: nomic-embed-text).`)
+      store.notify(`O modelo "${model}" não respondeu no endpoint de embeddings do LM Studio.`, 'error')
     }
   } catch (e) {
-    alert('Falha ao detectar dimensao do embedding: ' + e)
+    store.notify('Falha ao detectar dimensão do embedding: ' + e, 'error')
   }
 }
 
@@ -69,7 +81,7 @@ const loadLMModels = async () => {
 
     await detectEmbeddingDimension()
   } catch (e) {
-    alert('Erro ao conectar ao LM Studio: ' + e)
+    store.notify('Erro ao conectar ao LM Studio: ' + e, 'error')
   } finally {
     store.lmLoadingModels = false
   }
@@ -98,6 +110,73 @@ const providerLabel = (provider) => {
 
 const isProviderActive = (provider) => {
   return (store.config.active_model_providers || []).includes(provider)
+}
+
+// ── GROQ FLEET MANAGER ──
+const availableGroqModels = [
+  { id: 'llama-3.3-70b-versatile', label: 'Cérebro Superior', icon: '🧠', tier: 'Top Tier' },
+  { id: 'openai/gpt-oss-120b', label: 'Gigante OSS (120B)', icon: '🐘', tier: 'Ultra Scale' },
+  { id: 'qwen/qwen3-32b', label: 'Especialista JSON', icon: '💎', tier: 'Reasoning' },
+  { id: 'moonshotai/kimi-k2-instruct', label: 'Raciocínio Longo', icon: '🧠', tier: 'Expert' },
+  { id: 'moonshotai/kimi-k2-instruct-0905', label: 'Snapshot Kimi', icon: '📦', tier: 'Extra Quota' },
+  { id: 'meta-llama/llama-4-scout-17b-16e-instruct', label: 'Cavalo de Batalha', icon: '🐎', tier: 'Volume' },
+  { id: 'openai/gpt-oss-20b', label: 'Reserva de Elite', icon: '🛡️', tier: 'Safety' },
+  { id: 'allam-2-7b', label: 'Volume Adicional (7B)', icon: '📦', tier: 'Utility' },
+  { id: 'llama-3.1-8b-instant', label: 'Motor de Jato', icon: '⚡', tier: 'Instant' },
+  { id: 'groq/compound', label: 'Experimental', icon: '🧪', tier: 'Research' },
+  { id: 'groq/compound-mini', label: 'Experimental Mini', icon: '🧪', tier: 'Research' }
+]
+
+const isModelActive = (modelId) => {
+  if (!store.config.active_groq_models) return true
+  return store.config.active_groq_models.includes(modelId)
+}
+
+const toggleGroqModel = (modelId) => {
+  if (!store.config.active_groq_models) {
+    store.config.active_groq_models = availableGroqModels.map(m => m.id)
+  }
+  const idx = store.config.active_groq_models.indexOf(modelId)
+  if (idx > -1) {
+    if (store.config.active_groq_models.length > 1) {
+      store.config.active_groq_models.splice(idx, 1)
+    } else {
+      store.notify("Pelo menos um modelo deve permanecer ativo para a resiliência.", 'info')
+    }
+  } else {
+    store.config.active_groq_models.push(modelId)
+  }
+}
+
+// ── GOOGLE FLEET MANAGER ──
+const availableGoogleModels = [
+  { id: 'gemini-3.1-flash-lite-preview', label: 'Flash 3.1 (Lite)', icon: '🚀', tier: 'Speed' },
+  { id: 'gemini-2.5-flash', label: 'Capitão Flash 2.5', icon: '🏆', tier: 'Premium' },
+  { id: 'gemini-3-flash-preview', label: 'Modern Flash 3', icon: '⚖️', tier: 'Preview' },
+  { id: 'gemini-2.5-flash-lite', label: 'Escala de Volume', icon: '📦', tier: 'Quota' },
+  { id: 'gemma-4-31b-it', label: 'O Tanque (31B)', icon: '🛡️', tier: 'Resilient' },
+  { id: 'gemma-4-26b-a4b-it', label: 'Reserva Tática', icon: '🐘', tier: 'Gemma' }
+]
+
+const isGoogleModelActive = (modelId) => {
+  if (!store.config.active_google_models) return true
+  return store.config.active_google_models.includes(modelId)
+}
+
+const toggleGoogleModel = (modelId) => {
+  if (!store.config.active_google_models) {
+    store.config.active_google_models = availableGoogleModels.map(m => m.id)
+  }
+  const idx = store.config.active_google_models.indexOf(modelId)
+  if (idx > -1) {
+    if (store.config.active_google_models.length > 1) {
+      store.config.active_google_models.splice(idx, 1)
+    } else {
+        store.notify("Pelo menos um modelo deve permanecer ativo para a resiliência.", 'info')
+    }
+  } else {
+    store.config.active_google_models.push(modelId)
+  }
 }
 
 const toggleProvider = (provider) => {
@@ -243,20 +322,39 @@ watch(() => store.activeTab, (tab) => {
 </script>
 
 <template>
-  <main class="settings-view animate-fade-up">
+    <!-- NEXUS TOAST NOTIFICATION -->
+    <transition name="toast">
+      <div v-if="store.toast.show" 
+           class="nexus-toast animate-toast-in" 
+           :class="'toast-' + store.toast.type"
+           @click="store.toast.show = false">
+        <div class="toast-icon">
+          <span v-if="store.toast.type === 'success'">💎</span>
+          <span v-else-if="store.toast.type === 'error'">⚠️</span>
+          <span v-else>💠</span>
+        </div>
+        <div class="toast-content">
+          <div class="toast-title">{{ store.toast.type === 'success' ? 'Sincronizado' : store.toast.type === 'error' ? 'Alerta de Célula' : 'Nexus Info' }}</div>
+          <div class="toast-msg">{{ store.toast.message }}</div>
+        </div>
+      </div>
+    </transition>
+
+    <main class="settings-view animate-fade-up">
     <div class="settings-header">
       <div class="brand-badge pulse-aura">LUMAESTRO PREMIER</div>
       <h1 class="gradient-text">Orquestração de IAs</h1>
-      <p class="subtitle">Configurações globais e gerenciamento de identidades.</p>
+      <p class="subtitle">Configurações globais e gerenciamento de contas.</p>
     </div>
 
     <div class="tabs-nav-glass">
-      <button v-for="tab in ['geral', 'qdrant', 'chaves', 'motores', 'modelos', 'groq', 'contas', 'seguranca', 'mcp', 'repositórios']" 
+      <!-- NAVEGAÇÃO DE ABAS ATUALIZADA -->
+      <button v-for="tab in ['geral', 'qdrant', 'chaves', 'motores', 'rag', 'google', 'groq', 'contas', 'seguranca', 'mcp']" 
               :key="tab"
               @click="store.activeTab = tab" 
               :class="{ 'active': store.activeTab === tab }" 
               class="tab-btn-premium">
-        {{ tab === 'contas' ? 'CONTAS GEMINI 💎' : tab === 'groq' ? 'GROQ LPU 🏎️' : tab.toUpperCase() }}
+        {{ tab === 'contas' ? 'CONTAS' : tab === 'groq' ? 'GROQ LPU' : tab === 'rag' ? 'RAG/ONTOLOGIA' : tab.toUpperCase() }}
       </button>
     </div>
 
@@ -308,9 +406,21 @@ watch(() => store.activeTab, (tab) => {
            </div>
         </div>
 
+        <div style="height: 1px; background: rgba(148,163,184,0.1); margin: 2.5rem 0 1.5rem;"></div>
 
-
-
+        <div class="premium-form-group" style="margin-bottom: 2rem;">
+          <label style="color: var(--primary); font-weight: 800; letter-spacing: 1px;">MOTOR PRIMÁRIO (ORQUESTRADOR ACP)</label>
+          <p style="font-size: 0.75rem; color: var(--p-text-dim); margin-bottom: 1rem;">
+             Selecione o "vetor de combustível" principal que alimenta o cérebro do Lumaestro.
+          </p>
+          <select v-model="store.config.primary_provider" class="maestro-input" style="border-color: rgba(59,130,246,0.3);" @change="setPrimaryProvider(store.config.primary_provider)">
+            <option value="gemini">Gemini (Google DeepMind)</option>
+            <option value="claude">Claude (Anthropic)</option>
+            <option value="groq">Groq LPU (Ultra Latency)</option>
+            <option value="lmstudio">Local Expert (LM Studio)</option>
+            <option value="native">Local Nativo (Lumaestro Hybrid)</option>
+          </select>
+        </div>
 
         <button @click="save" class="btn-glow-blue">SALVAR ALTERAÇÕES GERAIS</button>
 
@@ -441,58 +551,106 @@ watch(() => store.activeTab, (tab) => {
 
       <!-- ABA CHAVES (INJEÇÃO DE CHAVES DIRETAS) -->
       <section v-if="store.activeTab === 'chaves'" class="glass-panel animate-slide-up">
-        <h2 class="section-title">Chaves de API (Conexão Legada)</h2>
-        <p style="color: var(--p-text-dim); margin-bottom: 1.5rem; font-size: 0.9rem;">
-          Gerencie injeções diretas de tokens de acesso para execução em modo bypass em vez do sistema nativo OAuth.
+        <h2 class="section-title">Conexões Legadas / Manuais</h2>
+        <p style="color: var(--p-text-dim); margin-bottom: 2rem; font-size: 0.9rem;">
+          Gerencie injeções diretas de tokens para provedores manuais ou integrações via bypass.
         </p>
         
+        <div class="premium-form-group">
+          <label>Claude API Key (Anthropic)</label>
+          <input v-model="store.config.claude_api_key" type="password" class="maestro-input" placeholder="sk-ant-..." :disabled="!store.config.use_claude_api_key" />
+        </div>
+
+        <div class="sec-card" style="margin-bottom: 2.5rem; padding: 1.5rem 2.5rem; border-color: rgba(217, 119, 6, 0.2);">
+           <div class="sec-info">
+              <h5 style="margin: 0; font-weight: 800; font-size: 1rem; color: #fff;">Claude API Mode</h5>
+              <p style="margin: 8px 0 0; font-size: 0.8rem; color: var(--p-text-dim);">Habilitar injeção direta de chave para modelos Sonnet/Haiku.</p>
+           </div>
+           <label class="hybrid-toggle-maestro">
+              <input type="checkbox" v-model="store.config.use_claude_api_key" />
+              <span class="m-slider-sec" style="background: rgba(217, 119, 6, 0.1);"></span>
+           </label>
+        </div>
+
+        <button @click="save" class="btn-glow-blue" style="width: 100%;">SALVAR CHAVES MANUAIS</button>
+      </section>
+
+      <!-- ABA GOOGLE (GEMINI NEXUS) -->
+      <section v-if="store.activeTab === 'google'" class="glass-panel animate-slide-up" style="border-color: rgba(59, 130, 246, 0.2);">
+        <h2 class="section-title" style="color: #60a5fa;">Google Gemini Nexus 💎</h2>
+        <p style="color: var(--p-text-dim); margin-bottom: 2rem; font-size: 0.9rem;">
+          Infraestrutura nativa do Google. Gerencie pools de chaves e o sistema de failover automático.
+        </p>
+
         <div class="premium-form-group">
           <label style="display: flex; align-items: center; justify-content: space-between;">
             <span>Gemini API Keys (Pool de Failover)</span>
             <span v-if="store.geminiKeyCount > 0" style="background: rgba(59, 130, 246, 0.15); color: #3b82f6; padding: 3px 10px; border-radius: 8px; font-size: 0.65rem; font-weight: 900; letter-spacing: 1px;">
-              {{ store.geminiKeyCount }} CHAVE{{ store.geminiKeyCount > 1 ? 'S' : '' }} 🔑
+              {{ store.geminiKeyCount }} CHAVE{{ store.geminiKeyCount > 1 ? 'S' : '' }} ATIVA{{ store.geminiKeyCount > 1 ? 'S' : '' }} 🔑
             </span>
           </label>
           <textarea 
             v-model="store.config.gemini_api_key" 
             class="maestro-input" 
-            placeholder="AIzaSy...chave1, AIzaSy...chave2, AIzaSy...chave3"
+            placeholder="AIzaSy..., AIzaSy..."
             rows="3"
-            style="resize: vertical; font-family: monospace; font-size: 0.85rem; line-height: 1.6;"
+            style="resize: vertical; font-family: monospace; font-size: 0.85rem; line-height: 1.6; border-color: rgba(59, 130, 246, 0.3);"
           ></textarea>
-
         </div>
 
+        <div class="premium-form-group" style="margin-top: 2rem;">
+          <label>Modelo Gemini de Prioridade (Boot)</label>
+          <select v-model="store.config.gemini_model" class="maestro-input" style="border-color: rgba(59, 130, 246, 0.3);">
+            <option v-for="model in availableGoogleModels" :key="model.id" :value="model.id">
+              {{ model.icon }} {{ model.id }} ({{ model.label }})
+            </option>
+          </select>
+        </div>
 
-
-        <div class="sec-card" style="margin-top: 1.5rem; margin-bottom: 1.5rem; padding: 1.2rem 1.6rem;">
+        <div class="sec-card" style="margin-top: 2rem; margin-bottom: 2.5rem; padding: 1.2rem 1.6rem; border-color: rgba(59, 130, 246, 0.2);">
            <div class="sec-info">
               <h5 style="margin: 0; font-weight: 800; font-size: 0.95rem; color: #fff;">Modo Autônomo API</h5>
-              <p style="margin: 8px 0 0; font-size: 0.78rem; color: var(--p-text-dim);">Usar chave legada em vez de Sessões OAuth.</p>
+              <p style="margin: 8px 0 0; font-size: 0.78rem; color: var(--p-text-dim);">Usar chave legada em vez de Sessões de Contas (OAuth).</p>
            </div>
            <label class="hybrid-toggle-maestro">
               <input type="checkbox" v-model="store.config.use_gemini_api_key" />
-              <span class="m-slider-sec"></span>
+              <span class="m-slider-sec" style="background: rgba(59, 130, 246, 0.1);"></span>
            </label>
         </div>
 
         <div class="premium-form-group">
-          <label>Claude API Key</label>
-          <input v-model="store.config.claude_api_key" type="password" class="maestro-input" placeholder="••••••••" :disabled="!store.config.use_claude_api_key" />
+          <label style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem;">
+            <span>Gerenciador da Frota Google (Cascata)</span>
+            <span style="font-size: 0.6rem; color: #3b82f6; font-weight: 900; letter-spacing: 1px;">SINFORNIA GOOGLE ATIVA 🛡️</span>
+          </label>
+          
+          <div class="google-fleet-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 15px;">
+            <div v-for="model in availableGoogleModels" :key="model.id" 
+                 class="fleet-item-card" 
+                 :class="{ 'active': isGoogleModelActive(model.id) }"
+                 @click="toggleGoogleModel(model.id)"
+                 style="background: rgba(255,255,255,0.03); border: 1px solid rgba(59, 130, 246, 0.1); border-radius: 12px; padding: 15px; cursor: pointer; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); position: relative; overflow: hidden; height: 100px; display: flex; flex-direction: column; justify-content: space-between;">
+              <div class="fleet-item-inner" style="position: relative; z-index: 2; height: 100%; display: flex; flex-direction: column; justify-content: space-between;">
+                <div style="display: flex; align-items: flex-start; justify-content: space-between;">
+                  <span style="font-size: 1.4rem;">{{ model.icon }}</span>
+                  <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
+                    <div class="maestro-switch mini" :class="{ 'on': isGoogleModelActive(model.id) }">
+                      <div class="maestro-switch-thumb"></div>
+                    </div>
+                    <div style="font-size: 0.5rem; background: rgba(59, 130, 246, 0.2); color: #3b82f6; padding: 2px 6px; border-radius: 4px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase;">{{ model.tier }}</div>
+                  </div>
+                </div>
+                <div>
+                  <div style="font-weight: 800; font-size: 0.75rem; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; opacity: 0.9;">{{ model.id }}</div>
+                  <div style="font-size: 0.6rem; color: var(--p-text-dim); font-weight: 600; letter-spacing: 0.5px;">{{ model.label }}</div>
+                </div>
+              </div>
+              <div v-if="isGoogleModelActive(model.id)" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(circle at top right, rgba(59, 130, 246, 0.1) 0%, transparent 70%); pointer-events: none;"></div>
+            </div>
+          </div>
         </div>
 
-        <div class="sec-card" style="margin-bottom: 2.5rem; padding: 1.5rem 2.5rem;">
-           <div class="sec-info">
-              <h5 style="margin: 0; font-weight: 800; font-size: 1rem; color: #fff;">Claude API Mode</h5>
-              <p style="margin: 8px 0 0; font-size: 0.8rem; color: var(--p-text-dim);">Habilitar injeção direta de chave Anthropic.</p>
-           </div>
-           <label class="hybrid-toggle-maestro">
-              <input type="checkbox" v-model="store.config.use_claude_api_key" />
-              <span class="m-slider-sec"></span>
-           </label>
-        </div>
-
-        <button @click="save" class="btn-glow-blue" style="margin-top: 1.5rem; width: 100%;">SALVAR CHAVES</button>
+        <button @click="save" class="btn-glow-blue" style="margin-top: 2rem; width: 100%;">SALVAR CONFIGURAÇÃO GOOGLE</button>
       </section>
 
       <!-- ABA GROQ (TURBO LPU) -->
@@ -522,13 +680,51 @@ watch(() => store.activeTab, (tab) => {
         </div>
 
         <div class="premium-form-group" style="margin-top: 2rem;">
-          <label>Modelo Groq Padrão</label>
+          <label>Modelo Groq de Prioridade (Boot)</label>
           <select v-model="store.config.groq_model" class="maestro-input" style="border-color: rgba(245, 158, 11, 0.3);">
-            <option value="llama-3.3-70b-versatile">Llama 3.3 70B Versatile (Recomendado)</option>
-            <option value="qwen-2.5-32b">Qwen 2.5 32B (Raciocínio Lógico)</option>
-            <option value="llama-3.1-8b-instant">Llama 3.1 8B Instant (Extrema Velocidade)</option>
-            <option value="mixtral-8x7b-32768">Mixtral 8x7b (Janela Longa)</option>
+            <option v-for="model in availableGroqModels" :key="model.id" :value="model.id">
+              {{ model.icon }} {{ model.id }} ({{ model.label }})
+            </option>
           </select>
+        </div>
+
+        <div class="premium-form-group" style="margin-top: 2.5rem;">
+          <label style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem;">
+            <span>Gerenciador da Frota de Resiliência (Cascata)</span>
+            <span style="font-size: 0.6rem; color: #f59e0b; font-weight: 900; letter-spacing: 1px;">MODO GUERRA TOTAL ATIVO 🛡️</span>
+          </label>
+          
+          <div class="groq-fleet-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 15px;">
+            <div v-for="model in availableGroqModels" :key="model.id" 
+                 class="fleet-item-card" 
+                 :class="{ 'active': isModelActive(model.id) }"
+                 @click="toggleGroqModel(model.id)"
+                 style="background: rgba(255,255,255,0.03); border: 1px solid rgba(245, 158, 11, 0.1); border-radius: 12px; padding: 15px; cursor: pointer; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); position: relative; overflow: hidden; height: 100px; display: flex; flex-direction: column; justify-content: space-between;">
+              
+              <div class="fleet-item-inner" style="position: relative; z-index: 2; height: 100%; display: flex; flex-direction: column; justify-content: space-between;">
+                <div style="display: flex; align-items: flex-start; justify-content: space-between;">
+                  <span style="font-size: 1.4rem;">{{ model.icon }}</span>
+                  <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
+                    <div class="maestro-switch mini" :class="{ 'on': isModelActive(model.id) }">
+                      <div class="maestro-switch-thumb"></div>
+                    </div>
+                    <div style="font-size: 0.5rem; background: rgba(245, 158, 11, 0.2); color: #f59e0b; padding: 2px 6px; border-radius: 4px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase;">{{ model.tier }}</div>
+                  </div>
+                </div>
+                
+                <div>
+                  <div style="font-weight: 800; font-size: 0.75rem; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; opacity: 0.9;">{{ model.id.split('/').pop() }}</div>
+                  <div style="font-size: 0.6rem; color: var(--p-text-dim); font-weight: 600; letter-spacing: 0.5px;">{{ model.label }}</div>
+                </div>
+              </div>
+
+              <!-- Glow Effect -->
+              <div v-if="isModelActive(model.id)" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(circle at top right, rgba(245, 158, 11, 0.1) 0%, transparent 70%); pointer-events: none;"></div>
+            </div>
+          </div>
+          <small style="color: var(--p-text-dim); font-size: 0.7rem; margin-top: 15px; display: block; line-height: 1.5;">
+            Clique nos cards para ativar/desativar modelos na cascata. O Lumaestro percorrerá **apenas** os modelos ativos quando as cotas estourarem.
+          </small>
         </div>
 
         <div class="sec-card" style="margin-top: 2rem; padding: 1.5rem; border: 1px solid rgba(245, 158, 11, 0.1); background: rgba(245, 158, 11, 0.02);">
@@ -556,7 +752,6 @@ watch(() => store.activeTab, (tab) => {
         <p style="color: var(--p-text-dim); margin-bottom: 2rem; font-size: 0.9rem;">
           Estação de controle dos núcleos de inteligência. Acompanhe a disponibilidade binária e inicie os daemons em background.
         </p>
-
 
         <div class="engine-cards-stack">
            <div v-for="tool in ['gemini', 'claude', 'lmstudio']" :key="tool" class="profile-card engine-showcase-card" :class="tool">
@@ -661,143 +856,21 @@ watch(() => store.activeTab, (tab) => {
         </div>
       </section>
 
-      <!-- ABA MODELOS (POOL ATIVO) -->
-      <section v-if="store.activeTab === 'modelos'" class="glass-panel animate-slide-up">
-        <h2 class="section-title">Pool Ativo de Modelos</h2>
+      <!-- ABA RAG/ONTOLOGIA (POOL ATIVO) -->
+      <!-- ABA RAG/ONTOLOGIA (EXCLUSIVO) -->
+      <section v-if="store.activeTab === 'rag'" class="glass-panel animate-slide-up">
+        <h2 class="section-title">RAG / Ontologia (Extrator de Triplas)</h2>
         <p style="color: var(--p-text-dim); margin-bottom: 2rem; font-size: 0.9rem;">
-          Configure quais provedores e modelos o sistema usa para chat, embeddings e RAG semântico.
+          Configure o cérebro semântico que processa suas notas, encontra conexões neurais e constrói o Grafo de Conhecimento.
         </p>
 
-        <!-- BLEND DE PROVEDORES PARA CHAT -->
-        <h3 style="font-size: 0.85rem; font-weight: 800; letter-spacing: 1px; color: #94a3b8; margin-bottom: 1rem; text-transform: uppercase;">Chat / Orquestrador</h3>
 
-        <div class="sec-card" style="margin-bottom: 1.5rem; padding: 1.2rem 1.6rem;">
-          <div class="sec-info">
-            <h5 style="margin: 0; font-weight: 800; font-size: 0.95rem; color: #fff;">Blend de provedores</h5>
-            <p style="margin: 6px 0 0; font-size: 0.78rem; color: var(--p-text-dim);">Quando ativo, o orquestrador respeita o pool e roteia pelo provedor mais adequado disponível.</p>
-          </div>
-          <label class="hybrid-toggle-maestro">
-            <input type="checkbox" v-model="store.config.blend_active_models" />
-            <span class="m-slider-sec"></span>
-          </label>
-        </div>
 
-        <div class="premium-form-group" style="margin-bottom: 1.5rem;">
-          <label style="margin-bottom: 10px; display: block;">Provedores ativos para chat</label>
-          <div style="display: flex; flex-wrap: wrap; gap: 0.75rem;">
-            <button
-              v-for="p in ['gemini', 'claude', 'groq', 'lmstudio']"
-              :key="p"
-              type="button"
-              @click="toggleProvider(p)"
-              :style="isProviderActive(p)
-                ? 'padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(16,185,129,0.4); background: rgba(16,185,129,0.12); color: #d1fae5; cursor: pointer; font-weight: 700;'
-                : 'padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(148,163,184,0.25); background: rgba(15,23,42,0.35); color: #cbd5e1; cursor: pointer; font-weight: 700;'"
-            >
-              {{ providerLabel(p) }} {{ isProviderActive(p) ? '✓' : '' }}
-            </button>
-          </div>
-          <small style="display: block; margin-top: 0.6rem; color: var(--p-text-dim); font-size: 0.72rem;">
-            Pelo menos um provedor precisa ficar ativo.
-          </small>
-        </div>
 
-        <div class="premium-form-group" style="margin-bottom: 2rem;">
-          <label>Provedor primário (chat padrão)</label>
-          <select v-model="store.config.primary_provider" class="maestro-input" @change="setPrimaryProvider(store.config.primary_provider)">
-            <option value="gemini">Gemini</option>
-            <option value="claude">Claude</option>
-            <option value="groq">Groq LPU</option>
-            <option value="lmstudio">LM Studio</option>
-          </select>
-        </div>
-
-        <div style="height: 1px; background: rgba(148,163,184,0.12); margin: 2rem 0;"></div>
-
-        <!-- MOTOR DE EMBEDDINGS -->
-        <h3 style="font-size: 0.85rem; font-weight: 800; letter-spacing: 1px; color: #94a3b8; margin-bottom: 1rem; text-transform: uppercase;">🔬 Motor de Embeddings (Qdrant / Sync 3D)</h3>
-        <p style="color: var(--p-text-dim); margin-bottom: 1.5rem; font-size: 0.82rem; line-height: 1.5;">
-          Define qual motor gera os vetores para busca semântica. Necessário para o Sync Obsidian 3D funcionar.<br/>
-          <strong style="color: #fbbf24;">⚠️ Alterar o provedor muda a dimensão dos vetores — será necessário resetar o banco Qdrant.</strong>
-        </p>
-
-        <div class="premium-form-group" style="margin-bottom: 1.2rem;">
-          <label>Provedor de embeddings</label>
-          <select id="embedding-provider-select" :value="store.config.embeddings_provider" class="maestro-input" @change="confirmProviderChange">
-            <option value="gemini">Nuvem: Gemini (gemini-embedding-2-preview · 3072 dim)</option>
-            <option value="native">Local: Lumaestro Nativo (Qwen3 0.6B Interno · 1024 dim)</option>
-            <option value="lmstudio">Servidor Externo: LM Studio</option>
-          </select>
-        </div>
-
-        <div v-if="store.config.embeddings_provider === 'lmstudio'" class="premium-form-group" style="margin-bottom: 1.2rem;">
-          <label>Modelo de embeddings no LM Studio</label>
-          <div style="display: flex; gap: 0.5rem; align-items: center;">
-            <input
-              v-model="store.config.embeddings_model"
-              placeholder="Ex: nomic-embed-text, text-embedding-nomic-embed-text-v1.5"
-              class="maestro-input"
-              @change="detectEmbeddingDimension"
-              style="flex: 1;"
-            />
-            <select v-if="store.lmModels.length > 0" v-model="store.config.embeddings_model" class="maestro-input" style="max-width: 220px;" @change="detectEmbeddingDimension">
-              <option value="">-- selecionar do LM Studio --</option>
-              <option v-for="m in store.lmModels" :key="m" :value="m">{{ m }}</option>
-            </select>
-          </div>
-          <small style="color: var(--p-text-dim); font-size: 0.72rem; display: block; margin-top: 0.4rem;">
-            Carregue um modelo de embeddings no LM Studio (ex: nomic-embed-text). Clique em "🔄 MODELOS" na aba Motores para atualizar a lista.
-          </small>
-        </div>
-
-        <div class="premium-form-group" style="margin-bottom: 2rem;">
-          <label>Dimensão dos vetores</label>
-          <div style="display: flex; gap: 0.5rem; align-items: center;">
-            <input
-              v-model.number="store.config.embedding_dimension"
-              type="number"
-              class="maestro-input"
-              style="max-width: 140px;"
-              placeholder="3072"
-            />
-            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-              <button type="button" @click="store.config.embedding_dimension = 3072" style="padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(59,130,246,0.4); background: rgba(59,130,246,0.08); color: #93c5fd; cursor: pointer; font-size: 0.75rem; font-weight: 700;">3072 Gemini</button>
-              <button type="button" @click="store.config.embedding_dimension = 768" style="padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(168,85,247,0.4); background: rgba(168,85,247,0.08); color: #d8b4fe; cursor: pointer; font-size: 0.75rem; font-weight: 700;">768 nomic</button>
-              <button type="button" @click="store.config.embedding_dimension = 1536" style="padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(234,179,8,0.4); background: rgba(234,179,8,0.08); color: #fde68a; cursor: pointer; font-size: 0.75rem; font-weight: 700;">1536 ada-002</button>
-            </div>
-          </div>
-          <small style="color: var(--p-text-dim); font-size: 0.72rem; display: block; margin-top: 0.4rem;">
-            Precisa coincidir exatamente com o modelo escolhido.
-          </small>
-        </div>
-
-        <div style="height: 1px; background: rgba(148,163,184,0.12); margin: 2rem 0;"></div>
-
-        <!-- MOTOR DE RAG / ONTOLOGIA -->
-        <h3 style="font-size: 0.85rem; font-weight: 800; letter-spacing: 1px; color: #94a3b8; margin-bottom: 1rem; text-transform: uppercase;">🧠 Motor de RAG / Ontologia (extração de triplas)</h3>
-        <p style="color: var(--p-text-dim); margin-bottom: 1.5rem; font-size: 0.82rem; line-height: 1.5;">
-          Define qual motor processa prompts de análise semântica (extração de fatos, grafo de conhecimento, conflitos).<br/>
-          Pode ser diferente do motor de embeddings.
-        </p>
-
-        <div class="premium-form-group" style="margin-bottom: 1.2rem;">
-          <label>Provedor de RAG/Ontologia</label>
-          <select v-model="store.config.rag_provider" class="maestro-input" @change="onRAGProviderChange">
-            <option value="gemini">Nuvem: Gemini (cascata resiliente de modelos)</option>
-            <option value="native">Local: Lumaestro Híbrido (Qwen Reasoning + Gemma Chat)</option>
-            <option value="lmstudio">Servidor Externo: LM Studio (modelo local)</option>
-            <option value="groq">Turbo: Groq LPU (Llama 3.3 70B / Qwen 32B)</option>
-            <option value="claude">Nuvem: Claude (melhor para análise de código)</option>
-          </select>
-        </div>
 
         <!-- SELETOR DE MOTOR DE RAG (Cards Visuais) -->
-        <div style="margin: 2rem 0; padding: 1.5rem; border-radius: 16px; border: 1px solid rgba(139, 92, 246, 0.15); background: rgba(139, 92, 246, 0.03);">
-          <h3 style="margin: 0 0 0.5rem; font-size: 0.85rem; font-weight: 800; letter-spacing: 1px; color: #94a3b8; text-transform: uppercase;">🧠 Inteligência de RAG</h3>
-          <p style="color: var(--p-text-dim); font-size: 0.8rem; margin-bottom: 1rem; line-height: 1.5;">
-            Escolha o cérebro que analisa suas notas e extrai o Grafo de Conhecimento.
-          </p>
-
+        <div style="margin: 2rem 0; padding: 1.5rem; border-radius: 16px; border: 1px solid rgba(139, 92, 246, 0.15); background: rgba(139, 92, 246, 0.03); transition: all 0.4s;"
+             :style="store.config.hybrid_failover_enabled ? 'opacity: 0.3; filter: grayscale(1); pointer-events: none;' : ''">
           <div style="display: flex; gap: 12px; flex-wrap: wrap;">
             <!-- Card NUVEM (Gemini) -->
             <div 
@@ -828,11 +901,11 @@ watch(() => store.activeTab, (tab) => {
               <div style="display: flex; align-items: center; gap: 10px;">
                 <span style="font-size: 1.5rem;">🛰️</span>
                 <div>
-                  <div style="font-weight: 900; font-size: 0.9rem; color: #fff;">Híbrido Local (Lumaestro)</div>
-                  <div style="font-size: 0.7rem; color: #94a3b8;">Qwen 3.6 Distilled (Extraction) + Gemma 4 (Chat)</div>
+                  <div style="font-weight: 900; font-size: 0.9rem; color: #fff;">LLM Local (Lumaestro)</div>
+                  <div style="font-size: 0.7rem; color: #94a3b8;">Claude Distilled (Qwen 3.5 Reasoning)</div>
                 </div>
               </div>
-              <div v-if="store.config.rag_provider === 'native'" style="font-size: 0.65rem; font-weight: 900; color: #ec4899; letter-spacing: 1px;">✓ MODO EXPERT ATIVO</div>
+              <div v-if="store.config.rag_provider === 'native'" style="font-size: 0.65rem; font-weight: 900; color: #ec4899; letter-spacing: 1px;">✓ EXPERT ATIVO</div>
             </div>
 
             <!-- Card TURBO LPU (Groq) -->
@@ -847,7 +920,7 @@ watch(() => store.activeTab, (tab) => {
                 <span style="font-size: 1.5rem;">🏎️</span>
                 <div>
                   <div style="font-weight: 900; font-size: 0.9rem; color: #fff;">Groq Turbo LPU</div>
-                  <div style="font-size: 0.7rem; color: #94a3b8;">Llama 3.3 70B · Ultra Latência</div>
+                  <div style="font-size: 0.7rem; color: #94a3b8;">Llama 3.3 70B · Resiliência Ativa</div>
                 </div>
               </div>
               <div v-if="store.config.rag_provider === 'groq'" style="font-size: 0.65rem; font-weight: 900; color: #f59e0b; letter-spacing: 1px;">✓ TURBO ATIVO</div>
@@ -855,172 +928,191 @@ watch(() => store.activeTab, (tab) => {
           </div>
         </div>
 
-        <!-- MODO SOBREVIVÊNCIA (FAILOVER HÍBRIDO) -->
-        <div class="glass-panel" style="margin-top: 2rem; border-color: rgba(16, 185, 129, 0.2); background: rgba(16, 185, 129, 0.02); padding: 2rem;">
-          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem;">
-            <div style="display: flex; align-items: center; gap: 12px;">
-              <span style="font-size: 2rem;">🛡️</span>
+        <!-- NEXUS SHIELD PROTOCOL (FAILOVER HÍBRIDO) -->
+        <div class="glass-panel" style="margin-top: 2rem; border-color: rgba(16, 185, 129, 0.2); background: rgba(5, 15, 15, 0.6); padding: 2rem; border-radius: 24px; box-shadow: 0 20px 50px rgba(0,0,0,0.3);">
+          <div style="display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 2rem;">
+            <div style="display: flex; align-items: center; gap: 18px;">
+              <div style="background: rgba(16, 185, 129, 0.1); padding: 12px; border-radius: 16px; border: 1px solid rgba(16, 185, 129, 0.2); box-shadow: 0 0 20px rgba(16, 185, 129, 0.1);">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>
+              </div>
               <div>
-                <h3 style="margin: 0; font-size: 1.1rem; font-weight: 800; color: #fff;">Resiliência Híbrida</h3>
-                <div style="font-size: 0.7rem; color: #10b981; font-weight: 900; letter-spacing: 1px;">MODO SOBREVIVÊNCIA</div>
-              </div>
-            </div>
-            <div class="sec-toggle-wrapper" @click="store.config.hybrid_failover_enabled = !store.config.hybrid_failover_enabled; save()">
-              <div class="maestro-switch" :class="{ 'on': store.config.hybrid_failover_enabled }">
-                <div class="maestro-switch-thumb"></div>
-              </div>
-              <span :class="store.config.hybrid_failover_enabled ? 'sec-label-active' : 'sec-label-blocked'" style="margin-left: 10px; font-size: 0.8rem;">
-                {{ store.config.hybrid_failover_enabled ? 'ATIVADO' : 'DESATIVADO' }}
-              </span>
-            </div>
-          </div>
-
-          <p style="color: var(--p-text-dim); font-size: 0.85rem; line-height: 1.6; margin-bottom: 1.5rem;">
-            Garante que o Lumaestro nunca pare de responder. Se a **Groq** ou **Gemini** atingirem limites de cota ou falharem, o sistema alterna automaticamente para o seu motor **Local (RX 580)** de forma silenciosa.
-          </p>
-
-          <!-- DISPLAY DINÂMICO DE CASCATA -->
-          <div style="margin-top: 1.5rem; transition: opacity 0.3s;" 
-               :style="!store.config.hybrid_failover_enabled ? 'opacity: 0.4; pointer-events: none; filter: grayscale(0.5);' : ''">
-             <div style="font-size: 0.7rem; color: #64748b; font-weight: 800; letter-spacing: 1px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-               <span style="display: inline-block; width: 8px; height: 1px; background: #334155;"></span>
-               CONFIGURAR PRIORIDADE DE RESILIÊNCIA
-             </div>
-             
-             <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
-                <div v-for="(prov, idx) in store.config.failover_priority" :key="prov" 
-                     class="animate-slide-up"
-                     style="display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: rgba(0,0,0,0.4); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 12px; transition: all 0.2s;"
-                >
-                  <div @click="movePriority(idx)" style="cursor: pointer; display: flex; align-items: center; gap: 8px;">
-                    <span style="font-size: 0.6rem; font-weight: 900; color: #10b981; opacity: 0.6;">#{{ idx + 1 }}</span>
-                    <span style="font-size: 0.75rem; font-weight: 900; letter-spacing: 1px;" 
-                          :style="prov === 'groq' ? 'color: #f59e0b;' : prov === 'gemini' ? 'color: #3b82f6;' : 'color: #ec4899;'">
-                      {{ prov === 'native' ? 'LOCAL (NATIVE)' : prov.toUpperCase() }}
-                    </span>
-                  </div>
-                  <button v-if="store.config.failover_priority.length > 1" 
-                          @click="removePriority(idx)" 
-                          style="background: rgba(255,255,255,0.05); border: none; color: #64748b; font-size: 0.8rem; cursor: pointer; padding: 2px 6px; border-radius: 4px; display: flex; align-items: center; justify-content: center; transition: color 0.2s;"
-                          onmouseover="this.style.color='#ef4444'"
-                          onmouseout="this.style.color='#64748b'"
-                  >
-                    ✕
-                  </button>
-                  <span v-if="idx < store.config.failover_priority.length - 1" style="color: #334155; margin-left: 4px;">➔</span>
-                </div>
-
-                <!-- Botão de Reinício de Hierarquia -->
-                <button @click="resetPriority" style="background: none; border: 1px dashed rgba(255,255,255,0.1); color: #475569; font-size: 0.6rem; font-weight: 900; padding: 10px 14px; border-radius: 12px; cursor: pointer;">
-                   REDEFINIR 🔄
-                </button>
-             </div>
-
-             <!-- MOTORES DISPONÍVEIS (NÃO ATIVOS NA CASCATA) -->
-             <div v-if="availableFailoverProviders.length > 0" style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid rgba(255,255,255,0.05);">
-                <div style="font-size: 0.6rem; color: #475569; font-weight: 800; letter-spacing: 1px; margin-bottom: 10px; text-transform: uppercase;">
-                  Motores Disponíveis para Resiliência
-                </div>
-                <div style="display: flex; gap: 8px;">
-                  <button v-for="p in availableFailoverProviders" :key="p"
-                          @click="addPriority(p)"
-                          style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); color: #94a3b8; padding: 6px 12px; border-radius: 8px; font-size: 0.7rem; font-weight: 900; cursor: pointer; transition: all 0.2s;"
-                          onmouseover="this.style.borderColor='rgba(16, 185, 129, 0.3)'; this.style.color='#fff'"
-                          onmouseout="this.style.borderColor='rgba(255,255,255,0.08)'; this.style.color='#94a3b8'"
-                  >
-                    + {{ p.toUpperCase() }}
-                  </button>
-                </div>
-             </div>
-             
-             <p style="margin-top: 1rem; font-size: 0.7rem; color: #475569; font-style: italic;">
-               * Clique na ordem para mover para o fim. Clique no [✕] para omitir o motor da proteção.
-             </p>
-          </div>
-        </div>
-
-        <div v-if="store.config.rag_provider === 'lmstudio'" class="premium-form-group" style="margin-bottom: 2rem;">
-          <label>Modelo de chat para RAG no LM Studio</label>
-          <div style="display: flex; gap: 0.5rem; align-items: center;">
-            <input
-              v-model="store.config.rag_model"
-              placeholder="Ex: google/gemma-4-26b-a4b, llama-3.2-3b-instruct"
-              class="maestro-input"
-              style="flex: 1;"
-            />
-            <select v-if="store.lmModels.length > 0" v-model="store.config.rag_model" class="maestro-input" style="max-width: 220px;">
-              <option value="">-- selecionar do LM Studio --</option>
-              <option v-for="m in store.lmModels" :key="m" :value="m">{{ m }}</option>
-            </select>
-          </div>
-          <small style="color: var(--p-text-dim); font-size: 0.72rem; display: block; margin-top: 0.4rem;">
-            Deixe vazio para usar o modelo padrão configurado na aba Motores.
-          </small>
-        </div>
-
-        <div v-if="store.config.rag_provider === 'claude'" class="premium-form-group" style="margin-bottom: 2rem;">
-          <label>Modelo Claude para RAG</label>
-          <select v-model="store.config.rag_model" class="maestro-input">
-            <option value="">claude-3-5-sonnet (padrão)</option>
-            <option value="claude-3-5-sonnet-latest">claude-3-5-sonnet-latest</option>
-            <option value="claude-3-5-haiku-latest">claude-3-5-haiku-latest (mais rápido)</option>
-            <option value="claude-opus-4-5">claude-opus-4-5</option>
-          </select>
-        </div>
-
-        <div v-if="store.config.rag_provider === 'groq'" class="premium-form-group" style="margin-bottom: 2rem;">
-          <label>Modelo Groq para RAG</label>
-          <select v-model="store.config.rag_model" class="maestro-input" style="border-color: rgba(245, 158, 11, 0.3);">
-            <option value="">llama-3.3-70b-versatile (padrão)</option>
-            <option value="llama-3.3-70b-versatile">Llama 3.3 70B Versatile</option>
-            <option value="qwen-2.5-32b">Qwen 2.5 32B</option>
-            <option value="llama-3.1-8b-instant">Llama 3.1 8B Instant</option>
-            <option value="mixtral-8x7b-32768">Mixtral 8x7b</option>
-          </select>
-        </div>
-
-        <button @click="save" class="btn-glow-blue" style="width: 100%;">SALVAR CONFIGURAÇÃO DE MODELOS</button>
-      </section>
-
-      <!-- ABA CONTAS GEMINI (OAUTH) -->
-      <section v-if="store.activeTab === 'contas'" class="glass-panel animate-slide-up">
-        <h2 class="section-title">Identidades Gemini OAuth</h2>
-        <p class="subtitle-maestro" style="color: var(--p-text-dim); margin-bottom: 1.5rem; font-size: 0.95rem;">
-          Gerencie múltiplas sessões isoladas do Google para alternar quotas de API e perfis em tempo real.
-        </p>
-
-        <div class="premium-form-group" style="display: flex; gap: 1rem; align-items: flex-end; margin-bottom: 2.5rem;">
-          <div style="flex: 1;">
-            <label>Nome da Nova Identidade</label>
-            <input v-model="store.newAccName" placeholder="Ex: Trabalho, Pessoal, Pesquisa..." class="maestro-input" @keyup.enter="handleAddAccount" />
-          </div>
-          <button @click="handleAddAccount" class="btn-glow-blue" style="height: 52px; padding: 0 24px; font-size: 0.8rem;">
-            CRIAR IDENTIDADE 💎
-          </button>
-        </div>
-
-        <div class="accounts-grid-premium">
-          <div v-for="acc in store.config.gemini_accounts" :key="acc.name" class="profile-card" :class="{ 'active-profile': acc.active }" style="display: flex; flex-direction: column;">
-            <div class="profile-header" style="display: flex; align-items: center; gap: 1.5rem; margin-bottom: 2.5rem;">
-              <div class="avatar-glow" style="flex-shrink: 0;">{{ acc.name[0].toUpperCase() }}</div>
-              <div class="profile-meta" style="min-width: 0; flex: 1;">
-                <h4 style="margin: 0; font-weight: 900; color: #fff; font-size: 1.1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" :title="acc.name">{{ acc.name }}</h4>
-                <div class="status-chip" :style="{ color: acc.active ? 'var(--p-accent)' : '#64748b', background: acc.active ? 'rgba(59, 130, 246, 0.1)' : 'transparent', border: acc.active ? '1px solid rgba(59, 130, 246, 0.2)' : 'none', padding: acc.active ? '4px 8px' : '0', borderRadius: '12px', display: 'inline-block', marginTop: '6px', fontSize: '0.65rem', fontWeight: '900', letterSpacing: '1px' }">
-                  {{ acc.active ? 'SESSÃO ATIVA' : 'MODO STANDBY' }}
+                <h3 style="margin: 0; font-size: 1.35rem; font-weight: 900; color: #fff; letter-spacing: -0.5px;">Nexus Shield Protocol</h3>
+                <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+                  <span v-if="store.config.hybrid_failover_enabled" style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; box-shadow: 0 0 10px #10b981; animation: pulse 2s infinite;"></span>
+                  <span :style="{ color: store.config.hybrid_failover_enabled ? '#10b981' : '#64748b' }" style="font-size: 0.75rem; font-weight: 900; letter-spacing: 1.5px; text-transform: uppercase;">
+                    {{ store.config.hybrid_failover_enabled ? 'Modo Sobrevivência Ativo' : 'Shield em Standby' }}
+                  </span>
                 </div>
               </div>
             </div>
             
-            <div class="profile-actions" style="display: flex; gap: 12px; margin-top: auto;">
-              <button @click="handleLoginAccount(acc.name)" class="btn-util" style="border-color: rgba(59, 130, 246, 0.4); color: #3b82f6; background: rgba(59, 130, 246, 0.05);">
-                LOGAR 🔑
+            <div class="sec-toggle-wrapper" @click="store.config.hybrid_failover_enabled = !store.config.hybrid_failover_enabled; save()" style="cursor: pointer;">
+              <div class="maestro-switch" :class="{ 'on': store.config.hybrid_failover_enabled }" style="width: 50px; height: 26px;">
+                <div class="maestro-switch-thumb" 
+                     style="width: 18px; height: 18px; transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);" 
+                     :style="store.config.hybrid_failover_enabled ? 'transform: translateX(28px); background: #3b82f6; box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);' : 'transform: translateX(0);'"></div>
+              </div>
+            </div>
+          </div>
+          
+          <p style="color: #94a3b8; font-size: 0.88rem; line-height: 1.6; margin-bottom: 2rem; max-width: 600px;">
+            O Shield monitora falhas de API e esgotamento de cotas. Em caso de queda, o Lumaestro aciona automaticamente o próximo motor da hierarquia abaixo.
+          </p>
+
+          <!-- LISTA DE MOTORES NEXUS -->
+          <div style="display: flex; flex-direction: column; gap: 12px; transition: all 0.4s;" 
+               :style="!store.config.hybrid_failover_enabled ? 'opacity: 0.3; filter: grayscale(1); pointer-events: none;' : ''">
+             
+             <div v-for="(prov, idx) in store.config.failover_priority" :key="prov" 
+                  class="animate-slide-up"
+                  style="display: flex; align-items: center; gap: 20px; padding: 4px 0;">
+                
+                <span style="font-size: 0.75rem; font-weight: 800; color: #10b981; min-width: 30px; opacity: 0.6;">#{{ idx + 1 }}</span>
+                
+                <div @click="movePriority(idx)" 
+                     style="flex: 1; display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(255,255,255,0.05); border-radius: 16px; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 12px rgba(0,0,0,0.1);"
+                     onmouseover="this.style.borderColor='rgba(16, 185, 129, 0.3)'; this.style.transform='translateX(4px)';"
+                     onmouseout="this.style.borderColor='rgba(255,255,255,0.05)'; this.style.transform='translateX(0)';"
+                >
+                  <div style="display: flex; align-items: center; gap: 16px;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" :stroke="prov === 'groq' ? '#f59e0b' : prov === 'gemini' ? '#3b82f6' : '#ec4899'" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                    <span style="font-size: 0.95rem; font-weight: 900; letter-spacing: 1px; color: #fff;">
+                      {{ prov === 'native' ? 'LOCAL (DAEMON)' : prov.toUpperCase() }}
+                    </span>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 4px;">
+                     <span style="color: #10b981; font-weight: 900; font-size: 1.2rem; opacity: 0.5;">→</span>
+                  </div>
+                </div>
+
+                <button v-if="store.config.failover_priority.length > 1" 
+                        @click="removePriority(idx)" 
+                        style="background: transparent; border: none; color: #334155; cursor: pointer; padding: 10px; font-size: 1.2rem; transition: color 0.2s;"
+                        onmouseover="this.style.color='#ef4444'"
+                        onmouseout="this.style.color='#334155'"
+                >
+                  ✕
+                </button>
+             </div>
+
+             <!-- FOOTER ACTION -->
+             <div style="margin-top: 1rem; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 1.5rem;">
+                <button @click="resetPriority" style="width: 100%; height: 50px; background: rgba(255,255,255,0.02); border: 1px dashed rgba(16, 185, 129, 0.2); border-radius: 14px; color: #64748b; font-size: 0.75rem; font-weight: 900; letter-spacing: 2px; cursor: pointer; transition: all 0.3s; display: flex; align-items: center; justify-content: center; gap: 10px;"
+                        onmouseover="this.style.background='rgba(16, 185, 129, 0.05)'; this.style.color='#10b981';"
+                        onmouseout="this.style.background='rgba(255,255,255,0.02)'; this.style.color='#64748b';">
+                   RESTAURAR PADRÕES 🛡️
+                </button>
+             </div>
+          </div>
+        </div>
+
+        <!-- CONFIGURAÇÕES ESPECÍFICAS (Apenas Modelos Locais requiridos) -->
+        <div v-if="store.config.rag_provider === 'lmstudio'" class="premium-form-group" style="margin-top: 2rem;">
+          <label style="color: #ef4444;">Modelo de chat RAG (LM Studio)</label>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <input v-model="store.config.rag_model" placeholder="Ex: google/gemma-4-26b-a4b" class="maestro-input" style="flex: 1; border-color: rgba(239, 68, 68, 0.3);" />
+            <select v-if="store.lmModels.length > 0" v-model="store.config.rag_model" class="maestro-input" style="max-width: 220px; border-color: rgba(239, 68, 68, 0.3);">
+              <option value="">-- selecionar do LM Studio --</option>
+              <option v-for="m in store.lmModels" :key="m" :value="m">{{ m }}</option>
+            </select>
+          </div>
+          <p style="font-size: 0.7rem; color: #94a3b8; margin-top: 8px;">*Obrigatório o modelo estar rodando no servidor local.</p>
+        </div>
+
+        <button @click="save" class="btn-glow-blue" style="width: 100%; margin-top: 3rem;">SALVAR CONFIGURAÇÃO DE RAG</button>
+      </section>
+
+      <!-- ABA IDENTIDADES (MULTIME-PROVEDOR) -->
+      <section v-if="store.activeTab === 'contas'" class="glass-panel animate-slide-up">
+        <h2 class="section-title">Gerenciador de Contas</h2>
+        <p class="subtitle-maestro" style="color: var(--p-text-dim); margin-bottom: 25px; font-size: 0.9rem;">
+          Gerencie múltiplas contas e perfis para alternar quotas e contextos entre projetos.
+        </p>
+
+        <!-- SELETOR DE PROVEDOR (NEXUS PILLS) -->
+        <div class="provider-selector-wrap">
+           <button v-for="p in accountProviders" :key="p.id" 
+                   @click="selectedAccountProvider = p.id"
+                   class="provider-pill"
+                   :class="{ active: selectedAccountProvider === p.id }"
+                   :style="selectedAccountProvider === p.id ? { '--brand-color': `var(--brand-${p.id})`, '--brand-glow': `var(--brand-${p.id})44` } : {}">
+             <span>{{ p.icon }}</span>
+             {{ p.label }}
+           </button>
+        </div>
+
+        <!-- CAIXA DE CRIAÇÃO NEXUS -->
+        <div class="identity-creation-nexus" :style="{ '--brand-color': `var(--brand-${selectedAccountProvider})`, '--brand-glow': `var(--brand-${selectedAccountProvider})44` }">
+          <input 
+            v-model="store.newAccName" 
+            placeholder="Nome da Nova Identidade (Trabalho, Pessoal...)" 
+            class="nexus-input" 
+            @keyup.enter="handleAddAccount(selectedAccountProvider)" 
+          />
+          <button @click="handleAddAccount(selectedAccountProvider)" class="btn-nexus-create">
+            CRIAR PERFIL {{ accountProviders.find(p => p.id === selectedAccountProvider)?.icon }}
+          </button>
+        </div>
+
+        <!-- GRADE DE IDENTIDADES -->
+        <div class="accounts-grid-premium">
+          <div v-if="filteredIdentities.length === 0" style="grid-column: 1/-1; text-align: center; padding: 4rem 2rem; border-radius: 24px; border: 1px dashed rgba(255,255,255,0.05); color: var(--p-text-dim);">
+            <div style="font-size: 2rem; margin-bottom: 1rem; opacity: 0.3;">🎭</div>
+            O Nexus de {{ selectedAccountProvider.toUpperCase() }} está vazio.
+          </div>
+
+          <div v-for="acc in filteredIdentities" :key="acc.name" 
+               class="identity-profile-card" 
+               :class="{ 'is-active': acc.active }"
+               :style="{ 
+                 '--brand-color': `var(--brand-${acc.provider})`, 
+                 '--brand-glow': `var(--brand-${acc.provider})44`,
+                 '--brand-alpha': `var(--brand-${acc.provider})11`
+               }">
+            
+            <div v-if="acc.active" class="active-aura"></div>
+
+            <div class="nexus-avatar">{{ acc.name[0].toUpperCase() }}</div>
+            
+            <div class="nexus-meta">
+              <h4>{{ acc.name }}</h4>
+              <div class="nexus-status" :style="{ color: acc.active ? `var(--brand-${acc.provider})` : 'var(--p-text-dim)' }">
+                {{ acc.active ? 'Identidade Sincronizada' : 'Standby' }}
+              </div>
+            </div>
+
+            <div style="margin-top: 1.5rem;">
+              <!-- Campo de Chave de API (Para identidades não-Google) -->
+              <div v-if="selectedAccountProvider !== 'google'" class="premium-form-group">
+                 <label style="font-size: 0.6rem; opacity: 0.6; margin-bottom: 8px;">CHAVE DE ACESSO</label>
+                 <input v-model="acc.api_key" type="password" class="maestro-input" style="font-size: 0.7rem; padding: 12px !important;" placeholder="sk-..." @change="save()" />
+              </div>
+
+              <div v-if="selectedAccountProvider === 'google'">
+                 <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.03);">
+                    <code style="font-size: 0.65rem; color: var(--brand-google); opacity: 0.8;">{{ acc.home_dir.split('\\').pop() }}</code>
+                 </div>
+              </div>
+            </div>
+
+            <div class="nexus-footer">
+              <button v-if="selectedAccountProvider === 'google'" @click="handleLoginAccount(selectedAccountProvider, acc.name)" class="btn-nexus-action primary">
+                LOGIN
               </button>
-              <button v-if="!acc.active" @click="handleSwitchAccount(acc.name)" class="btn-util" style="background: rgba(255,255,255,0.05);">
-                ATIVAR ⚡
+              
+              <button v-if="!acc.active" @click="handleSwitchAccount(selectedAccountProvider, acc.name)" class="btn-nexus-action">
+                ATIVAR
               </button>
-              <!-- Botão de Excluir Premium -->
-              <button class="btn-util btn-danger" style="flex: 0 0 50px; padding: 0;" title="Remover Identidade">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              <button v-else class="btn-nexus-action" style="background: #fff; color: #000; cursor: default;">
+                ONLINE
+              </button>
+              
+              <button @click="handleRemoveAccount(selectedAccountProvider, acc.name)" class="btn-nexus-action danger" title="Remover Identidade">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
               </button>
             </div>
           </div>
@@ -1089,80 +1181,12 @@ watch(() => store.activeTab, (tab) => {
            </div>
            <div class="mcp-actions-row" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin-top: 2rem;">
               <button @click="addMCPServer" class="btn-glow-blue" style="width: 100%;">INSTALAR SERVIDOR ⚡</button>
-              <button @click="liststore.mcpServers" class="btn-outline" style="width: 100%;">LISTAR REGISTRADOS 📋</button>
+              <button @click="listMCPServers" class="btn-outline" style="width: 100%;">LISTAR REGISTRADOS 📋</button>
            </div>
            <div v-if="store.showMcpList" class="mcp-output-container">
               <div class="output-header">SERVIDORES CONFIGURADOS</div>
               <pre class="mcp-output-box">{{ store.mcpServers }}</pre>
            </div>
-        </div>
-      </section>
-
-      <!-- ABA REPOSITÓRIOS (Code RAG & Aglomerados Radiais) -->
-      <section v-if="store.activeTab === 'repositórios'" class="glass-panel animate-slide-up">
-        <h2 class="section-title">Aglomerados Estelares (Repositórios Radiais)</h2>
-        <p style="color: var(--p-text-dim); margin-bottom: 2rem; font-size: 0.9rem;">
-          Injete pastas de projetos locais no Grafo do Lumaestro. Estes projetos formarão órbitas concêntricas independentes (RAG Radial) protegidas de poluição vetorial, orbitando seu respectivo <b>Nó Núcleo</b>.
-        </p>
-
-        <div class="mcp-restored-form" style="border: 1px solid rgba(139, 92, 246, 0.3); background: rgba(139, 92, 246, 0.03); padding: 2.5rem; border-radius: 20px;">
-           <div class="form-grid">
-             <div class="premium-form-group">
-                <label>Caminho Absoluto do Repositório</label>
-                <div style="display: flex; gap: 10px;">
-                  <input v-model="store.repoPathInput" placeholder="Ex: C:\git\Lumaestro" class="maestro-input" style="border-color: rgba(139, 92, 246, 0.4); flex: 1;" />
-                  <button @click="handleSelectDirectory" class="btn-glow-blue" style="flex: 0 0 auto; padding: 0 24px; font-size: 1.2rem; background: linear-gradient(135deg, #a855f7, #6366f1); border: 1px solid rgba(168, 85, 247, 0.5); border-radius: 14px;" title="Navegar e Escolher Pasta">
-                    📁
-                  </button>
-                </div>
-             </div>
-             <div class="premium-form-group">
-                <label>Nome do Núcleo Satélite (Core Node)</label>
-                <input v-model="store.coreNodeInput" placeholder="Ex: ProjetoLumaestro" class="maestro-input" style="border-color: rgba(139, 92, 246, 0.4);" />
-             </div>
-           </div>
-
-           <!-- Code RAG Toggle Switch Premium -->
-           <div class="sec-card" style="margin-top: 1rem; margin-bottom: 2.5rem; border-color: rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.05); padding: 1.5rem 2.5rem; display: flex; align-items: center; justify-content: space-between;">
-              <div class="sec-info" style="flex: 1;">
-                 <h5 style="margin: 0; font-weight: 800; font-size: 1rem; color: #10b981;">Devorar Código Fonte (Code RAG)</h5>
-                 <p style="margin: 8px 0 0; font-size: 0.8rem; color: var(--p-text-dim);">Ativando isto, além de .MD e Imagens, a IA irá ler, processar e gerar semânticas de todos os códigos .js, .go, .py e .ts.</p>
-              </div>
-              <label class="hybrid-toggle-maestro">
-                 <input type="checkbox" v-model="store.includeCodeToggle" />
-                 <span class="m-slider-sec" style="background: rgba(16, 185, 129, 0.1);"></span>
-              </label>
-           </div>
-
-           <button @click="handleAddProject" :disabled="store.repoStatusMsg !== ''" class="btn-glow-blue" style="width: 100%; background: linear-gradient(135deg, #a855f7, #6366f1); border: 1px solid rgba(168, 85, 247, 0.5);">
-              <span v-if="store.repoStatusMsg === ''">VINCULAR REPOSITÓRIO À SINFORNIA 🪐</span>
-              <span v-else>{{ store.repoStatusMsg }}</span>
-           </button>
-        </div>
-
-        <div style="margin-top: 4rem;">
-          <h3 style="font-size: 1rem; color: #fff; letter-spacing: 2px; margin-bottom: 1.5rem;">SISTEMAS SOLARES (Orquestrados)</h3>
-          
-          <div v-if="!store.config.external_projects || store.config.external_projects.length === 0" style="color: var(--p-text-dim); text-align: center; padding: 2rem; border-radius: 12px; border: 1px dashed rgba(255,255,255,0.1);">
-             O Universo ainda não possui outros projetos em órbita.
-          </div>
-          
-          <div v-else class="satellites-grid">
-             <div v-for="proj in store.config.external_projects" :key="proj.path" class="satellite-card">
-               <div class="sat-core">
-                 <div class="sat-ring-icon">🪐</div>
-                 <h4 class="sat-node-name">{{ proj.core_node }}</h4>
-                 <div class="sat-badge" :class="proj.include_code ? 'neo-active' : 'neo-docs'">
-                   {{ proj.include_code ? '⚡ CODE RAG' : '📄 APENAS DOCS' }}
-                 </div>
-               </div>
-               
-               <div class="sat-path-box">
-                 <span style="opacity: 0.6; margin-right: 8px;">📂</span>
-                 <span>{{ proj.path }}</span>
-               </div>
-             </div>
-          </div>
         </div>
       </section>
     </div>
@@ -1172,7 +1196,7 @@ watch(() => store.activeTab, (tab) => {
          <span class="t-title">SYSTEM_ORCHESTRATOR_OUTPUT</span>
          <div class="t-pulse"><span></span> ACTIVE</div>
       </div>
-      <div class="t-contents" ref="store.logContainer">
+      <div class="t-contents" :ref="(el) => store.logContainer = el">
         <div v-for="(log, i) in store.installLogs" :key="i" class="t-entry">> {{ log }}</div>
         <div v-if="store.installStatus" class="t-status">>> {{ store.installStatus }}</div>
       </div>
@@ -1223,4 +1247,87 @@ watch(() => store.activeTab, (tab) => {
 
 <style scoped>
 @import '../assets/css/Settings.css';
+
+@keyframes pulse {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
+/* NEXUS TOAST SYSTEM */
+.nexus-toast {
+  position: fixed;
+  top: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10000;
+  padding: 14px 24px;
+  border-radius: 18px;
+  background: rgba(13, 17, 23, 0.85);
+  backdrop-filter: blur(25px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 15px 50px rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 320px;
+  max-width: 450px;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.toast-success { 
+  border-color: rgba(59, 130, 246, 0.4); 
+  box-shadow: 0 0 30px rgba(59, 130, 246, 0.15); 
+}
+.toast-error { 
+  border-color: rgba(239, 68, 68, 0.4); 
+  box-shadow: 0 0 30px rgba(239, 68, 68, 0.15); 
+}
+
+.toast-icon {
+  font-size: 1.5rem;
+  background: rgba(255,255,255,0.03);
+  width: 45px;
+  height: 45px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.05);
+}
+
+.toast-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.toast-title {
+  font-size: 0.65rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--p-text-dim);
+  margin-bottom: 2px;
+}
+
+.toast-msg {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.animate-toast-in { animation: toastIn 0.6s cubic-bezier(0.19, 1, 0.22, 1); }
+@keyframes toastIn {
+  from { transform: translate(-50%, -60px); opacity: 0; }
+  to { transform: translate(-50%, 0); opacity: 1; }
+}
+
+.toast-leave-active {
+  transition: all 0.5s ease;
+}
+.toast-leave-to {
+  transform: translate(-50%, -60px);
+  opacity: 0;
+}
 </style>

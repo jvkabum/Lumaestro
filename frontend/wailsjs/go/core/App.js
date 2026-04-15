@@ -10,12 +10,12 @@ export function AddExternalProject(arg1, arg2, arg3) {
   return window['go']['core']['App']['AddExternalProject'](arg1, arg2, arg3);
 }
 
-export function AddGeminiAccount(arg1) {
-  return window['go']['core']['App']['AddGeminiAccount'](arg1);
-}
-
 export function AddGoldSample(arg1, arg2, arg3) {
   return window['go']['core']['App']['AddGoldSample'](arg1, arg2, arg3);
+}
+
+export function AddIdentity(arg1, arg2) {
+  return window['go']['core']['App']['AddIdentity'](arg1, arg2);
 }
 
 export function AddMCPServer(arg1, arg2) {
@@ -198,8 +198,8 @@ export function LoadAgentSession(arg1, arg2) {
   return window['go']['core']['App']['LoadAgentSession'](arg1, arg2);
 }
 
-export function LoginGeminiAccount(arg1) {
-  return window['go']['core']['App']['LoginGeminiAccount'](arg1);
+export function LoginIdentity(arg1, arg2) {
+  return window['go']['core']['App']['LoginIdentity'](arg1, arg2);
 }
 
 export function NewAgentSession(arg1) {
@@ -224,6 +224,10 @@ export function ReadGeminiConfig() {
 
 export function RejectAction(arg1, arg2) {
   return window['go']['core']['App']['RejectAction'](arg1, arg2);
+}
+
+export function RemoveIdentity(arg1, arg2) {
+  return window['go']['core']['App']['RemoveIdentity'](arg1, arg2);
 }
 
 export function ResetQdrantDB() {
@@ -318,8 +322,8 @@ export function SubmitReview(arg1, arg2) {
   return window['go']['core']['App']['SubmitReview'](arg1, arg2);
 }
 
-export function SwitchGeminiAccount(arg1) {
-  return window['go']['core']['App']['SwitchGeminiAccount'](arg1);
+export function SwitchIdentity(arg1, arg2) {
+  return window['go']['core']['App']['SwitchIdentity'](arg1, arg2);
 }
 
 export function SyncAllNodes() {

@@ -133,12 +133,12 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 			}
 		}
 
-		// Se houver uma conta específica ATIVA no pool (GeminiAccounts), ela tem prioridade total
+		// Se houver uma conta específica ATIVA no pool (Identidades), ela tem prioridade total
 		if cfgLoaded != nil {
-			for _, acc := range cfgLoaded.GeminiAccounts {
-				if acc.Active && acc.HomeDir != "" {
-					sessionHome = acc.HomeDir
-					fmt.Printf("[ACP] 👤 Conta Pool Ativa: Direcionando para %s\n", sessionHome)
+			for _, id := range cfgLoaded.Identities {
+				if id.Provider == "google" && id.Active && id.HomeDir != "" {
+					sessionHome = id.HomeDir
+					fmt.Printf("[ACP] 👤 Identidade Google Ativa: Direcionando para %s\n", sessionHome)
 					break
 				}
 			}
@@ -430,9 +430,9 @@ func (e *ACPExecutor) ListSessions(s *ACPSession) ([]SessionInfo, error) {
 
 	cwd, _ := os.Getwd()
 	if cfg, errCfg := config.Load(); errCfg == nil {
-		for _, acc := range cfg.GeminiAccounts {
-			if acc.Active && acc.HomeDir != "" {
-				sessionHome = acc.HomeDir
+		for _, id := range cfg.Identities {
+			if id.Provider == "google" && id.Active && id.HomeDir != "" {
+				sessionHome = id.HomeDir
 				break
 			}
 		}

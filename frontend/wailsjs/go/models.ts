@@ -69,20 +69,24 @@ export namespace config {
 	        this.include_code = source["include_code"];
 	    }
 	}
-	export class GeminiAccount {
+	export class Identity {
+	    provider: string;
 	    name: string;
 	    home_dir: string;
+	    api_key: string;
 	    active: boolean;
 	    exhausted: boolean;
 	
 	    static createFrom(source: any = {}) {
-	        return new GeminiAccount(source);
+	        return new Identity(source);
 	    }
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.provider = source["provider"];
 	        this.name = source["name"];
 	        this.home_dir = source["home_dir"];
+	        this.api_key = source["api_key"];
 	        this.active = source["active"];
 	        this.exhausted = source["exhausted"];
 	    }
@@ -94,7 +98,8 @@ export namespace config {
 	    gemini_api_key: string;
 	    use_gemini_api_key: boolean;
 	    gemini_key_index: number;
-	    gemini_accounts: GeminiAccount[];
+	    identities: Identity[];
+	    gemini_accounts?: Identity[];
 	    claude_api_key: string;
 	    use_claude_api_key: boolean;
 	    groq_api_key: string;
@@ -125,6 +130,8 @@ export namespace config {
 	    failover_priority: string[];
 	    gemini_model: string;
 	    groq_model: string;
+	    active_groq_models: string[];
+	    active_google_models: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new Config(source);
@@ -138,7 +145,8 @@ export namespace config {
 	        this.gemini_api_key = source["gemini_api_key"];
 	        this.use_gemini_api_key = source["use_gemini_api_key"];
 	        this.gemini_key_index = source["gemini_key_index"];
-	        this.gemini_accounts = this.convertValues(source["gemini_accounts"], GeminiAccount);
+	        this.identities = this.convertValues(source["identities"], Identity);
+	        this.gemini_accounts = this.convertValues(source["gemini_accounts"], Identity);
 	        this.claude_api_key = source["claude_api_key"];
 	        this.use_claude_api_key = source["use_claude_api_key"];
 	        this.groq_api_key = source["groq_api_key"];
@@ -169,6 +177,8 @@ export namespace config {
 	        this.failover_priority = source["failover_priority"];
 	        this.gemini_model = source["gemini_model"];
 	        this.groq_model = source["groq_model"];
+	        this.active_groq_models = source["active_groq_models"];
+	        this.active_google_models = source["active_google_models"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
