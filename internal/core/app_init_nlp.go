@@ -75,10 +75,9 @@ func (a *App) initNLPEngine(cfg *config.Config) (provider.ContentGenerator, erro
 			a.emitBoot("embeddings", "🛠️", "Motor local não encontrado. Iniciando instalação via winget...")
 			go func() {
 				if err := a.installer.InstallLlamaCPP(); err == nil {
-					a.emitBoot("embeddings", "✅", "Instalação concluída. Atualizando ambiente...")
+					a.emitBoot("embeddings", "✅", "Instalação concluída. O motor nativo será ativado na próxima reinicialização ou via HMR.")
 					a.installer.SyncPath()
 					time.Sleep(2 * time.Second)
-					a.initServices()
 				}
 			}()
 			return nil, fmt.Errorf("aguardando instalação do llama.cpp")

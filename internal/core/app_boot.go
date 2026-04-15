@@ -55,9 +55,19 @@ func (a *App) bootSequence() {
 
 // initServices orquestra a inicialização fragmentada de todos os serviços.
 func (a *App) initServices() error {
+	if a.isBooted {
+		return nil
+	}
+
 	a.muInit.Lock()
 	defer a.muInit.Unlock()
 
+	// Dupla verificação após o lock para evitar race condition
+	if a.isBooted {
+		return nil
+	}
+
+	// Limpeza Pesada: Apenas se ainda não estivermos "bootados"
 	a.installer.KillOrphans()
 
 	cfg, err := config.Load()
@@ -92,6 +102,7 @@ func (a *App) initServices() error {
 	a.initLightningAnalytics(cfg)
 
 	a.emitBoot("ready", "✅", "Maestro pronto.")
+	a.isBooted = true
 	return nil
 }
 
@@ -99,6 +110,7 @@ func (a *App) initServices() error {
 func (a *App) resetServicesForReload() {
 	a.muInit.Lock()
 	defer a.muInit.Unlock()
+	a.isBooted = false
 	a.crawler = nil
 	a.qdrant = nil
 	a.embedder = nil

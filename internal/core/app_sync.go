@@ -15,9 +15,12 @@ import (
 func (a *App) ScanVault() string {
 	fmt.Println("[BACKEND] ScanVault disparado assincronamente...")
 
-	// Tenta auto-recuperar os motores antes de iniciar o job assíncrono.
+	// 🛡️ Segurança: ScanVault não deve disparar initServices. Se os motores não
+	// estiverem prontos, o bootSequence cuidará disso ou o usuário fará manual.
 	if a.crawler == nil || a.ctx == nil {
-		_ = a.initServices()
+		fmt.Println("[Sync] ⏳ ScanVault bloqueado: Motores em transição ou offline.")
+		// Retornamos silenciosamente ou com erro informativo, mas SEM disparar o loop de boot.
+		return "⚠️ Motores em transição. Aguarde a inicialização do sistema."
 	}
 
 	if a.ctx == nil {

@@ -54,6 +54,8 @@ type App struct {
 	nativeEmbedder   *provider.NativeEmbedder
 	nativeExtraction *provider.NativeGenerator // Qwen Reasoning (Port 8086)
 	nativeGenerator  *provider.NativeGenerator // Gemma Chat (Port 8087)
+
+	isBooted bool // ✅ Travão de segurança contra loops de boot
 }
 
 // NewApp cria uma nova instância soberana do Lumaestro.
