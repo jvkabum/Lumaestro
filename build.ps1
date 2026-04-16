@@ -1,13 +1,13 @@
-# 🚀 Script de Build Lumaestro (Produção)
-# Compila o app com as tags de correção e empacota as DLLs necessárias.
+# Script de Build Lumaestro (Producao)
+# Compila o app com as tags de correcao e empacota as DLLs necessarias.
 
-Write-Host "🏗️ Iniciando Compilação de Produção do Lumaestro..." -ForegroundColor Cyan
+Write-Host "Iniciando Compilacao de Producao do Lumaestro..." -ForegroundColor Cyan
 
 # 1. Executa o build do Wails com as tags de estabilidade do DuckDB
 wails build -tags "duckdb_use_lib,no_duckdb_arrow"
 
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "❌ Erro na compilação!" -ForegroundColor Red
+    Write-Host "Erro na compilacao!" -ForegroundColor Red
     exit $LASTEXITCODE
 }
 
@@ -16,14 +16,13 @@ $dllSource = "deps\duckdb\duckdb.dll"
 $binFolder = "build\bin"
 $exePath = "$binFolder\Lumaestro.exe"
 
-# 3. Copia a DLL do DuckDB para a pasta do binário (Essencial para rodar fora do Dev)
+# 3. Copia a DLL do DuckDB para a pasta do binario
 if (Test-Path $dllSource) {
-    Write-Host "📦 Empacotando DuckDB DLL em $binFolder..." -ForegroundColor Green
+    Write-Host "Empacotando DuckDB DLL em $binFolder..." -ForegroundColor Green
     Copy-Item $dllSource -Destination $binFolder -Force
 } else {
-    Write-Host "⚠️ Aviso: duckdb.dll não encontrada em $dllSource. O executável pode falhar." -ForegroundColor Yellow
+    Write-Host "Aviso: duckdb.dll nao encontrada em $dllSource." -ForegroundColor Yellow
 }
 
-Write-Host "`n✅ Build concluído com sucesso!" -ForegroundColor Green
-Write-Host "📍 Seu executável está pronto em: $exePath" -ForegroundColor Cyan
-Write-Host "💡 DICA: Para rodar em outro PC, leve a pasta '$binFolder' inteira." -ForegroundColor Gray
+Write-Host "Build concluido com sucesso!" -ForegroundColor Green
+Write-Host "Seu executavel esta pronto em: $exePath" -ForegroundColor Cyan
