@@ -514,6 +514,30 @@ export function useDeckRender() {
     // Mockamos a API que o 3d-force-graph tinha para não quebrar a UI
     store.graphInstance = {
         zoomToFit: zoomToFit,
+        graphData: (newData) => {
+            if (newData === undefined) {
+                // Getter: retorna estado atual do motor
+                return { nodes: currentNodes, links: currentLinks };
+            }
+            // Setter: reconstrói referências e sincroniza com o Worker de Física
+            currentNodes = newData.nodes;
+            const nodeMap = new Map();
+            currentNodes.forEach(n => nodeMap.set(n.id, n));
+            currentLinks = newData.links.map(link => ({
+                ...link,
+                sourceObj: nodeMap.get(typeof link.source === 'object' ? link.source.id : link.source),
+                targetObj: nodeMap.get(typeof link.target === 'object' ? link.target.id : link.target)
+            })).filter(link => link.sourceObj && link.targetObj);
+            if (physicsWorker) {
+                physicsWorker.postMessage({
+                    type: 'UPDATE_DATA',
+                    payload: {
+                        nodes: JSON.parse(JSON.stringify(currentNodes)),
+                        links: JSON.parse(JSON.stringify(newData.links))
+                    }
+                });
+            }
+        },
         cameraPosition: (pos, node) => {
             if (node) focusNode(node);
         },

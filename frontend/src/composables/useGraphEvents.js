@@ -1,4 +1,4 @@
-import * as THREE from 'three'
+// Eventos Wails adaptados para arquitetura Deck.gl (sem THREE.js)
 import { useGraphStore } from '../stores/graph'
 import { useOrchestratorStore } from '../stores/orchestrator'
 
@@ -33,20 +33,14 @@ export function useGraphEvents() {
       store.highlightedLinks.add(linkId1)
       store.highlightedLinks.add(linkId2)
       
-      // Forçar atualização visual das arestas no motor Three.js
-      if (Graph) {
-        Graph.linkColor(Graph.linkColor())
-        Graph.linkWidth(Graph.linkWidth())
-      }
-
+      store.highlightedLinks.add(linkId1)
+      store.highlightedLinks.add(linkId2)
+      
       // Efeito de Rastro: O brilho desaparece após 4 segundos (Cinemático)
+      // Deck.gl atualiza reativamente via updateTriggers no tamanho do Set
       setTimeout(() => {
         store.highlightedLinks.delete(linkId1)
         store.highlightedLinks.delete(linkId2)
-        if (Graph) {
-          Graph.linkColor(Graph.linkColor())
-          Graph.linkWidth(Graph.linkWidth())
-        }
       }, 4000)
     })
 
@@ -118,9 +112,9 @@ export function useGraphEvents() {
       }
     })
 
-    // 🎬 Percurso Cinematográfico da IA: Anima cada hop individualmente com delay
+    // 🎬 Percurso Cinematográfico da IA (Adaptado para Deck.gl)
     window.runtime.EventsOn("graph:traverse", (data) => {
-      if (!Graph || !data?.hops?.length) return
+      if (!Graph || !Graph.graphData || !data?.hops?.length) return
 
       orchestrator.isNavigating = true
       const hops = data.hops
@@ -133,52 +127,22 @@ export function useGraphEvents() {
           // 1. Voa a câmera até o nó DESTINO (To)
           const targetNode = nodes.find(n => n.id === hop.to || n.name === hop.to)
           if (targetNode) {
-            Graph.cameraPosition(
-              { x: targetNode.x + 180, y: targetNode.y + 120, z: targetNode.z + 180 }, // Offset aumentado para zoom mais suave
-              targetNode,
-              600
-            )
-
-            // 2. Explode uma luz pontual dourada no destino e faz o nó pulsar
-            const light = new THREE.PointLight(0x4facfe, 3, 80)
-            light.position.set(targetNode.x, targetNode.y, targetNode.z)
-            Graph.scene().add(light)
-            
-            // Efeito de pulso no objeto 3D do nó
-            const nodeObj = targetNode.__threeObj
-            if (nodeObj) {
-              const originalScale = nodeObj.scale.x
-              nodeObj.scale.set(originalScale * 2.5, originalScale * 2.5, originalScale * 2.5)
-              let scale = originalScale * 2.5
-              const interval = setInterval(() => {
-                scale -= 0.1
-                if (scale <= originalScale) {
-                  nodeObj.scale.set(originalScale, originalScale, originalScale)
-                  clearInterval(interval)
-                } else {
-                  nodeObj.scale.set(scale, scale, scale)
-                }
-              }, 30)
-            }
-
-            setTimeout(() => Graph.scene().remove(light), 1200)
+            Graph.cameraPosition(null, targetNode)
           }
 
-          // 3. Acende partículas no link deste hop
+          // 2. Acende as rotas deste hop (Deck.gl reage reativamente via updateTriggers)
           const linkKey1 = `${hop.from}-${hop.to}`
           const linkKey2 = `${hop.to}-${hop.from}`
           store.clickedNodeLinks.add(linkKey1)
           store.clickedNodeLinks.add(linkKey2)
-          Graph.linkDirectionalParticles(Graph.linkDirectionalParticles())
 
-          // 4. Remove a partícula deste hop após 3s
+          // 3. Remove a partícula deste hop após 3s
           setTimeout(() => {
             store.clickedNodeLinks.delete(linkKey1)
             store.clickedNodeLinks.delete(linkKey2)
-            Graph.linkDirectionalParticles(Graph.linkDirectionalParticles())
           }, 3000)
 
-          // 5. Marca como "fim da travessia" no último hop
+          // 4. Marca como "fim da travessia" no último hop
           if (i === hops.length - 1) {
             setTimeout(() => { orchestrator.isNavigating = false }, 1500)
           }
@@ -186,19 +150,10 @@ export function useGraphEvents() {
       })
     })
 
-    // 📐 Resize handler
-    const handleResize = () => {
-      if (Graph && containerRef.value) {
-        Graph.width(containerRef.value.clientWidth)
-        Graph.height(containerRef.value.clientHeight)
-      }
-    }
-    window.addEventListener('resize', handleResize)
+    // 📐 Resize — Deck.gl redimensiona automaticamente ao container pai (width/height: '100%')
 
     // Retorna cleanup (para onUnmounted)
-    return () => {
-      window.removeEventListener('resize', handleResize)
-    }
+    return () => {}
   }
 
   /**
