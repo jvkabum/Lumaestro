@@ -116,8 +116,61 @@ func (i *Installer) runStreaming(name string, args ...string) error {
 	return cmd.Wait()
 }
 
-// InstallGemini CLI via NPM Global.
+// InstallNode instala o Node.js LTS no sistema do cliente (pré-requisito para CLIs).
+func (i *Installer) InstallNode() error {
+	i.LogChan <- "📦 Instalando Node.js LTS no sistema..."
+	if runtime.GOOS == "windows" {
+		// Tenta via winget (incluso no Windows 10/11)
+		i.LogChan <- "⏳ Executando winget install OpenJS.NodeJS.LTS... (Aceite os termos se solicitado)"
+		err := i.runStreaming("powershell", "-Command", "winget install OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements")
+		if err != nil {
+			// Fallback: tenta via chocolatey se winget falhar
+			i.LogChan <- "⚠️ winget falhou. Tentando via instalação direta..."
+			return i.runStreaming("powershell", "-Command",
+				"$url = 'https://nodejs.org/dist/v22.16.0/node-v22.16.0-x64.msi'; "+
+					"$out = \"$env:TEMP\\node-installer.msi\"; "+
+					"(New-Object Net.WebClient).DownloadFile($url, $out); "+
+					"Start-Process msiexec -ArgumentList '/i', $out, '/quiet', '/norestart' -Wait; "+
+					"Remove-Item $out -Force")
+		}
+		return nil
+	} else if runtime.GOOS == "darwin" {
+		i.LogChan <- "⏳ Executando brew install node..."
+		return i.runStreaming("brew", "install", "node")
+	}
+	return fmt.Errorf("instalação automática do Node.js não suportada para %s. Instale manualmente em https://nodejs.org", runtime.GOOS)
+}
+
+// ensureNode verifica se o Node.js está no sistema e instala automaticamente se necessário.
+// Retorna true se o Node já existia ou foi instalado com sucesso.
+func (i *Installer) ensureNode() error {
+	if i.CheckStatus("node") {
+		return nil // Node já está instalado
+	}
+
+	i.LogChan <- "⚠️ Node.js não encontrado no sistema. Iniciando instalação automática..."
+	if err := i.InstallNode(); err != nil {
+		return fmt.Errorf("falha ao instalar Node.js (pré-requisito): %w", err)
+	}
+
+	// Sincroniza o PATH para encontrar o node recém-instalado
+	i.SyncPath()
+
+	// Verifica novamente
+	if !i.CheckStatus("node") {
+		return fmt.Errorf("Node.js foi instalado mas não foi encontrado no PATH. Reinicie o aplicativo ou instale manualmente em https://nodejs.org")
+	}
+
+	i.LogChan <- "✅ Node.js instalado com sucesso!"
+	return nil
+}
+
+// InstallGemini CLI via NPM Global. Instala Node.js automaticamente se necessário.
 func (i *Installer) InstallGemini() error {
+	if err := i.ensureNode(); err != nil {
+		return err
+	}
+
 	i.LogChan <- "📦 Instalando Gemini CLI globalmente no sistema..."
 	if runtime.GOOS == "windows" {
 		return i.runStreaming("cmd", "/C", "npm install -g @google/gemini-cli@latest --force")
@@ -125,8 +178,12 @@ func (i *Installer) InstallGemini() error {
 	return i.runStreaming("npm", "install", "-g", "@google/gemini-cli@latest", "--force")
 }
 
-// InstallClaude CLI via NPM Global.
+// InstallClaude CLI via NPM Global. Instala Node.js automaticamente se necessário.
 func (i *Installer) InstallClaude() error {
+	if err := i.ensureNode(); err != nil {
+		return err
+	}
+
 	i.LogChan <- "📦 Instalando Claude Code globalmente no sistema..."
 	if runtime.GOOS == "windows" {
 		return i.runStreaming("cmd", "/C", "npm install -g @anthropic-ai/claude-code@latest --force")
@@ -148,17 +205,44 @@ func (i *Installer) InstallLlamaCPP() error {
 }
 
 // SyncPath injeta caminhos comuns (Claude e NPM) no PATH do processo atual.
+// Também lê o PATH fresco do registro do Windows para capturar mudanças feitas por `npm install -g`.
 // Isso garante que o app encontre as ferramentas mesmo que o PATH global esteja desatualizado.
 func (i *Installer) SyncPath() {
 	home, _ := os.UserHomeDir()
 	appData := os.Getenv("APPDATA")
+	localAppData := os.Getenv("LOCALAPPDATA")
 	
-	// Caminhos prováveis
+	// 1. Lê o PATH fresco do registro do Windows (captura mudanças pós-instalação)
+	if runtime.GOOS == "windows" {
+		cmd := exec.Command("powershell", "-NoProfile", "-Command",
+			"[System.Environment]::GetEnvironmentVariable('PATH', 'User')")
+		out, err := cmd.Output()
+		if err == nil {
+			freshUserPath := strings.TrimSpace(string(out))
+			if freshUserPath != "" {
+				currentPath := os.Getenv("PATH")
+				for _, segment := range strings.Split(freshUserPath, ";") {
+					segment = strings.TrimSpace(segment)
+					if segment != "" && !strings.Contains(currentPath, segment) {
+						currentPath = currentPath + ";" + segment
+					}
+				}
+				os.Setenv("PATH", currentPath)
+			}
+		}
+	}
+
+	// 2. Caminhos estáticos conhecidos (fallback para SOs sem Registro)
 	paths := []string{
-		filepath.Join(home, ".local", "bin"),         // Claude Code
-		filepath.Join(appData, "npm"),                // Gemini CLI (NPM Global)
-		filepath.Join(home, "AppData", "Roaming", "npm"),   // Fallback NPM
-		`C:\Program Files\llama.cpp`,                // Winget padrão (Admin)
+		filepath.Join(home, ".local", "bin"),                       // Claude Code
+		filepath.Join(appData, "npm"),                              // Gemini CLI (NPM Global)
+		filepath.Join(home, "AppData", "Roaming", "npm"),           // Fallback NPM
+		`C:\Program Files\llama.cpp`,                              // Winget padrão (Admin)
+		filepath.Join(localAppData, "fnm_multishells"),             // FNM (Node Manager)
+		filepath.Join(home, ".nvm", "current", "bin"),              // NVM Unix
+		filepath.Join(appData, "nvm"),                              // NVM Windows
+		filepath.Join(home, "scoop", "shims"),                      // Scoop
+		`C:\Program Files\nodejs`,                                 // Node.js padrão
 	}
 
 	// 🔍 Busca dinâmica pelo diretório do WinGet (Portátil)
@@ -185,7 +269,11 @@ func (i *Installer) SyncPath() {
 	if len(newPaths) > 0 {
 		sep := string(os.PathListSeparator)
 		os.Setenv("PATH", currentPath+sep+strings.Join(newPaths, sep))
-		i.LogChan <- fmt.Sprintf("✅ Ambiente Sincronizado: %d novos caminhos injetados.", len(newPaths))
+		// Non-blocking send para evitar deadlock quando chamado do GetToolsStatus em loop
+		select {
+		case i.LogChan <- fmt.Sprintf("✅ Ambiente Sincronizado: %d novos caminhos injetados.", len(newPaths)):
+		default:
+		}
 	}
 }
 

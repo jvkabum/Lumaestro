@@ -11,8 +11,11 @@ import (
 
 // GetToolsStatus verifica se as IAs CLIs estão instaladas no PATH e os status de autenticação
 func (a *App) GetToolsStatus() map[string]bool {
-	// Reduzimos o ruído no log para esse porque ele é feito a cada refresh
+	// Sincroniza o PATH para detectar ferramentas recém-instaladas sem restart
+	a.installer.SyncPath()
+	
 	return map[string]bool{
+		"node":        a.installer.CheckStatus("node"),
 		"gemini":      a.installer.CheckStatus("gemini"),
 		"claude":      a.installer.CheckStatus("claude"),
 		"obsidian":    a.installer.CheckStatus("obsidian"),
@@ -26,6 +29,8 @@ func (a *App) GetToolsStatus() map[string]bool {
 func (a *App) InstallTool(name string) string {
 	var err error
 	switch name {
+	case "node":
+		err = a.installer.InstallNode()
 	case "gemini":
 		err = a.installer.InstallGemini()
 	case "claude":
@@ -39,6 +44,10 @@ func (a *App) InstallTool(name string) string {
 	if err != nil {
 		return "Erro na instalação: " + err.Error()
 	}
+
+	// Sincroniza o ambiente imediatamente após a instalação
+	a.installer.SyncPath()
+
 	return "Instalação de " + name + " concluída com sucesso!"
 }
 
