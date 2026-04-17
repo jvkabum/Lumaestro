@@ -28,8 +28,9 @@ export function useLayerComposer() {
         // Cálculo O(L) de densidade para uso compartilhado pelas camadas
         const degreeCounts = new Map();
         currentLinks.forEach(l => {
-            const sid = l.source?.id || l.source;
-            const tid = l.target?.id || l.target;
+            // 🛡️ [ELITE FIX v18.8] Garante que IDs sejam Strings para compatibilidade com o NodeMap
+            const sid = String(l.source?.id || l.source);
+            const tid = String(l.target?.id || l.target);
             degreeCounts.set(sid, (degreeCounts.get(sid) || 0) + 1);
             degreeCounts.set(tid, (degreeCounts.get(tid) || 0) + 1);
         });

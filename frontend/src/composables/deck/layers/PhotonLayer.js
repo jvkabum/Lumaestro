@@ -18,11 +18,23 @@ export function createPhotonLayer({ currentLinks, clLinks, hlLinks, animationTim
             
             // Phase offset para cada link (baseado no index) para evitar sincronia robótica
             const phase = (animationTime + (index * 0.137)) % 1.0;
-            return [
-                s.x + (t.x - s.x) * phase,
-                s.y + (t.y - s.y) * phase,
-                s.z + (t.z - s.z) * phase
-            ];
+
+            // 1. Interpolação Linear de Base (X, Y, Z)
+            const lx = s.x + (t.x - s.x) * phase;
+            const ly = s.y + (t.y - s.y) * phase;
+            const lz = s.z + (t.z - s.z) * phase;
+
+            // 2. Cálculo da Curvatura Parabólica (Sync com LinkLayer getHeight: 0.3)
+            const dx = t.x - s.x;
+            const dy = t.y - s.y;
+            const dz = t.z - s.z;
+            const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            
+            // h = 4 * H * t * (1 - t) -> Parábola perfeita que atinge o pico em t=0.5
+            const arcHeight = distance * 0.3; // 0.3 é o multiplicador do LinkLayer
+            const curveOffset = arcHeight * 4 * phase * (1 - phase);
+
+            return [lx, ly, lz + curveOffset];
         },
         getFillColor: link => {
             const s = link.source.id || link.source;

@@ -38,25 +38,23 @@ export function createNodeLayer({
             return colors[type] ? [...colors[type], 220] : [155, 155, 155, 220];
         },
         getRadius: node => {
-            // 📏 ESCALONAMENTO POR IMPORTÂNCIA ESTRUTURAL (Paridade v14.1)
-            const deg = degreeCounts.get(node.id) || node.degree || 0;
+            // 📏 HIERARQUIA VISUAL (Volumétrica de Volume = Raio^3)
+            const deg = degreeCounts.get(String(node.id)) || node.degree || 0;
             const pr = (node.pagerank && node.pagerank > 0) ? (node.pagerank * 15) : deg;
 
-            // Fator de Tipo (Fontes e Sistemas são naturalmente maiores)
-            const type = node['document-type'] || 'chunk';
-            const typeFactor = type === 'source' ? 1.8 : (type === 'system' ? 2.2 : (type === 'page' ? 1.4 : 1.0));
-
-            const zoomBoost = Math.max(0.40, Math.pow(2, zoom + 1.5));
-
-            // Fórmula original preservada
-            const baseScale = (5 + Math.pow(Math.max(deg, pr), 0.7) * 2.5) * typeFactor;
-            const finalSize = (node.id === activeNodeId) ? baseScale * 1.5 : baseScale;
-
-            return Math.max(finalSize * zoomBoost, 3.5);
+            const isActive = node.id === activeNodeId;
+            const importance = Math.max(deg, pr);
+            
+            // Scaled Down para parâmetros de densidade tradicionais (Snippet Referência)
+            const baseScale = 1.0 + Math.pow(importance, 0.5) * 0.4;
+            const finalScale = isActive ? baseScale * 1.5 : baseScale;
+            
+            return Math.pow(finalScale, 3); // ← Volume = raio³ (para GPU escalar áreas perfeitamente)
         },
-        radiusUnits: 'pixels',
-        radiusMinPixels: 3,
-        radiusMaxPixels: 1000,
+        radiusScale: 1, // Desativado o multiplicador de galáxia, agora usamos valores exatos volumétricos
+        radiusUnits: 'common', // 🌍 Mudança para unidades globais para perspectiva natural
+        radiusMinPixels: 2.0,  // 🔍 Garante legibilidade de longe
+        radiusMaxPixels: 1500,
         pickable: true,
         opacity: 1,
         billboard: true,
@@ -65,7 +63,7 @@ export function createNodeLayer({
         updateTriggers: {
             getFillColor: [activeNodeId, store.hoveredNodeId],
             getPosition: tickCounter,
-            getRadius: [zoom]
+            getRadius: [zoom, degreeCounts.size]
         },
         onHover,
         onClick,

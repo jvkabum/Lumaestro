@@ -13,7 +13,7 @@ export function bootstrapNodes(nodes, oldMap) {
         if (existing) return Object.assign(existing, n);
 
         // Nascimento esférico 3D (distribuição volumétrica polar)
-        const r = Math.pow(Math.random(), 1 / 3) * 3000;
+        const r = Math.pow(Math.random(), 1 / 3) * 500;
         const theta = Math.acos(2 * Math.random() - 1);
         const phi = 2 * Math.PI * Math.random();
         
@@ -33,7 +33,7 @@ export function bootstrapNodes(nodes, oldMap) {
 export function repairCoordinates(nodesData) {
     nodesData.forEach(n => {
         if (n.z === null || n.z === undefined) {
-            const r = Math.pow(Math.random(), 1 / 3) * 8000;
+            const r = Math.pow(Math.random(), 1 / 3) * 500;
             const theta = Math.acos(2 * Math.random() - 1);
             n.z = r * Math.cos(theta);
         }
@@ -75,7 +75,7 @@ export function computeCommunityCenters(nodesData) {
     const communityCenters = new Map();
     const numC = Math.max(communityMap.size, 1);
     const golden = Math.PI * (Math.sqrt(5) - 1);
-    const gR = 45000; // SUPERNOVA expansion
+    const gR = 800; // SUPERNOVA expansion (escalado para D3 Padrão)
 
     Array.from(communityMap.keys()).forEach((cid, i) => {
         const yNorm = 1 - (i / Math.max(numC - 1, 1)) * 2;

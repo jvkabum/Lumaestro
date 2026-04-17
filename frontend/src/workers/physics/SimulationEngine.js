@@ -21,25 +21,18 @@ export function createSimulation({
     const manualVelDecay = 0.3; // Para o eixo Z manual
 
     const simulation = d3.forceSimulation(nodesData, 3)
-        .alphaDecay(0.04)
-        .velocityDecay(velocityDecay)
+        .alphaDecay(0.08)       // ← Velocidade de "esfriamento" (convergência)
+        .velocityDecay(0.45)    // ← Amortecimento do movimento (estabilidade)
         
         // 1. Força de Elástico (Links)
         .force('link', d3.forceLink(linksData).id(d => d.id)
             .distance(link => {
-                const sC = link.source?.community;
-                const tC = link.target?.community;
                 const sType = link.source?.['document-type'] || 'chunk';
                 const tType = link.target?.['document-type'] || 'chunk';
-                
-                if (sType === 'memory' || tType === 'memory') return 120;
-                return (sC === tC) ? 850 : 15000;
+                if (sType === 'memory' || tType === 'memory') return 80;   // Órbita próxima
+                return 350;  // Distância interestelar para notas
             })
-            .strength(link => {
-                const sC = link.source?.community;
-                const tC = link.target?.community;
-                return (sC === tC) ? 0.3 : 0.02;
-            })
+            .strength(0.7)  // ← Rigidez da conexão (0.0 a 1.0)
         )
 
         // 2. Forças Celestiais (Custom)
@@ -47,20 +40,18 @@ export function createSimulation({
 
         // 3. Repulsão (ManyBody)
         .force('charge', d3.forceManyBody().strength(d => {
-            const deg = nodeDegrees.get(d.id) || 0;
-            const pr = (d.pagerank && d.pagerank > 0) ? (d.pagerank * 20) : deg;
-            const baseRepulsion = -25000;
-            
-            if (deg > HUB_PHYS_LIMIT) return -185000;
-            return baseRepulsion - (pr * 500); 
-        }).distanceMax(80000))
+            const importance = (d.pagerank && d.pagerank > 0) ? (d.pagerank * 15) : (nodeDegrees.get(d.id) || 0);
+            const baseRepulsion = -400;
+            return baseRepulsion - (importance * 60);  // ← Mais importante = mais repulsão
+        }).distanceMax(3000))
         
-        // 4. Colisão
-        .force('collide', d3.forceCollide().radius(d => {
-            const deg = nodeDegrees.get(d.id) || 0;
-            const pr = (d.pagerank && d.pagerank > 0) ? (d.pagerank * 20) : deg;
-            if (deg > HUB_PHYS_LIMIT) return 2500;
-            return (1 + Math.pow(pr, 0.5) * 15) + 70;
+        // 4. Centro Global (Mínimo)
+        .force('center', d3.forceCenter(0, 0, 0).strength(0.01))
+
+        // 5. Colisão física (impede sobreposição visual)
+        .force('collide', d3.forceCollide(node => {
+            const importance = (node.pagerank && node.pagerank > 0) ? (node.pagerank * 15) : (nodeDegrees.get(node.id) || 0);
+            return (1 + Math.pow(importance, 0.5) * 4) + 10;  // ← Raio de colisão
         }));
 
     let tickCount = 0;

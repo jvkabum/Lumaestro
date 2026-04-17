@@ -27,11 +27,12 @@ export function useDataEngineer() {
         });
     };
 
-    // Sincronização Incremental (Blindagem de Física)
-    const syncIncremental = (rawNodes, nodeMap, currentNodes) => {
+    // Sincronização Incremental (Blindagem de Física e Metadados v18.5)
+    const syncIncremental = (rawNodes, nodeMap, currentNodesRef) => {
         const pureNodes = purify(rawNodes);
-
-        pureNodes.forEach(n => {
+        
+        // 1. Reconciliação de Metadados (Mantendo referências físicas)
+        const updatedList = pureNodes.map(n => {
             const sid = String(n.id);
             if (!nodeMap.has(sid)) {
                 // Novo Nó: Nascimento Esférico
@@ -46,9 +47,9 @@ export function useDataEngineer() {
                     z: r * Math.cos(phi)
                 };
                 nodeMap.set(sid, newNode);
-                currentNodes.push(newNode);
+                return newNode;
             } else {
-                // Nó Existente: Atualiza metadados sem tocar nas coordenadas físicas
+                // Nó Existente: Mescla metadados novos preservando coordenadas de física
                 const existing = nodeMap.get(sid);
                 Object.assign(existing, { 
                     ...n, 
@@ -56,10 +57,14 @@ export function useDataEngineer() {
                     y: existing.y, 
                     z: existing.z 
                 });
+                return existing;
             }
         });
 
-        return pureNodes;
+        // 2. [CRÍTICO] Sincronização Reativa: Atualiza o array que o Deck.gl consome
+        currentNodesRef.value = updatedList;
+
+        return updatedList;
     };
 
     // Mapeamento de Links (Cura de referências)

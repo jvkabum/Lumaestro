@@ -92,7 +92,7 @@ export function useDeckRender() {
 
     const updateGraph = (rawNodes, rawEdges) => {
         if (!physicsWorker || !deckInstance.value) return;
-        const pureNodes = syncIncremental(rawNodes, nodeMap, currentNodes.value);
+        const pureNodes = syncIncremental(rawNodes, nodeMap, currentNodes);
         currentLinks.value = mapLinks(rawEdges, nodeMap);
         updatePhysicsData(pureNodes, purify(rawEdges));
     };
