@@ -1,10 +1,11 @@
 import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useGraphStore } from '../stores/graph'
 import { useDeckRender } from './deck/useDeckRender'
-import { useGraphData } from './useGraphData'
-import { useGraphControls } from './useGraphControls'
-import { useGraphEvents } from './useGraphEvents'
-import { useGraphSync } from './useGraphSync'
+import { useDataTransformer } from './deck/internal/DataTransformer'
+import { useInputDriver } from './deck/engine/InputDriver'
+import { useBridgeDriver } from './deck/engine/BridgeDriver'
+import { useSyncManager } from './deck/internal/SyncManager'
+import { useXRayProcessor } from './deck/internal/XRayProcessor'
 
 /**
  * 🎼 useGraphOrchestrator — O Maestro do Ciclo de Vida do Grafo
@@ -20,12 +21,13 @@ export function useGraphOrchestrator(props) {
   const logContainerRef = ref(null)
   const isUiMinimized = ref(false)
 
-  // ── Importações de Sub-Lógicas ──
+  // ── Importações de Sub-Lógicas (Domínio Deck) ──
   const { initGraph, updateGraph, destroyGraph, currentViewState } = useDeckRender()
-  const { getGraphData } = useGraphData()
-  const { registerKeyboardControls } = useGraphControls()
-  const { registerGraphEvents } = useGraphEvents()
-  const { syncAllOnStartup } = useGraphSync()
+  const { transform } = useDataTransformer()
+  const { registerKeyboardControls } = useInputDriver()
+  const { registerGraphEvents } = useBridgeDriver()
+  const { syncAllOnStartup, executeFullSync, triggerScan } = useSyncManager()
+  const { runReconScan, pruneNodes } = useXRayProcessor()
 
   // ── Cleanup ──
   let cleanupKeyboard = null
@@ -43,8 +45,13 @@ export function useGraphOrchestrator(props) {
     syncAllOnStartup()
 
     // 3. Registrar Listeners (Eventos Wails e Teclado)
-    cleanupEvents = registerGraphEvents(containerRef)
-    cleanupKeyboard = registerKeyboardControls(currentViewState)
+    cleanupEvents = registerGraphEvents({ 
+        updateGraph, 
+        focusNode: (id) => store.graphInstance?.focusNode(id) // Ponte para o Pilot via Store Contract
+    })
+    cleanupKeyboard = registerKeyboardControls(currentViewState, (dx, dy, dz) => {
+        store.graphInstance?.panTarget(dx, dy, dz)
+    })
   })
 
   onUnmounted(() => {
@@ -62,13 +69,23 @@ export function useGraphOrchestrator(props) {
       clearTimeout(renderTimeout)
       renderTimeout = setTimeout(() => {
         // 1. Passa pela lógica preciosa de X-Ray / Esqueleto / Nós Virtuais
-        const { nodes: filteredNodes, links: filteredEdges } = getGraphData(props.nodes, props.edges)
+        const { nodes: filteredNodes, links: filteredEdges } = transform(props.nodes, props.edges)
         
         // 2. Sincronização Incremental (Zero Jitter) em vez de rebuild total
         updateGraph(filteredNodes, filteredEdges)
       }, 450) // Agrupa rajadas de websocket E cliques rápidos no Slider de X-Ray
     }
   }, { deep: true })
+
+  // ── Handlers de UI (Paridade Total v17.1) ──
+  const handleFullSync = () => { store.modalMode = 'full'; store.showConfirmModal = true; }
+  const handleFastSync = () => { store.modalMode = 'fast'; store.showConfirmModal = true; }
+  
+  const confirmSync = () => {
+    store.showConfirmModal = false;
+    if (store.modalMode === 'full') executeFullSync()
+    else triggerScan()
+  }
 
   // W5: Auto-scroll dos logs
   watch(() => props.graphLogs, () => {
@@ -83,6 +100,12 @@ export function useGraphOrchestrator(props) {
     containerRef,
     logContainerRef,
     isUiMinimized,
-    currentViewState
+    currentViewState,
+    // Hook Exports
+    handleFullSync,
+    handleFastSync,
+    confirmSync,
+    runReconScan,
+    pruneNodes
   }
 }
