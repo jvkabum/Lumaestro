@@ -1,7 +1,7 @@
 <script setup>
 import { useGraphStore } from '../../stores/graph'
 import { useOrchestratorStore } from '../../stores/orchestrator'
-import { useGraphOrchestrator } from '../../composables/useGraphOrchestrator'
+import { useGraphActions } from '../../composables/deck/useGraphActions'
 
 /**
  * 🎛️ GraphControlUI — O Centro de Comando do Grafo
@@ -28,7 +28,7 @@ const {
   handleFullSync, 
   runReconScan, 
   pruneNodes 
-} = useGraphOrchestrator()
+} = useGraphActions()
 </script>
 
 <template>

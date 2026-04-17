@@ -20,7 +20,12 @@ export function useSyncManager() {
       
       if (bridge && bridge.GetGraphHealth) {
         store.graphHealth = await bridge.GetGraphHealth()
-        console.log("[Sync] Saúde do Grafo carregada:", store.graphHealth)
+      }
+
+      // 🧠 [ESSENCIAL] Solicita ao backend o envio em lote de todos os nós persistidos
+      if (bridge && bridge.SyncAllNodes) {
+        await bridge.SyncAllNodes()
+        console.log("[Sync] Gatilho SyncAllNodes disparado.")
       }
     } catch (err) {
       console.error("[Sync] Falha na sincronização inicial:", err)
@@ -36,6 +41,9 @@ export function useSyncManager() {
       const bridge = (window.go && window.go.core && window.go.core.App) || 
                      (window.go && window.go.main && window.go.main.App);
       await bridge.FullSync()
+      if (bridge && bridge.SyncAllNodes) {
+        await bridge.SyncAllNodes()
+      }
     } catch (e) {
       console.error("[Sync] Erro na sincronização total:", e)
     } finally {

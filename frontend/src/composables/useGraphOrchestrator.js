@@ -5,7 +5,7 @@ import { useDataTransformer } from './deck/internal/DataTransformer'
 import { useInputDriver } from './deck/engine/InputDriver'
 import { useBridgeDriver } from './deck/engine/BridgeDriver'
 import { useSyncManager } from './deck/internal/SyncManager'
-import { useXRayProcessor } from './deck/internal/XRayProcessor'
+// O XRayProcessor agora é consumido apenas via useGraphActions.js para UI
 
 /**
  * 🎼 useGraphOrchestrator — O Maestro do Ciclo de Vida do Grafo
@@ -26,8 +26,7 @@ export function useGraphOrchestrator(props) {
   const { transform } = useDataTransformer()
   const { registerKeyboardControls } = useInputDriver()
   const { registerGraphEvents } = useBridgeDriver()
-  const { syncAllOnStartup, executeFullSync, triggerScan } = useSyncManager()
-  const { runReconScan, pruneNodes } = useXRayProcessor()
+  const { syncAllOnStartup } = useSyncManager()
 
   // ── Cleanup ──
   let cleanupKeyboard = null
@@ -77,16 +76,6 @@ export function useGraphOrchestrator(props) {
     }
   }, { deep: true })
 
-  // ── Handlers de UI (Paridade Total v17.1) ──
-  const handleFullSync = () => { store.modalMode = 'full'; store.showConfirmModal = true; }
-  const handleFastSync = () => { store.modalMode = 'fast'; store.showConfirmModal = true; }
-  
-  const confirmSync = () => {
-    store.showConfirmModal = false;
-    if (store.modalMode === 'full') executeFullSync()
-    else triggerScan()
-  }
-
   // W5: Auto-scroll dos logs
   watch(() => props.graphLogs, () => {
     nextTick(() => {
@@ -100,12 +89,6 @@ export function useGraphOrchestrator(props) {
     containerRef,
     logContainerRef,
     isUiMinimized,
-    currentViewState,
-    // Hook Exports
-    handleFullSync,
-    handleFastSync,
-    confirmSync,
-    runReconScan,
-    pruneNodes
+    currentViewState
   }
 }

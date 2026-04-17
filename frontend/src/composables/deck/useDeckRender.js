@@ -79,6 +79,10 @@ export function useDeckRender() {
         // 3. Ativação dos Contratos e Relógio
         bind();
         startClock(() => updateLayers());
+
+        // 🚀 [RENDER INICIAL] Força um frame imediato para evitar tela preta 
+        // caso o Worker demore a disparar o primeiro Tick
+        updateLayers();
     };
 
     const updateGraph = (rawNodes, rawEdges) => {
