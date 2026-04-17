@@ -1,18 +1,18 @@
 import { shallowRef } from 'vue';
-import { useGraphStore } from '../stores/graph';
+import { useGraphStore } from '../../stores/graph';
 
 // Motores de Especialistas (Engine Drivers)
-import { usePhysicsDriver } from './deck/engine/PhysicsDriver.js';
-import { useDataEngineer } from './deck/engine/DataEngineer.js';
-import { useInteractionPilot } from './deck/engine/InteractionPilot.js';
+import { usePhysicsDriver } from './engine/PhysicsDriver.js';
+import { useDataEngineer } from './engine/DataEngineer.js';
+import { useInteractionPilot } from './engine/InteractionPilot.js';
 
 // Micro-Módulos Atômicos (v13.0 & v14.0)
-import { useAnimationClock } from './deck/engine/AnimationClock.js';
-import { useEventBridge } from './deck/engine/EventBridge.js';
-import { useLayerComposer } from './deck/engine/LayerComposer.js';
-import { useStoreContract } from './deck/engine/StoreContract.js';
-import { useDeckFactory } from './deck/engine/DeckFactory.js';
-import { usePhysicsReceiver } from './deck/engine/PhysicsReceiver.js';
+import { useAnimationClock } from './engine/AnimationClock.js';
+import { useEventBridge } from './engine/EventBridge.js';
+import { useLayerComposer } from './engine/LayerComposer.js';
+import { useStoreContract } from './engine/StoreContract.js';
+import { useDeckFactory } from './engine/DeckFactory.js';
+import { usePhysicsReceiver } from './engine/PhysicsReceiver.js';
 
 /**
  * 🎼 useDeckRender — O Maestro Atômico Definitivo (v14.0)

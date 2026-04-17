@@ -1,6 +1,6 @@
 import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useGraphStore } from '../stores/graph'
-import { useDeckRender } from './useDeckRender'
+import { useDeckRender } from './deck/useDeckRender'
 import { useGraphData } from './useGraphData'
 import { useGraphControls } from './useGraphControls'
 import { useGraphEvents } from './useGraphEvents'
