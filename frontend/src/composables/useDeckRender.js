@@ -207,7 +207,7 @@ export function useDeckRender() {
                 const r = 200 + Math.random() * 500;
                 const theta = Math.random() * 2 * Math.PI;
                 const phi = Math.acos(2 * Math.random() - 1);
-                
+
                 const newNode = {
                     ...n,
                     x: r * Math.sin(phi) * Math.cos(theta),
@@ -220,11 +220,11 @@ export function useDeckRender() {
                 // Atualiza metadados PRESERVANDO x, y, z (Blindagem de Física)
                 const existing = nodeMap.get(sid);
                 // Usamos spread para garantir que novos metadados entrem, mas posições fiquem
-                Object.assign(existing, { 
-                    ...n, 
-                    x: existing.x, 
-                    y: existing.y, 
-                    z: existing.z 
+                Object.assign(existing, {
+                    ...n,
+                    x: existing.x,
+                    y: existing.y,
+                    z: existing.z
                 });
             }
         });
@@ -233,7 +233,7 @@ export function useDeckRender() {
         currentLinks = pureEdges.map(link => {
             const sid = String(typeof link.source === 'object' ? link.source.id : link.source);
             const tid = String(typeof link.target === 'object' ? link.target.id : link.target);
-            
+
             return {
                 ...link,
                 sourceObj: nodeMap.get(sid),
@@ -417,16 +417,16 @@ export function useDeckRender() {
                     // 📏 ESCALONAMENTO POR IMPORTÂNCIA ESTRUTURAL (v9.0)
                     const deg = degreeCounts.get(node.id) || node.degree || 0;
                     const pr = (node.pagerank && node.pagerank > 0) ? (node.pagerank * 15) : deg;
-                    
+
                     const zoom = currentViewState.value.zoom;
                     // Calibração do zoomBoost para suportar nós maiores sem cobrir a tela
-                    const zoomBoost = Math.max(0.40, Math.pow(2, zoom + 1.5)); 
-                    
+                    const zoomBoost = Math.max(0.40, Math.pow(2, zoom + 1.5));
+
                     // Fórmula Agressiva: Foca no número de conexões reais (deg)
-                    const baseScale = 5 + Math.pow(deg, 0.7) * 2.5; 
+                    const baseScale = 5 + Math.pow(deg, 0.7) * 2.5;
                     const finalSize = (node.id === activeNodeId) ? baseScale * 1.5 : baseScale;
-                    
-                    return Math.max(finalSize * zoomBoost, 3.5); 
+
+                    return Math.max(finalSize * zoomBoost, 3.5);
                 },
                 radiusUnits: 'pixels',
                 radiusMinPixels: 3,

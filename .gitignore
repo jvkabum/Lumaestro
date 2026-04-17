@@ -18,6 +18,7 @@ tmp/
 .lumaestro/
 .lumaestro/parallel-memory.json
 .lumaestro.json
+.lumaestro_topology.json
 .context/
 *.db
 *.db-journal
