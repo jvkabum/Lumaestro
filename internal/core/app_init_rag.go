@@ -28,6 +28,13 @@ func (a *App) initRAGInfrastructure(cfg *config.Config) {
 
 	if a.embedder != nil && a.ontology != nil {
 		a.crawler = obsidian.NewCrawler(cfg.ObsidianVaultPath, a.embedder, a.qdrant, a.ontology)
+		
+		// 🏗️ [CRÍTICO] Garante que as coleções existem no banco vetorial imediatamente
+		go func() {
+			if a.crawler != nil && a.ctx != nil {
+				_ = a.crawler.EnsureCollections(a.ctx)
+			}
+		}()
 	} else {
 		a.crawler = nil
 		a.emitBoot("crawler", "⚠️", "Crawler pausado: configure um provedor de embeddings na aba MODELOS.")

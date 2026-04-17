@@ -16,7 +16,7 @@ const orchestrator = useOrchestratorStore()
 const isUiMinimized = ref(false)
 
 // ── Composables ──
-const { initGraph, updateGraph, destroyGraph } = useDeckRender()
+const { initGraph, updateGraph, destroyGraph, currentViewState } = useDeckRender()
 const { getGraphData } = useGraphData()
 const { registerKeyboardControls } = useGraphControls()
 const { registerGraphEvents, resolveConflict } = useGraphEvents()
@@ -53,7 +53,7 @@ onMounted(async () => {
   cleanupEvents = registerGraphEvents(containerRef)
 
   // 4. Registrar controles de teclado (WASD)
-  cleanupKeyboard = registerKeyboardControls()
+  cleanupKeyboard = registerKeyboardControls(currentViewState)
 })
 
 onUnmounted(() => {

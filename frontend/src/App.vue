@@ -67,8 +67,6 @@ const startResize = (e) => {
   const startWidth = chatWidth.value
 
   const onMouseMove = (moveEvent) => {
-    // Puxa da esquerda para a direita → diminui chat
-    // Puxa da direita para a esquerda → aumenta chat
     const delta = startX - moveEvent.clientX
     const newWidth = Math.min(maxChatWidth, Math.max(minChatWidth, startWidth + delta))
     chatWidth.value = newWidth
@@ -87,6 +85,66 @@ const startResize = (e) => {
 }
 
 onMounted(async () => {
+  // 🚀 [PRIORIDADE MÁXIMA] Registro Imediato de Listeners para evitar perda de dados no boot
+  EventsOn('view:change', (view) => {
+    currentView.value = view
+  })
+
+  // Escuta os logs em tempo real
+  EventsOn('agent:log', (log) => {
+    const lastLog = state.logs[state.logs.length - 1]
+    
+    // Se for o Maestro e o último também for Maestro, anexa o texto (Streaming)
+    if (log.source === 'MAESTRO' && lastLog && lastLog.source === 'MAESTRO') {
+      lastLog.content += log.content
+    } else {
+      state.logs.push(log)
+    }
+  })
+
+  // Escuta os dados do Grafo (Nodes e Edges) em lote (Batch Sync)
+  EventsOn('graph:nodes:batch', (batchNodes) => {
+    // Proteção contra null para evitar travamento (forEach só roda se existir dado)
+    (batchNodes || []).forEach(node => {
+      if (!state.nodes.find(n => n.id === node.id)) {
+        state.nodes.push(node)
+      }
+    })
+  })
+
+  EventsOn('graph:node', (node) => {
+    if (!node) return
+    if (!state.nodes.find(n => n.id === node.id)) {
+      state.nodes.push(node)
+    }
+  })
+
+  EventsOn('graph:edge', (edge) => {
+    if (!edge) return
+    const s = edge.source.id || edge.source
+    const t = edge.target.id || edge.target
+    if (!state.edges.find(e => {
+      const es = e.source.id || e.source
+      const et = e.target.id || e.target
+      return (es === s && et === t) || (es === t && et === s) // Evita duplicatas bidirecionais se redundante
+    })) {
+      state.edges.push(edge)
+    }
+  })
+
+  EventsOn('graph:log', (glog) => {
+    if (!glog) return
+    state.graphLogs.push(glog)
+    if(state.graphLogs.length > 20) {
+      state.graphLogs.shift() // Mantém o console UI leve (apenas os 20 últimos pensamentos)
+    }
+  })
+
+  // Escuta saltos entre notas nas pesquisas
+  EventsOn('node:active', (nodeId) => {
+    state.activeNode = nodeId
+  })
+
   // 🧠 Escuta o Diagnóstico de Boot (cada estágio do backend)
   EventsOn('boot:stage', (data) => {
     if (data.stage === 'error') {
@@ -145,62 +203,6 @@ onMounted(async () => {
   setTimeout(() => {
     if (isBooting.value) isBooting.value = false
   }, 4000)
-  
-  // Escuta troca de visualização remota (ex: vindo das Settings)
-  EventsOn('view:change', (view) => {
-    currentView.value = view
-  })
-
-  // Escuta os logs em tempo real
-  EventsOn('agent:log', (log) => {
-    const lastLog = state.logs[state.logs.length - 1]
-    
-    // Se for o Maestro e o último também for Maestro, anexa o texto (Streaming)
-    if (log.source === 'MAESTRO' && lastLog && lastLog.source === 'MAESTRO') {
-      lastLog.content += log.content
-    } else {
-      state.logs.push(log)
-    }
-  })
-
-  // Escuta os dados do Grafo (Nodes e Edges) em lote (Batch Sync)
-  EventsOn('graph:nodes:batch', (batchNodes) => {
-    batchNodes.forEach(node => {
-      if (!state.nodes.find(n => n.id === node.id)) {
-        state.nodes.push(node)
-      }
-    })
-  })
-
-  EventsOn('graph:node', (node) => {
-    if (!state.nodes.find(n => n.id === node.id)) {
-      state.nodes.push(node)
-    }
-  })
-
-  EventsOn('graph:edge', (edge) => {
-    const s = edge.source.id || edge.source
-    const t = edge.target.id || edge.target
-    if (!state.edges.find(e => {
-      const es = e.source.id || e.source
-      const et = e.target.id || e.target
-      return (es === s && et === t) || (es === t && et === s) // Evita duplicatas bidirecionais se redundante
-    })) {
-      state.edges.push(edge)
-    }
-  })
-
-  EventsOn('graph:log', (glog) => {
-    state.graphLogs.push(glog)
-    if(state.graphLogs.length > 20) {
-      state.graphLogs.shift() // Mantém o console UI leve (apenas os 20 últimos pensamentos)
-    }
-  })
-
-  // Escuta saltos entre notas nas pesquisas
-  EventsOn('node:active', (nodeId) => {
-    state.activeNode = nodeId
-  })
 })
 </script>
 
@@ -290,9 +292,9 @@ onMounted(async () => {
 
                 <div class="boot-stages">
                   <TransitionGroup name="stage-list">
-                    <div
-                      v-for="s in bootStages"
-                      :key="s.stage"
+                    <div 
+                      v-for="s in bootStages" 
+                      :key="s.stage" 
                       class="boot-stage"
                       :class="{ done: s.done, active: !s.done }"
                     >
@@ -634,6 +636,10 @@ nav button.active {
   background-clip: text;
   -webkit-text-fill-color: transparent;
   letter-spacing: 2px;
+}
+
+@keyframes boot-ring-spin {
+  to { transform: rotate(360deg); }
 }
 
 .boot-title {

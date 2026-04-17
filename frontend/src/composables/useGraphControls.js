@@ -1,5 +1,5 @@
-import * as THREE from 'three'
 import { useGraphStore } from '../stores/graph'
+import { toRaw } from 'vue'
 
 /**
  * 🎮 useGraphControls — Navegação Gamificada (WASD + QE)
@@ -23,24 +23,44 @@ export function useGraphControls() {
     return el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)
   }
 
-  const startMoving = () => {
+  const startMoving = (viewStateRef) => {
     const move = () => {
-      const Graph = store.graphInstance
-      if (!Graph || typeof Graph.panTarget !== 'function') return
+      const vs = viewStateRef.value
+      if (!vs) return
+      
+      const speed = 25 * Math.max(0.2, (5 - vs.zoom) / 5) // Velocidade adaptativa ao zoom
+      const bearingRad = (vs.bearing * Math.PI) / 180
+      
+      // Vetores Direcionais Relativos à Câmera
+      const sinB = Math.sin(bearingRad)
+      const cosB = Math.cos(bearingRad)
       
       let dx = 0, dy = 0, dz = 0
 
-      // Intenções Brutas de Movimento
-      if (keys.w) dz -= moveSpeed
-      if (keys.s) dz += moveSpeed
-      if (keys.a) dx -= moveSpeed
-      if (keys.d) dx += moveSpeed
-      if (keys.q) dy -= moveSpeed
-      if (keys.e) dy += moveSpeed
+      // W/S: Frente/Trás (Baseado no Bearing)
+      if (keys.w) { dx += sinB * speed; dz -= cosB * speed; }
+      if (keys.s) { dx -= sinB * speed; dz += cosB * speed; }
+      
+      // A/D: Strafe (Lateral)
+      if (keys.a) { dx -= cosB * speed; dz -= sinB * speed; }
+      if (keys.d) { dx += cosB * speed; dz += sinB * speed; }
+      
+      // Q/E: Vertical (Eixo Y)
+      if (keys.q) dy -= speed
+      if (keys.e) dy += speed
 
       if (dx !== 0 || dy !== 0 || dz !== 0) {
-         // Delega o cálculo do quaternion/yaw para o Motor Gráfico Ativo (Deck.gl)
-         Graph.panTarget(dx, dy, dz)
+        // Atualiza o target do Deck.gl diretamente
+        const currentTarget = vs.target || [0,0,0]
+        viewStateRef.value = {
+          ...vs,
+          target: [
+            currentTarget[0] + dx,
+            currentTarget[1] + dy,
+            currentTarget[2] + dz
+          ],
+          transitionDuration: 0 // Movimento instantâneo para fluidez total
+        }
       }
 
       moveInterval = requestAnimationFrame(move)
@@ -78,7 +98,7 @@ export function useGraphControls() {
     }
   }
 
-  const handleKeyDown = (e) => {
+  const handleKeyDown = (e, viewStateRef) => {
     // F1: Toggle FPS counter
     if (e.key === 'F1') {
       e.preventDefault()
@@ -95,7 +115,7 @@ export function useGraphControls() {
     const k = e.key.toLowerCase()
     if (k in keys) {
       keys[k] = true
-      if (!moveInterval) startMoving()
+      if (!moveInterval) startMoving(viewStateRef)
     }
   }
 
@@ -116,14 +136,17 @@ export function useGraphControls() {
    * Registra os listeners de teclado no window
    * @returns {Function} Cleanup function para chamar em onUnmounted
    */
-  const registerKeyboardControls = () => {
-    window.addEventListener('keydown', handleKeyDown)
-    window.addEventListener('keyup', handleKeyUp)
+  const registerKeyboardControls = (viewStateRef) => {
+    const onKeyDown = (e) => handleKeyDown(e, viewStateRef)
+    const onKeyUp = (e) => handleKeyUp(e)
+    
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
 
     // Retorna a função de limpeza
     return () => {
-      window.removeEventListener('keydown', handleKeyDown)
-      window.removeEventListener('keyup', handleKeyUp)
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
       if (moveInterval) cancelAnimationFrame(moveInterval)
       stopFpsLoop()
     }

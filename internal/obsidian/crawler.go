@@ -134,7 +134,7 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 		relPath, _ := filepath.Rel(c.VaultPath, path)
 		if relPath == "." { return nil }
 
-		// 📁 Se for diretório, emite como um Planeta
+		// 📁 Se for diretório, emite como um Planeta ou Sistema Solar
 		if info.IsDir() {
 			folderID := "planet:" + strings.ToLower(relPath)
 			folderName := info.Name()
@@ -142,8 +142,13 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 			// Determina o Pai (Parent) para criar aresta de órbita
 			parentDir := filepath.Dir(relPath)
 			var parentID string
+			celestialType := "planet"
+			mass := 20.0
+
 			if parentDir == "." {
 				parentID = galaxyID
+				celestialType = "solar-system-core" // Pastas raiz do vault são sistemas solares
+				mass = 50.0
 			} else {
 				parentID = "planet:" + strings.ToLower(parentDir)
 			}
@@ -153,16 +158,18 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 					"id":            folderID,
 					"name":          folderName,
 					"document-type": "folder",
-					"celestial-type": "planet",
-					"mass":          20.0,
-					"summary":       fmt.Sprintf("Pasta '%s' no vault, contendo notas relacionadas.", folderName),
-					"what-it-does":  "Agrupa notas por tema e cria contexto estrutural para navegação semântica.",
+					"celestial-type": celestialType,
+					"mass":          mass,
+					"parent_gravity_id": parentID,
+					"summary":       fmt.Sprintf("Entidade astronômica '%s' (Tipo: %s).", folderName, celestialType),
+					"what-it-does":  "Atua como centro de gravidade local para documentos e subpastas orbitais.",
 				})
 				// Aresta de Órbita Física (Parentesco)
 				runtime.EventsEmit(c.ctx, "graph:edge", map[string]interface{}{
 					"source": parentID,
 					"target": folderID,
 					"weight": 5, // Aresta forte de gravidade
+					"edge-type": "orbital",
 				})
 				processedFolders[folderID] = true
 			}
@@ -198,6 +205,7 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 			"source": parentID,
 			"target": nodeID,
 			"weight": 3, // Gravidade local
+			"edge-type": "orbital",
 		})
 
 		// Lê conteúdo (md/código) para gerar resumo real e extrair links
@@ -232,6 +240,7 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 						"document-type":  docType,
 						"celestial-type": "moon",
 						"mass":           5.0,
+						"parent_gravity_id": parentID,
 						"summary":        fileSummary,
 						"what-it-does":   fileWhatItDoes,
 					})
@@ -253,6 +262,7 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 			"document-type":  docType,
 			"celestial-type": "moon",
 			"mass":           5.0,
+			"parent_gravity_id": parentID,
 			"summary":        fileSummary,
 			"what-it-does":   fileWhatItDoes,
 		})
@@ -422,15 +432,20 @@ func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.P
 				return nil
 			}
 
-			// 📁 Emitir Pasta (Planeta)
+			// 📁 Emitir Pasta (Planeta ou Sistema Solar)
 			if info.IsDir() {
 				folderID := "planet:" + strings.ToLower(repo.CoreNode+":"+relPath)
 				folderName := info.Name()
 
 				parentDir := filepath.Dir(relPath)
 				var parentID string
+				celestialType := "planet"
+				mass := 15.0
+
 				if parentDir == "." {
 					parentID = galaxyID
+					celestialType = "solar-system-core"
+					mass = 40.0
 				} else {
 					parentID = "planet:" + strings.ToLower(repo.CoreNode+":"+parentDir)
 				}
@@ -440,15 +455,17 @@ func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.P
 						"id":            folderID,
 						"name":          folderName,
 						"document-type": "folder",
-						"celestial-type": "planet",
-						"mass":          15.0,
-						"summary":       fmt.Sprintf("Pasta '%s' dentro do repositório satélite.", folderName),
-						"what-it-does":  "Agrupa módulos relacionados para facilitar contexto técnico no grafo.",
+						"celestial-type": celestialType,
+						"mass":          mass,
+						"parent_gravity_id": parentID,
+						"summary":       fmt.Sprintf("Entidade astronômica '%s' do repositório satélite.", folderName),
+						"what-it-does":  "Atua como centro de gravidade local em uma galáxia externa.",
 					})
 					runtime.EventsEmit(c.ctx, "graph:edge", map[string]interface{}{
 						"source": parentID,
 						"target": folderID,
 						"weight": 5,
+						"edge-type": "orbital",
 					})
 					processedFolders[folderID] = true
 				}
@@ -479,18 +496,7 @@ func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.P
 				return extractFileSummary(nodeName, ext, string(raw))
 			}()
 
-			// Emite a Lua do Projeto com resumo individual
-			runtime.EventsEmit(c.ctx, "graph:node", map[string]interface{}{
-				"id":             nodeID,
-				"name":           nodeName,
-				"document-type":  docType,
-				"celestial-type": "moon",
-				"mass":           4.0,
-				"summary":        fileSummary,
-				"what-it-does":   fileWhatItDoes,
-			})
-
-			// Aresta de órbita para a pasta
+			// Determina o Pai (Parent) para criar aresta de órbita
 			parentDir := filepath.Dir(relPath)
 			var parentID string
 			if parentDir == "." {
@@ -499,10 +505,23 @@ func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.P
 				parentID = "planet:" + strings.ToLower(repo.CoreNode+":"+parentDir)
 			}
 
+			// Emite a Lua do Projeto com resumo individual
+			runtime.EventsEmit(c.ctx, "graph:node", map[string]interface{}{
+				"id":             nodeID,
+				"name":           nodeName,
+				"document-type":  docType,
+				"celestial-type": "moon",
+				"mass":           4.0,
+				"parent_gravity_id": parentID,
+				"summary":        fileSummary,
+				"what-it-does":   fileWhatItDoes,
+			})
+
 			runtime.EventsEmit(c.ctx, "graph:edge", map[string]interface{}{
 				"source": parentID,
 				"target": nodeID,
 				"weight": 3,
+				"edge-type": "orbital",
 			})
 
 			tasks <- crawlTask{
@@ -612,13 +631,22 @@ func (c *Crawler) processFile(ctx context.Context, path string, info os.FileInfo
 		}
 	}
 
-	// Emite arestas das triplas extraídas para o grafo visual
+	// Emite arestas das triplas extraídas para o grafo visual (Asteroides)
 	for _, t := range triples {
 		if t.Object != "" && len(t.Object) < 50 {
+			runtime.EventsEmit(c.ctx, "graph:node", map[string]interface{}{
+				"id":            strings.ToLower(t.Object),
+				"name":          t.Object,
+				"document-type": "keyword",
+				"celestial-type": "asteroid",
+				"mass":          1.0,
+				"parent_gravity_id": nodeID,
+			})
 			runtime.EventsEmit(c.ctx, "graph:edge", map[string]interface{}{
 				"source": nodeID,
 				"target": strings.ToLower(t.Object),
 				"weight": 1,
+				"edge-type": "semantic",
 			})
 		}
 	}

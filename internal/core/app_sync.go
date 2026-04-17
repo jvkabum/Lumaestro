@@ -251,6 +251,14 @@ func (a *App) SyncAllNodes() {
 	points, err := a.qdrant.Search("obsidian_knowledge", nil, 1500)
 	if err != nil {
 		fmt.Printf("[Sync] Erro ao buscar nós para sincronização: %v\n", err)
+		
+		// 🛠️ AUTO-REPARO: Se for erro 404 (coleção não existe), tenta criar
+		if strings.Contains(err.Error(), "Status 404") || strings.Contains(err.Error(), "Not found") {
+			if a.crawler != nil && a.ctx != nil {
+				fmt.Println("[Sync] 🏗️ Gatilho de Auto-Reparo: Coleção não encontrada. Criando agora...")
+				_ = a.crawler.EnsureCollections(a.ctx)
+			}
+		}
 		return
 	}
 	memoryPoints, err := a.qdrant.Search("knowledge_graph", nil, 1500)
@@ -258,8 +266,8 @@ func (a *App) SyncAllNodes() {
 		fmt.Printf("[Sync] Erro ao buscar memórias para sincronização: %v\n", err)
 	}
 
-	var nodesBatch []map[string]interface{}
-	var edgesBatch []map[string]interface{}
+	nodesBatch := make([]map[string]interface{}, 0)
+	edgesBatch := make([]map[string]interface{}, 0)
 	batchIndex := map[string]struct{}{}
 	edgeIndex := map[string]struct{}{}
 
@@ -417,6 +425,7 @@ func (a *App) SyncAllNodes() {
 	a.saveTopologyCache(nodesBatch, edgesBatch)
 
 	// Emite o pacote completo de nós de uma só vez
+	fmt.Printf("[Sync] Emitindo batch final de %d nós para o Wails...\n", len(nodesBatch))
 	a.emitEvent("graph:nodes:batch", nodesBatch)
 	fmt.Printf("[Sync] ✅ %d nós e %d arestas sincronizados e cacheados.\n", len(nodesBatch), len(edgesBatch))
 

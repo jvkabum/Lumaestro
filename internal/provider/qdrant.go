@@ -242,6 +242,11 @@ func (c *QdrantClient) useFallback(err error) bool {
 		return false
 	}
 	if err != nil {
+		// 🛡️ Ignora 404 (Not Found) para ativação do fallback global.
+		// Erro 404 é um erro lógico (coleção não existe), não um erro de rede/servidor.
+		if strings.Contains(err.Error(), "Status 404") || strings.Contains(err.Error(), "Not found") {
+			return false
+		}
 		c.activateFallback(err)
 		return true
 	}
