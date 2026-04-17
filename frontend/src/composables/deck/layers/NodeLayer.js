@@ -1,3 +1,4 @@
+
 import { ScatterplotLayer } from '@deck.gl/layers';
 import { colors, getCommunityColor } from '../Constants';
 
@@ -7,12 +8,12 @@ import { colors, getCommunityColor } from '../Constants';
  * Responsável por renderizar os nós (documentos, memórias, sistemas).
  * Inclui os algoritmos de escalonamento v9.0 e os eventos de interação (Hover, Click, Drag).
  */
-export function createNodeLayer({ 
-    currentNodes, 
-    degreeCounts, 
-    zoom, 
-    activeNodeId, 
-    store, 
+export function createNodeLayer({
+    currentNodes,
+    degreeCounts,
+    zoom,
+    activeNodeId,
+    store,
     tickCounter,
     onHover,
     onClick,
@@ -40,7 +41,7 @@ export function createNodeLayer({
             // 📏 ESCALONAMENTO POR IMPORTÂNCIA ESTRUTURAL (Paridade v14.1)
             const deg = degreeCounts.get(node.id) || node.degree || 0;
             const pr = (node.pagerank && node.pagerank > 0) ? (node.pagerank * 15) : deg;
-            
+
             // Fator de Tipo (Fontes e Sistemas são naturalmente maiores)
             const type = node['document-type'] || 'chunk';
             const typeFactor = type === 'source' ? 1.8 : (type === 'system' ? 2.2 : (type === 'page' ? 1.4 : 1.0));

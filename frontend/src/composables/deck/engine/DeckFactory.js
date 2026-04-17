@@ -7,17 +7,17 @@ import { Deck, OrbitView } from '@deck.gl/core';
  * Centraliza definições de Tooltips, Views e comportamentos de ViewState.
  */
 export function useDeckFactory() {
-    
+
     const createDeck = ({ containerRef, currentViewState, onViewStateChange }) => {
         return new Deck({
             parent: containerRef,
             initialViewState: currentViewState,
             getTooltip: ({ object }) => object && object.name ? {
                 text: `${object.name}\nTipo: ${object['document-type'] || 'Conceito'}`,
-                style: { 
-                    backgroundColor: 'rgba(15, 23, 42, 0.95)', 
-                    color: '#fff', 
-                    borderRadius: '6px', 
+                style: {
+                    backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                    color: '#fff',
+                    borderRadius: '6px',
                     padding: '8px 12px',
                     border: '1px solid rgba(255, 255, 255, 0.1)',
                     fontFamily: 'Inter, sans-serif',
