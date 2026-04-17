@@ -26,6 +26,7 @@ export function useDeckFactory() {
                 }
             } : null,
             onViewStateChange,
+            controller: true, // 🖱️ Habilita Zoom, Pan e Rotação orbitais
             views: new OrbitView({ orbitAxis: 'Y', near: 0.1, far: 50000 }),
             layers: []
         });

@@ -68,8 +68,13 @@ export function useDeckRender() {
         currentLinks.value = mapLinks(rawEdges, nodeMap);
 
         deckInstance.value = createDeck({ 
-            containerRef, currentViewState, 
-            onViewStateChange: ({ viewState }) => { currentViewState.value = viewState; updateLayers(); return viewState; } 
+            containerRef, 
+            currentViewState: currentViewState.value, 
+            onViewStateChange: ({ viewState }) => { 
+                currentViewState.value = viewState; 
+                updateLayers(); 
+                return viewState; 
+            } 
         });
 
         // 2. Física e Telemetria
