@@ -1,15 +1,13 @@
 <script setup>
 import { useGraphStore } from '../../stores/graph'
-import { useGraphSync } from '../../composables/useGraphSync'
-import { useGraphEvents } from '../../composables/useGraphEvents'
+import { useGraphActions } from '../../composables/deck/useGraphActions'
 
 const props = defineProps({
   nodesCount: { type: Number, default: 0 }
 })
 
 const store = useGraphStore()
-const { confirmSync } = useGraphSync()
-const { resolveConflict } = useGraphEvents()
+const { confirmSync, resolveConflict } = useGraphActions()
 </script>
 
 <template>

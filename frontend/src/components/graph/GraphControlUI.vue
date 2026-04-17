@@ -1,8 +1,7 @@
 <script setup>
 import { useGraphStore } from '../../stores/graph'
 import { useOrchestratorStore } from '../../stores/orchestrator'
-import { useGraphSync } from '../../composables/useGraphSync'
-import { useGraphXRay } from '../../composables/useGraphXRay'
+import { useGraphOrchestrator } from '../../composables/useGraphOrchestrator'
 
 /**
  * 🎛️ GraphControlUI — O Centro de Comando do Grafo
@@ -24,8 +23,12 @@ const emit = defineEmits(['toggle-minimize', 'update-log-ref'])
 
 const store = useGraphStore()
 const orchestrator = useOrchestratorStore()
-const { handleFastSync, handleFullSync } = useGraphSync()
-const { runReconScan, pruneNodes } = useGraphXRay()
+const { 
+  handleFastSync, 
+  handleFullSync, 
+  runReconScan, 
+  pruneNodes 
+} = useGraphOrchestrator()
 </script>
 
 <template>

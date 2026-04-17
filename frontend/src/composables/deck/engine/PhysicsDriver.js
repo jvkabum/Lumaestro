@@ -1,4 +1,4 @@
-import PhysicsWorker from '../../workers/physicsWorker?worker';
+import PhysicsWorker from '../../../workers/physicsWorker?worker';
 
 /**
  * 🏎️ PhysicsDriver — O Motor de Física
