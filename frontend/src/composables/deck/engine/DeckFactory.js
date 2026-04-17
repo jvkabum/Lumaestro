@@ -55,16 +55,31 @@ export function useDeckFactory() {
                 near: 0.00001, far: 1000000, fovy: 50
             }),
             
-            getTooltip: ({ object }) => object && object.name ? {
-                text: `${object.name}\nTipo: ${object['document-type'] || 'Conceito'}`,
-                style: {
-                    backgroundColor: 'rgba(15, 23, 42, 0.95)', color: '#fff', borderRadius: '8px',
-                    padding: '10px 14px', border: '1px solid rgba(0, 242, 255, 0.3)',
-                    fontFamily: 'Inter, sans-serif', fontSize: '13px',
-                    boxShadow: '0 4px 20px rgba(0, 0, 0, 0.4)', backdropFilter: 'blur(8px)',
-                    zIndex: 9999, animation: 'tooltipFadeIn 0.2s ease-out'
-                }
-            } : null,
+            getTooltip: ({ object }) => {
+                if (!object || !object.name) return null;
+                const limitStr = (str, len) => str.length > len ? str.substring(0, len) + '...' : str;
+                
+                const summaryText = object.summary || object['what-it-does'] || '';
+                const summaryHtml = summaryText ? 
+                    `<div style="margin-top: 8px; padding-top: 8px; border-top: 1px dashed rgba(0,242,255,0.2); font-size: 11.5px; opacity: 0.85; max-width: 250px; line-height: 1.4; white-space: normal;">
+                       ${limitStr(summaryText, 220)}
+                     </div>` : '';
+
+                return {
+                    html: `
+                        <div style="font-weight: 700; font-size: 14px; letter-spacing: 0.5px; margin-bottom: 2px;">${object.name.toUpperCase()}</div>
+                        <div style="font-size: 11px; color: #00f2ff; text-transform: uppercase;">▶ ${object['document-type'] || 'Conceito'}</div>
+                        ${summaryHtml}
+                    `,
+                    style: {
+                        backgroundColor: 'rgba(10, 15, 30, 0.95)', color: '#fff', borderRadius: '6px',
+                        padding: '12px 14px', border: '1px solid rgba(0, 242, 255, 0.25)',
+                        fontFamily: 'Inter, sans-serif',
+                        boxShadow: '0 8px 32px rgba(0, 242, 255, 0.15)', backdropFilter: 'blur(12px)',
+                        zIndex: 9999, pointerEvents: 'none'
+                    }
+                };
+            },
             
             layers: [],
             parameters: { antialias: true, depthTest: true, blend: true }

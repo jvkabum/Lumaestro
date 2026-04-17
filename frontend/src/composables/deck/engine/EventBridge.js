@@ -25,9 +25,11 @@ export function useEventBridge({ store, pilotFocus, startPhysicsDrag, handlePhys
         store.selectedNode = info.object;
         store.nodeDetails = { loading: true, path: '', content: '', isVirtual: false };
 
-        // Integração com o Backend (Wails)
-        if (window.go?.main?.App?.GetNeuralNodeContext) {
-            window.go.main.App.GetNeuralNodeContext(info.object.id).then(res => {
+        // Integração Dinâmica com o Backend (Wails)
+        const bridge = (window.go?.core?.App) || (window.go?.main?.App);
+        
+        if (bridge && bridge.GetNeuralNodeContext) {
+            bridge.GetNeuralNodeContext(info.object.id).then(res => {
                 if (res && res.success !== false) {
                     store.nodeDetails = {
                         loading: false,
@@ -43,8 +45,17 @@ export function useEventBridge({ store, pilotFocus, startPhysicsDrag, handlePhys
                         res.related_edges.forEach(edgeId => store.clickedNodeLinks.add(edgeId));
                     }
                     updateLayers();
+                } else {
+                    store.nodeDetails = { loading: false, path: 'Erro', content: 'Metadados não encontrados no Vector Store.' };
                 }
+            }).catch(err => {
+                console.error("[EventBridge] Erro ao buscar contexto do nó:", err);
+                store.nodeDetails = { loading: false, path: 'Erro de Conexão', content: 'Falha letal ao contatar o Bridge do backend.' };
             });
+        } else {
+            // Backend inativo, simula falha
+            console.warn("[EventBridge] Bridge do Wails inativo ou Módulo não encontrado.");
+            store.nodeDetails = { loading: false, path: 'Offline', content: 'Comunicação RPC indisponível no momento.' };
         }
 
         // Voo de câmera para o nó
