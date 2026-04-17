@@ -11,6 +11,7 @@ export function createLabelLayer({ currentNodes, degreeCounts, zoom, store, tick
     return new TextLayer({
         id: 'graph-labels',
         data: currentNodes,
+        visible: store.showLabels !== false,
         getPosition: node => [node.x || 0, node.y || 0, node.z || 0],
         getText: node => {
             const deg = degreeCounts.get(node.id) || node.degree || 0;

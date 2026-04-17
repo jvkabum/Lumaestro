@@ -31,11 +31,12 @@ export function useDeckRender() {
     const nodeMap = new Map();
     const activeNodeId = shallowRef(null);
     const currentViewState = shallowRef({ target: [0, 0, 0], zoom: -2.8, rotationX: 30, rotationOrbit: -25 });
+    let cleanupKeyboard = null; // ← Segura a lixeira dos listeners de teclado
 
     // ── Instalação dos Especialistas (Atomic Drivers) ──
     const { initPhysics, updatePhysicsData, syncPositions, startDrag, handleDrag, endDrag, terminatePhysics } = usePhysicsDriver();
     const { purify, bootstrapCoordinates, syncIncremental, mapLinks } = useDataEngineer();
-    const { focusNode: pilotFocus, zoomToFit: pilotZoom, panTarget: pilotPan } = useInteractionPilot();
+    const { focusNode: pilotFocus, zoomToFit: pilotZoom, panTarget: pilotPan, setupKeyboardNav } = useInteractionPilot();
     const { startClock, stopClock, getTick } = useAnimationClock();
     const { compose } = useLayerComposer();
     const { createDeck } = useDeckFactory();
@@ -83,6 +84,10 @@ export function useDeckRender() {
 
         // 3. Ativação dos Contratos e Relógio
         bind();
+        
+        // ⌨️ Configuração de Teclado (WASD/QE + Presets v18.13 - via InteractionPilot)
+        cleanupKeyboard = setupKeyboardNav(deckInstance.value, currentViewState, containerRef, store, 25);
+
         startClock(() => updateLayers());
 
         // 🚀 [RENDER INICIAL] Força um frame imediato para evitar tela preta 
@@ -112,7 +117,9 @@ export function useDeckRender() {
     };
 
     const destroyGraph = () => {
+        if (cleanupKeyboard) cleanupKeyboard(); // Limpa listeners de teclado
         stopClock(); terminatePhysics(); unbind();
+
         if (deckInstance.value) { deckInstance.value.finalize(); deckInstance.value = null; }
         document.body.style.cursor = 'default';
     };
