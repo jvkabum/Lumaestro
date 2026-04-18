@@ -9,7 +9,7 @@ export function useDeckFactory() {
 
     const NAV_CONFIG = {
         minZoom: -15, maxZoom: 50,
-        minPitch: -Infinity, maxPitch: Infinity, // Total liberdade espacial (looping 360 infinito)
+        minRotationX: -179, maxRotationX: 179, // Liberdade total de rotação vertical (evita gimbal lock no polo exato)
         zoomSpeed: 1.2, dragSpeed: 1.0, rotateSpeed: 0.8,
         inertia: 0.15
     };
@@ -30,8 +30,7 @@ export function useDeckFactory() {
             initialViewState: {
                 ...currentViewState,
                 minZoom: NAV_CONFIG.minZoom, maxZoom: NAV_CONFIG.maxZoom,
-                minPitch: NAV_CONFIG.minPitch, maxPitch: NAV_CONFIG.maxPitch,
-                minRotationX: NAV_CONFIG.minPitch, maxRotationX: NAV_CONFIG.maxPitch // Nome correto para liberar a trava do OrbitView
+                minRotationX: NAV_CONFIG.minRotationX, maxRotationX: NAV_CONFIG.maxRotationX
             },
             
             onViewStateChange: (view) => {
@@ -45,8 +44,7 @@ export function useDeckFactory() {
                 zoomSpeed: NAV_CONFIG.zoomSpeed, dragSpeed: NAV_CONFIG.dragSpeed, rotateSpeed: NAV_CONFIG.rotateSpeed,
                 inertia: NAV_CONFIG.inertia,
                 minZoom: NAV_CONFIG.minZoom, maxZoom: NAV_CONFIG.maxZoom, 
-                minPitch: NAV_CONFIG.minPitch, maxPitch: NAV_CONFIG.maxPitch,
-                minRotationX: NAV_CONFIG.minPitch, maxRotationX: NAV_CONFIG.maxPitch
+                minRotationX: NAV_CONFIG.minRotationX, maxRotationX: NAV_CONFIG.maxRotationX
             },
             
             views: new OrbitView({
