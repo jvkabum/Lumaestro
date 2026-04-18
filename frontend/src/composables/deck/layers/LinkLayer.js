@@ -120,8 +120,13 @@ export function createLinkLayer({ currentLinks, clLinks, hlLinks, animationTime 
             if (l['edge-type'] === 'orbital') return false;
             const sObj = l.sourceObj;
             const tObj = l.targetObj;
-            if (sObj && (sObj['celestial-type'] === 'galaxy-core' || sObj['celestial-type'] === 'solar-system-core')) return false;
-            if (tObj && (tObj['celestial-type'] === 'galaxy-core' || tObj['celestial-type'] === 'solar-system-core')) return false;
+            
+            // 🛡️ Previne o "Nó Central Invisível" (Buraco Negro)
+            // Se a aresta não tem um nó de origem ou destino válido, a ignoramos.
+            if (!sObj || !tObj) return false;
+
+            if (sObj['celestial-type'] === 'galaxy-core' || sObj['celestial-type'] === 'solar-system-core') return false;
+            if (tObj['celestial-type'] === 'galaxy-core' || tObj['celestial-type'] === 'solar-system-core') return false;
             return true;
         }),
         getSourcePosition: link => link.sourceObj ? [link.sourceObj.x || 0, link.sourceObj.y || 0, link.sourceObj.z || 0] : [0, 0, 0],
