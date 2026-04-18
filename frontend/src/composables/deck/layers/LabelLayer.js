@@ -1,4 +1,5 @@
 import { TextLayer } from '@deck.gl/layers';
+import { COORDINATE_SYSTEM } from '@deck.gl/core';
 import { colors } from '../Constants';
 
 /**
@@ -10,6 +11,8 @@ import { colors } from '../Constants';
 export function createLabelLayer({ currentNodes, degreeCounts, zoom, store, tickCounter }) {
     return new TextLayer({
         id: 'graph-labels',
+        coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
+        fontSettings: { sdf: true },
         data: currentNodes,
         visible: store.showLabels !== false,
         getPosition: node => [node.x || 0, node.y || 0, node.z || 0],

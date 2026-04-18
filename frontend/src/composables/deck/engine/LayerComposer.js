@@ -1,8 +1,6 @@
-// Importação das micro-layers atômicas
 import { createLabelLayer } from '../layers/LabelLayer.js';
 import { createLinkLayer } from '../layers/LinkLayer.js';
 import { createNodeLayer } from '../layers/NodeLayer.js';
-import { createPhotonLayer } from '../layers/PhotonLayer.js';
 
 /**
  * 🏗️ LayerComposer — O Arquiteto de Camadas
@@ -37,20 +35,17 @@ export function useLayerComposer() {
 
         // Montagem do Pipeline de Renderização
         return [
-            // 1. Etiquetas (LOD)
+            // 1. Etiquetas (LOD) - CARTESIAN Sync
             createLabelLayer({ currentNodes, degreeCounts, zoom, store, tickCounter: animationTime }),
             
-            // 2. Conexões (Arcos)
-            createLinkLayer({ currentLinks, clLinks, hlLinks, tickCounter: animationTime }),
+            // 2. Conexões + Fótons (GPU Sync V9)
+            createLinkLayer({ currentLinks, clLinks, hlLinks, animationTime }),
             
-            // 3. Nós (Interação)
+            // 3. Nós (Interação) - CARTESIAN Sync
             createNodeLayer({ 
                 currentNodes, degreeCounts, zoom, activeNodeId, store, tickCounter: animationTime,
                 ...eventHandlers
-            }),
-
-            // 4. Atmosfera (Fótons)
-            createPhotonLayer({ currentLinks, clLinks, hlLinks, animationTime, store })
+            })
         ];
     };
 

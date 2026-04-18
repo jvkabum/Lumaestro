@@ -1,5 +1,6 @@
 
 import { ScatterplotLayer } from '@deck.gl/layers';
+import { COORDINATE_SYSTEM } from '@deck.gl/core';
 import { colors, getCommunityColor } from '../Constants';
 
 /**
@@ -23,6 +24,7 @@ export function createNodeLayer({
 }) {
     return new ScatterplotLayer({
         id: 'graph-nodes',
+        coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
         data: [...currentNodes], // Clone para garantir atualização no Deck.gl
         getPosition: node => [node.x || 0, node.y || 0, node.z || 0],
         getFillColor: node => {
