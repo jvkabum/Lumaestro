@@ -130,7 +130,7 @@ func (n *GraphNavigator) ExpandContext(ctx context.Context, initialNotes []map[s
 
 		// 🚀 Emite o percurso completo como uma única mensagem animável no frontend
 		if len(trail) > 0 {
-			runtime.EventsEmit(ctx, "graph:traverse", map[string]interface{}{
+			runtime.EventsEmit(n.ctx, "graph:traverse", map[string]interface{}{
 				"hops":  trail,
 				"total": len(trail),
 			})

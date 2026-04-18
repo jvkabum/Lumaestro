@@ -278,7 +278,7 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 	// ══════════════════════════════════════════════════════════
 	if len(pendingFiles) == 0 {
 		fmt.Println("[Crawler] ✅ Nenhum arquivo novo ou modificado. Scan completo sem chamadas de API!")
-		runtime.EventsEmit(ctx, "agent:log", map[string]string{
+		runtime.EventsEmit(c.ctx, "agent:log", map[string]string{
 			"source":  "CRAWLER",
 			"content": fmt.Sprintf("✅ Grafo montado. Todos os %d arquivos estão em cache.", totalCached),
 		})
@@ -311,7 +311,7 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 	wg.Wait()
 
 	c.saveCache()
-	runtime.EventsEmit(ctx, "agent:log", map[string]string{
+	runtime.EventsEmit(c.ctx, "agent:log", map[string]string{
 		"source":  "CRAWLER",
 		"content": fmt.Sprintf("✅ Indexação completa. Novos/Atualizados: %d. Cache: %d.", totalIndexed, totalCached),
 	})

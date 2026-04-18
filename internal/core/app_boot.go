@@ -9,7 +9,10 @@ import (
 
 // bootSequence executa a inicialização dos motores em background. (DNA 1:1)
 func (a *App) bootSequence() {
-	time.Sleep(1 * time.Second)
+	// 🔌 Injeção imediata de contexto para habilitar comunicações seguras
+	a.injectContexts()
+	
+	time.Sleep(500 * time.Millisecond)
 	a.emitBoot("config", "⚙️", "Carregando configurações...")
 
 	if err := a.initServices(); err != nil {
@@ -17,8 +20,6 @@ func (a *App) bootSequence() {
 		a.emitBoot("error", "🔴", "Falha na inicialização: "+err.Error())
 		return
 	}
-
-	a.injectContexts()
 
 	if a.crawler != nil && a.ctx != nil {
 		go func() {

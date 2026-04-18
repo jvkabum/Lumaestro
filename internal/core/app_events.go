@@ -2,6 +2,7 @@ package core
 
 import (
 	"encoding/base64"
+	"fmt"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -11,6 +12,13 @@ func (a *App) emitEvent(name string, data interface{}) {
 	if a.ctx == nil {
 		return
 	}
+
+	// 🛡️ Blindagem contra Panics do Wails (como Invalid Context)
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("⚠️ [AppEvents] Falha silenciosa ao emitir '%s' (Contexto Crítico): %v\n", name, r)
+		}
+	}()
 
 	// 🛡️ Verificação de Vida do Contexto
 	select {
