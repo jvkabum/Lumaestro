@@ -29,6 +29,10 @@ const isResizing = ref(false)
 const minChatWidth = 556
 const maxChatWidth = 1400
 
+// Minimização do Chat
+const isChatMinimized = ref(false)
+const toggleChat = () => { isChatMinimized.value = !isChatMinimized.value }
+
 // Terminal Dock Inferior (Estilo VSCode)
 const isTerminalDockOpen = ref(true)
 
@@ -276,8 +280,12 @@ onMounted(async () => {
           <HistorySidebar v-if="orchestrator.isSidebarOpen" />
         </Transition>
 
-        <aside class="glass chat-area" :style="{ width: chatWidth + 'px', minWidth: chatWidth + 'px' }">
-          <ChatPanel />
+        <aside 
+          class="glass chat-area" 
+          :class="{ 'chat-minimized': isChatMinimized }"
+          :style="isChatMinimized ? {} : { width: chatWidth + 'px', minWidth: chatWidth + 'px' }"
+        >
+          <ChatPanel :is-minimized="isChatMinimized" @toggle-minimize="toggleChat" />
 
           <!-- 🚀 Overlay de Boot — Diagnóstico Visual (Movido para o Chat) -->
           <Transition name="boot-fade">
@@ -497,9 +505,15 @@ nav button.active {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  transition: none;
+  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1), min-width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative; /* Necessário para conter o overlay de boot */
   overflow: hidden; /* Mantém o overlay dentro dos cantos arredondados */
+}
+
+.chat-area.chat-minimized {
+  width: 52px !important;
+  min-width: 52px !important;
+  margin: 10px 6px 0 6px;
 }
 
 /* ── Resize Handle ── */

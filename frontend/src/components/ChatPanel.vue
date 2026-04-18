@@ -10,6 +10,10 @@ import ReviewBlock from './ReviewBlock.vue'
 import SubagentPanel from './SubagentPanel.vue'
 import TerminalView from './TerminalView.vue'
 
+// Props e Emits
+const props = defineProps({ isMinimized: { type: Boolean, default: false } })
+const emit = defineEmits(['toggle-minimize'])
+
 // --- Uso da Store (Pinia) ---
 const orchestrator = useOrchestratorStore()
 const settings = useSettingsStore()
@@ -121,8 +125,8 @@ const handleSessionEnded = (agent) => {
     <!-- 📋 Overlay de Plano de Execução -->
     <PlanView />
 
-    <header class="panel-header glass">
-      <div class="header-left">
+    <header class="panel-header glass" :class="{ 'is-minimized': props.isMinimized }">
+      <div class="header-left" v-show="!props.isMinimized">
         <span class="orchestra-icon">🎻</span>
         <div class="header-titles">
           <h2>MAESTRO</h2>
@@ -143,9 +147,9 @@ const handleSessionEnded = (agent) => {
           </div>
         </div>
       </div>
-      <div class="header-actions">
+      <div class="header-actions" :class="{ 'actions-vertical': props.isMinimized }">
         <!-- Toggle Terminal View -->
-        <button @click="showRawTerminal = !showRawTerminal" class="action-btn" :class="{ 'btn-active': showRawTerminal }" title="Alternar Terminal Bruto">
+        <button v-show="!props.isMinimized" @click="showRawTerminal = !showRawTerminal" class="action-btn" :class="{ 'btn-active': showRawTerminal }" title="Alternar Terminal Bruto">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
             <line x1="8" y1="21" x2="16" y2="21"></line>
@@ -172,6 +176,18 @@ const handleSessionEnded = (agent) => {
           </svg>
         </button>
         
+        <!-- 🔽 Botão Minimizar/Maximizar Chat -->
+        <button @click="emit('toggle-minimize')" class="action-btn" :title="props.isMinimized ? 'Expandir Chat' : 'Minimizar Chat'">
+          <svg v-if="!props.isMinimized" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="13 17 18 12 13 7"></polyline>
+            <polyline points="6 17 11 12 6 7"></polyline>
+          </svg>
+          <svg v-else viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="11 17 6 12 11 7"></polyline>
+            <polyline points="18 17 13 12 18 7"></polyline>
+          </svg>
+        </button>
+
         <button v-if="isTerminalMode" @click="orchestrator.stopSession()" class="exit-btn-circle" title="Encerrar Sessão">
            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3">
              <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -182,7 +198,7 @@ const handleSessionEnded = (agent) => {
     </header>
 
     <!-- Área Principal do Chat (Premium) -->
-    <div v-show="!showRawTerminal" class="chat-main-area" ref="logContainer">
+    <div v-show="!showRawTerminal && !props.isMinimized" class="chat-main-area" ref="logContainer">
       <div class="chat-scroll-boundary">
         <!-- Tela de Harmonização Inicial (Loading Screen) -->
         <Transition name="fade">
@@ -227,7 +243,7 @@ const handleSessionEnded = (agent) => {
     </div>
 
     <!-- Terminal Real com TABS de Agentes -->
-    <div v-show="showRawTerminal" class="raw-terminal-view">
+    <div v-show="showRawTerminal && !props.isMinimized" class="raw-terminal-view">
       <div class="terminal-overlay-header">
         <div class="terminal-tabs">
           <button
@@ -292,7 +308,19 @@ const handleSessionEnded = (agent) => {
   z-index: 10;
   background: rgba(15, 23, 42, 0.7);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
+
+/* Quando o painel está minimizado: header vira coluna vertical */
+.chat-panel-parent:has(.chat-main-area[style*="display: none"]) .panel-header,
+.chat-panel-parent .panel-header.is-minimized {
+  flex-direction: column;
+  height: 100%;
+  padding: 16px 0;
+  justify-content: flex-start;
+  gap: 16px;
+}
+
 
 .header-left { display: flex; align-items: center; gap: 14px; }
 .orchestra-icon { font-size: 1.2rem; filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.5)); }
@@ -343,6 +371,16 @@ const handleSessionEnded = (agent) => {
 .quota-value { font-size: 10px; font-weight: 800; color: #94a3b8; letter-spacing: 0.5px; }
 
 .header-actions { display: flex; align-items: center; gap: 10px; }
+
+.actions-vertical {
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 8px;
+  padding-top: 4px;
+  width: 100%;
+  align-items: center;
+}
+
 
 .action-btn {
   background: transparent; border: none; color: #64748b; cursor: pointer;
