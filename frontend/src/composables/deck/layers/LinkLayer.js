@@ -11,8 +11,13 @@ const animationModule = {
     defaultUniforms: {
         u_time_v9_stable: 0
     },
-    // No v9, precisamos declarar o bloco explicitamente no vs ou fs para o assembler emitir
+    // Declaramos o bloco explicitamente no vs e no fs para o assembler emitir em ambos
     vs: `
+        uniform animation_v9Uniforms {
+            float u_time_v9_stable;
+        } animation_v9;
+    `,
+    fs: `
         uniform animation_v9Uniforms {
             float u_time_v9_stable;
         } animation_v9;
