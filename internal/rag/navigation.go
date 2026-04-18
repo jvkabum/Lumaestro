@@ -4,8 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/wailsapp/wails/v2/pkg/runtime"
-
+	"Lumaestro/internal/utils"
 	"Lumaestro/internal/config"
 	"Lumaestro/internal/provider"
 	"Lumaestro/internal/rag/neural"
@@ -63,7 +62,7 @@ func (n *GraphNavigator) ExpandContext(ctx context.Context, initialNotes []map[s
 			totalChars += len(content)
 			
 			// Efeito: Acende o nó mestre
-			runtime.EventsEmit(n.ctx, "node:active", name)
+			utils.SafeEmit(n.ctx, "node:active", name)
 		}
 	}
 
@@ -112,7 +111,7 @@ func (n *GraphNavigator) ExpandContext(ctx context.Context, initialNotes []map[s
 						// ✨ VISUAL: destaca link individual E coleta trilha com peso neural
 						neuralWeight := n.Ranker.GetWeight(name)
 
-						runtime.EventsEmit(n.ctx, "graph:highlight", map[string]interface{}{
+						utils.SafeEmit(n.ctx, "graph:highlight", map[string]interface{}{
 							"source": parentName,
 							"target": name,
 							"weight": neuralWeight,
@@ -130,7 +129,7 @@ func (n *GraphNavigator) ExpandContext(ctx context.Context, initialNotes []map[s
 
 		// 🚀 Emite o percurso completo como uma única mensagem animável no frontend
 		if len(trail) > 0 {
-			runtime.EventsEmit(n.ctx, "graph:traverse", map[string]interface{}{
+			utils.SafeEmit(n.ctx, "graph:traverse", map[string]interface{}{
 				"hops":  trail,
 				"total": len(trail),
 			})

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"Lumaestro/internal/provider"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"Lumaestro/internal/utils"
 )
 
 // KnowledgeWeaver é o "Tecelão de Conhecimento" que transforma conversas em sinapses.
@@ -35,8 +35,8 @@ func NewKnowledgeWeaver(ontology *provider.OntologyService, qdrant *provider.Qdr
 // WeaveChatKnowledge analisa o texto do chat, extrai fatos e os integra ao grafo com consciência de sessão.
 func (w *KnowledgeWeaver) WeaveChatKnowledge(ctx context.Context, sessionID string, chatText string) error {
 	// 📡 Sinalização de Início: Avisa o Frontend que a WEAVER começou a tecer
-	runtime.EventsEmit(w.ctx, "weaver:started", nil)
-	defer runtime.EventsEmit(w.ctx, "weaver:finished", nil)
+	utils.SafeEmit(w.ctx, "weaver:started", nil)
+	defer utils.SafeEmit(w.ctx, "weaver:finished", nil)
 
 	// 1. Extração de Triplas (Sinapses)
 	contextHint := fmt.Sprintf("Memória de Chat - Sessão: %s", sessionID)
@@ -67,13 +67,13 @@ func (w *KnowledgeWeaver) WeaveChatKnowledge(ctx context.Context, sessionID stri
 					"status": "legacy",
 					"archived_at": time.Now().Format(time.RFC3339),
 				})
-				runtime.EventsEmit(w.ctx, "agent:log", map[string]string{
+				utils.SafeEmit(w.ctx, "agent:log", map[string]string{
 					"source":  "WEAVER",
 					"content": fmt.Sprintf("📜 Conhecimento Legado: '%s' foi superado por '%s'.", existing["object"], t.Object),
 				})
 			} else {
 				// CONFLITO TOTAL: Emite Alerta Vermelho para o Frontend com os dados completos para resolução
-				runtime.EventsEmit(w.ctx, "graph:conflict", map[string]interface{}{
+				utils.SafeEmit(w.ctx, "graph:conflict", map[string]interface{}{
 					"subject":    t.Subject,
 					"predicate":  t.Predicate,
 					"old":        existing["object"],
@@ -105,19 +105,19 @@ func (w *KnowledgeWeaver) WeaveChatKnowledge(ctx context.Context, sessionID stri
 		w.Qdrant.UpsertPoint("knowledge_graph", id, vector, payload)
 
 		// 4. ATUALIZAÇÃO VISUAL
-		runtime.EventsEmit(w.ctx, "graph:node", map[string]string{
+		utils.SafeEmit(w.ctx, "graph:node", map[string]string{
 			"id":            t.Subject,
 			"name":          t.Subject,
 			"document-type": "memory",
 			"session-id":    sessionID,
 		})
-		runtime.EventsEmit(w.ctx, "graph:node", map[string]string{
+		utils.SafeEmit(w.ctx, "graph:node", map[string]string{
 			"id":            t.Object,
 			"name":          t.Object,
 			"document-type": "memory",
 			"session-id":    sessionID,
 		})
-		runtime.EventsEmit(w.ctx, "graph:edge", map[string]string{
+		utils.SafeEmit(w.ctx, "graph:edge", map[string]string{
 			"source": t.Subject,
 			"target": t.Object,
 		})

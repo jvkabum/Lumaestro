@@ -2,33 +2,13 @@ package core
 
 import (
 	"encoding/base64"
-	"fmt"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"Lumaestro/internal/utils"
 )
 
 // emitEvent é a central de rádio blindada do Lumaestro.
 // Valida se o contexto Wails está ativo antes de qualquer emissão assíncrona.
 func (a *App) emitEvent(name string, data interface{}) {
-	if a.ctx == nil {
-		return
-	}
-
-	// 🛡️ Blindagem contra Panics do Wails (como Invalid Context)
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Printf("⚠️ [AppEvents] Falha silenciosa ao emitir '%s' (Contexto Crítico): %v\n", name, r)
-		}
-	}()
-
-	// 🛡️ Verificação de Vida do Contexto
-	select {
-	case <-a.ctx.Done():
-		// Contexto invalidado ou app fechando: abortar missão.
-		return
-	default:
-		// Contexto saudável: liberar transmissão.
-		runtime.EventsEmit(a.ctx, name, data)
-	}
+	utils.SafeEmit(a.ctx, name, data)
 }
 
 // emitBoot envia um evento de diagnóstico de boot para o frontend.

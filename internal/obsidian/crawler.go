@@ -17,7 +17,6 @@ import (
 	"Lumaestro/internal/config"
 	"Lumaestro/internal/provider"
 	"Lumaestro/internal/utils"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // IndexCache armazena o hash SHA-256 do conteúdo de cada arquivo indexado.
@@ -118,7 +117,7 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 	galaxyID := "galaxy:" + strings.ToLower(galaxyName)
 
 	// Emite o Sol Central (Core da Galáxia)
-	runtime.EventsEmit(c.ctx, "graph:node", map[string]interface{}{
+	utils.SafeEmit(c.ctx, "graph:node", map[string]interface{}{
 		"id":            galaxyID,
 		"name":          galaxyName,
 		"document-type": "galaxy-core",
@@ -154,7 +153,7 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 			}
 
 			if !processedFolders[folderID] {
-				runtime.EventsEmit(c.ctx, "graph:node", map[string]interface{}{
+				utils.SafeEmit(c.ctx, "graph:node", map[string]interface{}{
 					"id":            folderID,
 					"name":          folderName,
 					"document-type": "folder",
@@ -165,7 +164,7 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 					"what-it-does":  "Atua como centro de gravidade local para documentos e subpastas orbitais.",
 				})
 				// Aresta de Órbita Física (Parentesco)
-				runtime.EventsEmit(c.ctx, "graph:edge", map[string]interface{}{
+				utils.SafeEmit(c.ctx, "graph:edge", map[string]interface{}{
 					"source": parentID,
 					"target": folderID,
 					"weight": 5, // Aresta forte de gravidade
@@ -201,7 +200,7 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 			parentID = "planet:" + strings.ToLower(parentDir)
 		}
 
-		runtime.EventsEmit(c.ctx, "graph:edge", map[string]interface{}{
+		utils.SafeEmit(c.ctx, "graph:edge", map[string]interface{}{
 			"source": parentID,
 			"target": nodeID,
 			"weight": 3, // Gravidade local
@@ -218,7 +217,7 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 
 				links := extractLinks(content)
 				for _, target := range links {
-					runtime.EventsEmit(c.ctx, "graph:edge", map[string]interface{}{
+					utils.SafeEmit(c.ctx, "graph:edge", map[string]interface{}{
 						"source": nodeID,
 						"target": strings.ToLower(target),
 						"weight": 1, // Link semântico
@@ -234,7 +233,7 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 				if exists && cachedHash == hash {
 					atomic.AddInt32(&totalCached, 1)
 					// Emite nó com resumo real mesmo para arquivos em cache
-					runtime.EventsEmit(c.ctx, "graph:node", map[string]interface{}{
+					utils.SafeEmit(c.ctx, "graph:node", map[string]interface{}{
 						"id":             nodeID,
 						"name":           nodeName,
 						"document-type":  docType,
@@ -256,7 +255,7 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 		}
 
 		// Emite a Lua com resumo gerado a partir do conteúdo real
-		runtime.EventsEmit(c.ctx, "graph:node", map[string]interface{}{
+		utils.SafeEmit(c.ctx, "graph:node", map[string]interface{}{
 			"id":             nodeID,
 			"name":           nodeName,
 			"document-type":  docType,
@@ -278,7 +277,7 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 	// ══════════════════════════════════════════════════════════
 	if len(pendingFiles) == 0 {
 		fmt.Println("[Crawler] ✅ Nenhum arquivo novo ou modificado. Scan completo sem chamadas de API!")
-		runtime.EventsEmit(c.ctx, "agent:log", map[string]string{
+		utils.SafeEmit(c.ctx, "agent:log", map[string]string{
 			"source":  "CRAWLER",
 			"content": fmt.Sprintf("✅ Grafo montado. Todos os %d arquivos estão em cache.", totalCached),
 		})
@@ -311,7 +310,7 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 	wg.Wait()
 
 	c.saveCache()
-	runtime.EventsEmit(c.ctx, "agent:log", map[string]string{
+	utils.SafeEmit(c.ctx, "agent:log", map[string]string{
 		"source":  "CRAWLER",
 		"content": fmt.Sprintf("✅ Indexação completa. Novos/Atualizados: %d. Cache: %d.", totalIndexed, totalCached),
 	})
@@ -369,7 +368,7 @@ func (c *Crawler) IndexSystemDocs(ctx context.Context, rootPath string) error {
 	wg.Wait()
 
 	if totalIndexed > 0 {
-		runtime.EventsEmit(c.ctx, "agent:log", map[string]string{
+		utils.SafeEmit(c.ctx, "agent:log", map[string]string{
 			"source":  "SYSTEM",
 			"content": fmt.Sprintf("⚙️ Documentação do projeto integrada ao RAG (%d arquivos).", totalIndexed),
 		})
@@ -393,7 +392,7 @@ func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.P
 
 		// O CoreNode é o Sol da Galáxia do Projeto
 		galaxyID := "galaxy:" + strings.ToLower(repo.CoreNode)
-		runtime.EventsEmit(c.ctx, "graph:node", map[string]interface{}{
+		utils.SafeEmit(c.ctx, "graph:node", map[string]interface{}{
 			"id":            galaxyID,
 			"name":          repo.CoreNode,
 			"document-type": "galaxy-core",
@@ -451,7 +450,7 @@ func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.P
 				}
 
 				if !processedFolders[folderID] {
-					runtime.EventsEmit(c.ctx, "graph:node", map[string]interface{}{
+					utils.SafeEmit(c.ctx, "graph:node", map[string]interface{}{
 						"id":            folderID,
 						"name":          folderName,
 						"document-type": "folder",
@@ -461,7 +460,7 @@ func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.P
 						"summary":       fmt.Sprintf("Entidade astronômica '%s' do repositório satélite.", folderName),
 						"what-it-does":  "Atua como centro de gravidade local em uma galáxia externa.",
 					})
-					runtime.EventsEmit(c.ctx, "graph:edge", map[string]interface{}{
+					utils.SafeEmit(c.ctx, "graph:edge", map[string]interface{}{
 						"source": parentID,
 						"target": folderID,
 						"weight": 5,
@@ -506,7 +505,7 @@ func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.P
 			}
 
 			// Emite a Lua do Projeto com resumo individual
-			runtime.EventsEmit(c.ctx, "graph:node", map[string]interface{}{
+			utils.SafeEmit(c.ctx, "graph:node", map[string]interface{}{
 				"id":             nodeID,
 				"name":           nodeName,
 				"document-type":  docType,
@@ -517,7 +516,7 @@ func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.P
 				"what-it-does":   fileWhatItDoes,
 			})
 
-			runtime.EventsEmit(c.ctx, "graph:edge", map[string]interface{}{
+			utils.SafeEmit(c.ctx, "graph:edge", map[string]interface{}{
 				"source": parentID,
 				"target": nodeID,
 				"weight": 3,
@@ -537,7 +536,7 @@ func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.P
 		wg.Wait()
 
 		if totalIndexed > 0 {
-			runtime.EventsEmit(c.ctx, "agent:log", map[string]string{
+			utils.SafeEmit(c.ctx, "agent:log", map[string]string{
 				"source":  "RADIAL",
 				"content": fmt.Sprintf("🌌 Galáxia %s estabilizada com %d planetas e luas.", repo.CoreNode, totalIndexed),
 			})
@@ -619,7 +618,7 @@ func (c *Crawler) processFile(ctx context.Context, path string, info os.FileInfo
 			mimeType = "image/jpeg"
 		}
 
-		runtime.EventsEmit(c.ctx, "agent:log", map[string]string{
+		utils.SafeEmit(c.ctx, "agent:log", map[string]string{
 			"source":  "CRAWLER",
 			"content": fmt.Sprintf("👁️ Analisando mídia: %s...", info.Name()),
 		})
@@ -634,7 +633,7 @@ func (c *Crawler) processFile(ctx context.Context, path string, info os.FileInfo
 	// Emite arestas das triplas extraídas para o grafo visual (Asteroides)
 	for _, t := range triples {
 		if t.Object != "" && len(t.Object) < 50 {
-			runtime.EventsEmit(c.ctx, "graph:node", map[string]interface{}{
+			utils.SafeEmit(c.ctx, "graph:node", map[string]interface{}{
 				"id":            strings.ToLower(t.Object),
 				"name":          t.Object,
 				"document-type": "keyword",
@@ -642,7 +641,7 @@ func (c *Crawler) processFile(ctx context.Context, path string, info os.FileInfo
 				"mass":          1.0,
 				"parent_gravity_id": nodeID,
 			})
-			runtime.EventsEmit(c.ctx, "graph:edge", map[string]interface{}{
+			utils.SafeEmit(c.ctx, "graph:edge", map[string]interface{}{
 				"source": nodeID,
 				"target": strings.ToLower(t.Object),
 				"weight": 1,
@@ -700,7 +699,7 @@ func (c *Crawler) processFile(ctx context.Context, path string, info os.FileInfo
 	})
 
 	// Emite nó atualizado com resumo real (garante que o grafo exibe conteúdo indexado)
-	runtime.EventsEmit(c.ctx, "graph:node", map[string]interface{}{
+	utils.SafeEmit(c.ctx, "graph:node", map[string]interface{}{
 		"id":            nodeID,
 		"document-type": forcedDocType,
 		"summary":       nodeSummary,
@@ -759,7 +758,7 @@ func (c *Crawler) EnsureCollections(ctx context.Context) error {
 
 		if !exists {
 			fmt.Printf("[Crawler] 🏗️ Criando coleção inexistente: %s (Dim: %d)\n", name, dimension)
-			runtime.EventsEmit(c.ctx, "agent:log", map[string]string{
+			utils.SafeEmit(c.ctx, "agent:log", map[string]string{
 				"source":  "CRAWLER",
 				"content": fmt.Sprintf("🏗️ Preparando infraestrutura: Criando coleção '%s' (%d dim)...", name, dimension),
 			})

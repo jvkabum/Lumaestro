@@ -15,7 +15,7 @@ import (
 	"Lumaestro/internal/db"
 
 	"github.com/google/uuid"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"Lumaestro/internal/utils"
 )
 
 // StartSession inicia o Gemini CLI com a flag --acp. Se loadSessionID for fornecido, tenta restaurar essa sessão em vez de criar uma nova.
@@ -263,7 +263,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		}
 	}(session)
 
-	runtime.EventsEmit(e.Ctx, "agent:starting", agent)
+	utils.SafeEmit(e.Ctx, "agent:starting", agent)
 
 	go e.runRPCListener(session, stdout)
 	go e.runStderrMonitor(session, stderr)
@@ -381,7 +381,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		Params:  modeParams,
 	})
 
-	runtime.EventsEmit(e.Ctx, "terminal:started", map[string]interface{}{
+	utils.SafeEmit(e.Ctx, "terminal:started", map[string]interface{}{
 		"agent":     agent,
 		"mode":      "ACP (JSON-RPC)",
 		"isRealPTY": false,
@@ -409,7 +409,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 
 		if stillActive {
 			fmt.Printf("[ACP] Sessão %s encerrada do mapa.\n", agent)
-			runtime.EventsEmit(e.Ctx, "terminal:closed", agent)
+			utils.SafeEmit(e.Ctx, "terminal:closed", agent)
 
 			e.LogChan <- ExecutionLog{
 				Source:  "SYSTEM",
@@ -585,7 +585,7 @@ func (e *ACPExecutor) DeleteSession(filePath string) error {
 		return fmt.Errorf("falha ao deletar arquivo: %v", err)
 	}
 
-	runtime.EventsEmit(e.Ctx, "agent:turn_complete", "system")
+	utils.SafeEmit(e.Ctx, "agent:turn_complete", "system")
 
 	return nil
 }

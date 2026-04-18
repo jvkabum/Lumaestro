@@ -5,8 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
-
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"Lumaestro/internal/utils"
 )
 
 // runRPCListener inicia a escuta ndJSON ligando o pipe de stdout ao handler.
@@ -52,7 +51,7 @@ func (e *ACPExecutor) runStderrMonitor(s *ACPSession, stderr io.Reader) {
 				Content: fmt.Sprintf("🔴 Falha na comunicação com o servidor do Google: %s", cleanLine),
 			}
 			// Destravar o frontend emitindo turn_complete
-			runtime.EventsEmit(e.Ctx, "agent:turn_complete", s.AgentName)
+			utils.SafeEmit(e.Ctx, "agent:turn_complete", s.AgentName)
 		} else if isRelevant {
 			e.LogChan <- ExecutionLog{
 				Source:  "CLI/AVISO",
@@ -62,7 +61,7 @@ func (e *ACPExecutor) runStderrMonitor(s *ACPSession, stderr io.Reader) {
 
 		// Gatilhos específicos de login
 		if strings.Contains(cleanLine, "Login required") {
-			runtime.EventsEmit(e.Ctx, "agent:login_required", s.AgentName)
+			utils.SafeEmit(e.Ctx, "agent:login_required", s.AgentName)
 		}
 
 		// Log interno para depuração

@@ -8,8 +8,6 @@ import (
 
 	"Lumaestro/internal/config"
 	"Lumaestro/internal/utils"
-
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // HandleNotification processa notificações assíncronas do processo ACP (streaming, progresso, etc).
@@ -88,7 +86,7 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 				}
 
 				if info != "" {
-					runtime.EventsEmit(h.Executor.Ctx, "agent:stats", map[string]string{
+					utils.SafeEmit(h.Executor.Ctx, "agent:stats", map[string]string{
 						"agent": h.Session.AgentName,
 						"info":  info,
 					})
@@ -152,7 +150,7 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 				h.reportTurnCost()
 
 				if !isBg {
-					runtime.EventsEmit(h.Executor.Ctx, "agent:turn_complete", h.Session.AgentName)
+					utils.SafeEmit(h.Executor.Ctx, "agent:turn_complete", h.Session.AgentName)
 				}
 
 				h.Executor.turnMu.Lock()
@@ -185,7 +183,7 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 					} else if strings.TrimSpace(update.Text) != "" {
 						action = update.Text
 					}
-					runtime.EventsEmit(h.Executor.Ctx, "agent:status", map[string]string{
+					utils.SafeEmit(h.Executor.Ctx, "agent:status", map[string]string{
 						"agent":  h.Session.AgentName,
 						"tool":   "thinking",
 						"action": action,
@@ -266,7 +264,7 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			Path string `json:"path"`
 		}
 		if json.Unmarshal(params, &p) == nil {
-			runtime.EventsEmit(h.Executor.Ctx, "agent:status", map[string]string{
+			utils.SafeEmit(h.Executor.Ctx, "agent:status", map[string]string{
 				"agent":  h.Session.AgentName,
 				"tool":   "read_file",
 				"action": fmt.Sprintf("Lendo arquivo: %s", p.Path),
@@ -290,7 +288,7 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			Content string `json:"content"`
 		}
 		if json.Unmarshal(params, &p) == nil {
-			runtime.EventsEmit(h.Executor.Ctx, "agent:status", map[string]string{
+			utils.SafeEmit(h.Executor.Ctx, "agent:status", map[string]string{
 				"agent":  h.Session.AgentName,
 				"tool":   "write_file",
 				"action": fmt.Sprintf("Escrevendo em: %s", p.Path),
@@ -343,7 +341,7 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			Path string `json:"path"`
 		}
 		if json.Unmarshal(params, &p) == nil {
-			runtime.EventsEmit(h.Executor.Ctx, "agent:status", map[string]string{
+			utils.SafeEmit(h.Executor.Ctx, "agent:status", map[string]string{
 				"agent":  h.Session.AgentName,
 				"tool":   "delete_file",
 				"action": fmt.Sprintf("Deletando: %s", p.Path),
@@ -371,7 +369,7 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			NewPath string `json:"newPath"`
 		}
 		if json.Unmarshal(params, &p) == nil {
-			runtime.EventsEmit(h.Executor.Ctx, "agent:status", map[string]string{
+			utils.SafeEmit(h.Executor.Ctx, "agent:status", map[string]string{
 				"agent":  h.Session.AgentName,
 				"tool":   "move_file",
 				"action": fmt.Sprintf("Movendo: %s", p.OldPath),
@@ -400,7 +398,7 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			Args    []string `json:"args"`
 		}
 		if json.Unmarshal(params, &p) == nil {
-			runtime.EventsEmit(h.Executor.Ctx, "agent:status", map[string]string{
+			utils.SafeEmit(h.Executor.Ctx, "agent:status", map[string]string{
 				"agent":  h.Session.AgentName,
 				"tool":   "run_command",
 				"action": fmt.Sprintf("Executando: %s", p.Command),
@@ -408,7 +406,7 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			cfg, _ := config.Load()
 			if cfg.Security.AllowRunCommands {
 				details := fmt.Sprintf("%s %s", p.Command, strings.Join(p.Args, " "))
-				runtime.EventsEmit(h.Executor.Ctx, "agent:status", map[string]string{
+				utils.SafeEmit(h.Executor.Ctx, "agent:status", map[string]string{
 					"agent":  h.Session.AgentName,
 					"action": "Executando comando: " + details,
 					"kind":   "command",
@@ -484,7 +482,7 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 	})
 
 	if !strings.Contains(h.Session.ID, "-background-") {
-		runtime.EventsEmit(h.Executor.Ctx, "agent:turn_complete", h.Session.AgentName)
+		utils.SafeEmit(h.Executor.Ctx, "agent:turn_complete", h.Session.AgentName)
 	}
 }
 
@@ -505,7 +503,7 @@ func (h *ACPRpcHandler) HandleResponse(id interface{}, result json.RawMessage, r
 		ch <- JSONRPCMessage{ID: id, Result: result, Error: rpcErr}
 		if idInt > 3 && strings.EqualFold(h.Session.AgentName, "lmstudio") && !strings.Contains(h.Session.ID, "-background-") {
 			// Fallback para LM Studio: alguns fluxos podem não publicar session/update final.
-			runtime.EventsEmit(h.Executor.Ctx, "agent:turn_complete", h.Session.AgentName)
+			utils.SafeEmit(h.Executor.Ctx, "agent:turn_complete", h.Session.AgentName)
 		}
 		return
 	}
@@ -529,7 +527,7 @@ func (h *ACPRpcHandler) HandleResponse(id interface{}, result json.RawMessage, r
 
 		// 🔓 LIBERAÇÃO DE ERRO: Garante que a UI destrave se houver erro no motor
 		if !strings.Contains(h.Session.ID, "-background-") {
-			runtime.EventsEmit(h.Executor.Ctx, "agent:turn_complete", h.Session.AgentName)
+			utils.SafeEmit(h.Executor.Ctx, "agent:turn_complete", h.Session.AgentName)
 		}
 
 		h.Executor.turnMu.Lock()
@@ -561,7 +559,7 @@ func (h *ACPRpcHandler) HandleResponse(id interface{}, result json.RawMessage, r
 	default:
 	}
 	if !strings.Contains(h.Session.ID, "-background-") {
-		runtime.EventsEmit(h.Executor.Ctx, "agent:turn_complete", h.Session.AgentName)
+		utils.SafeEmit(h.Executor.Ctx, "agent:turn_complete", h.Session.AgentName)
 	}
 }
 

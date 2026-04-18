@@ -6,7 +6,7 @@ import (
 	"Lumaestro/internal/config"
 	"Lumaestro/internal/orchestration"
 	"github.com/google/uuid"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"Lumaestro/internal/utils"
 )
 
 // emitReward emite um bônus ou penalidade técnica autônoma (Sistema Lightning).
@@ -70,7 +70,7 @@ func (h *ACPRpcHandler) reportTurnCost() {
 
 		// Emitir evento de telemetria para o Dashboard (Wails)
 		if h.Executor.Ctx != nil {
-			runtime.EventsEmit(h.Executor.Ctx, "agent:tokens", map[string]interface{}{
+			utils.SafeEmit(h.Executor.Ctx, "agent:tokens", map[string]interface{}{
 				"agent":          h.Session.AgentName,
 				"prompt":         h.Session.LastPromptTokens,
 				"candidates":     h.Session.LastCandidatesTokens,

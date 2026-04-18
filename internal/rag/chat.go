@@ -9,7 +9,7 @@ import (
 	"Lumaestro/internal/tools"
 	"strings"
 
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"Lumaestro/internal/utils"
 	"time"
 )
 
@@ -58,21 +58,21 @@ func (s *ChatService) Ask(ctx context.Context, agent string, sessionID string, q
 
 	// 2. Gerar vetor da pergunta e relatar início do raciocínio
 	now := time.Now().Format("15:04")
-	runtime.EventsEmit(s.ctx, "graph:log", fmt.Sprintf("[%s] 🔍 buscando '%s'...", now, question))
+	utils.SafeEmit(s.ctx, "graph:log", fmt.Sprintf("[%s] 🔍 buscando '%s'...", now, question))
 
 	contextData := ""
 	if s.Embedder == nil {
-		runtime.EventsEmit(s.ctx, "graph:log", fmt.Sprintf("[%s] ⚠️ RAG semântico indisponível. Prosseguindo sem contexto vetorial.", now))
+		utils.SafeEmit(s.ctx, "graph:log", fmt.Sprintf("[%s] ⚠️ RAG semântico indisponível. Prosseguindo sem contexto vetorial.", now))
 	} else {
 		vector, err := s.Embedder.GenerateEmbedding(ctx, question, true)
 		if err != nil {
-			runtime.EventsEmit(s.ctx, "graph:log", fmt.Sprintf("[%s] ⚠️ Semântica indisponível no momento. Prosseguindo sem RAG.", now))
+			utils.SafeEmit(s.ctx, "graph:log", fmt.Sprintf("[%s] ⚠️ Semântica indisponível no momento. Prosseguindo sem RAG.", now))
 		} else {
 			// 2. Busca Vetorial (RAG): Busca por proximidade semântica
 			// Aumentado de 3 para 5 para maior cobertura de contexto
 			notes, _ := s.Search.SearchNote(ctx, vector, 5)
 			if len(notes) > 0 {
-				runtime.EventsEmit(s.ctx, "graph:log", fmt.Sprintf("[%s] 📄 encontradas %d notas matrizes para a resposta.", now, len(notes)))
+				utils.SafeEmit(s.ctx, "graph:log", fmt.Sprintf("[%s] 📄 encontradas %d notas matrizes para a resposta.", now, len(notes)))
 			}
 
 			fullContext := s.Nav.ExpandContext(ctx, notes)
@@ -81,15 +81,15 @@ func (s *ChatService) Ask(ctx context.Context, agent string, sessionID string, q
 			// 3. Brilhar as notas iniciais encontradas no Grafo e lançar Log
 			for i, note := range notes {
 				if noteName, ok := note["name"].(string); ok {
-					runtime.EventsEmit(s.ctx, "graph:log", fmt.Sprintf("[%s] ✨ lendo notas mestre -> %s", time.Now().Format("15:04"), noteName))
+					utils.SafeEmit(s.ctx, "graph:log", fmt.Sprintf("[%s] ✨ lendo notas mestre -> %s", time.Now().Format("15:04"), noteName))
 					
 					// Apenas a nota mais relevante (Top 1) ganha o foco automático da câmera
 					if i == 0 {
-						runtime.EventsEmit(s.ctx, "node:active", noteName)
+						utils.SafeEmit(s.ctx, "node:active", noteName)
 					}
 
 					// Envia o próprio nó principal para o painel se ele não foi carregado
-					runtime.EventsEmit(s.ctx, "graph:node", map[string]string{"id": noteName, "name": noteName})
+					utils.SafeEmit(s.ctx, "graph:node", map[string]string{"id": noteName, "name": noteName})
 				}
 			}
 		}
@@ -103,7 +103,7 @@ func (s *ChatService) Ask(ctx context.Context, agent string, sessionID string, q
 	}
 
 	// 📡 Identidade Visual: Avisa o Frontend qual Perfil assumiu a palavra (Modo Silent RAG)
-	runtime.EventsEmit(s.ctx, "agent:profile", map[string]string{
+	utils.SafeEmit(s.ctx, "agent:profile", map[string]string{
 		"name":   profile.Name,
 		"engine": selectedAgent,
 	})
