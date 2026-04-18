@@ -1,7 +1,61 @@
-
 import { ScatterplotLayer } from '@deck.gl/layers';
 import { COORDINATE_SYSTEM } from '@deck.gl/core';
 import { colors, getCommunityColor } from '../Constants';
+
+/**
+ * 🪐 NeuralNodeLayer — Esferas 3D Falsas (Impostors)
+ * 
+ * Subclasse que injeta um shader avançado no ScatterplotLayer para 
+ * simular geometria tridimensional com reflexão, luz direcional 
+ * e brilho especular, mantendo o custo de performance a base de 2 triângulos (2D).
+ */
+class NeuralNodeLayer extends ScatterplotLayer {
+    getShaders() {
+        const shaders = super.getShaders();
+        return {
+            ...shaders,
+            inject: {
+                'fs:DECKGL_FILTER_COLOR': `
+                    // No ScatterplotLayer, geometry.uv já varia de -1.0 a 1.0 partindo do centro
+                    vec2 coord = geometry.uv;
+                    float radiusSq = dot(coord, coord);
+                    
+                    // Suaviza a borda como uma esfera (anti-aliasing)
+                    if (radiusSq > 1.0) discard;
+                    
+                    // Reconstrói a Normal da Esfera (eixo Z é calculado via Pitágoras: X² + Y² + Z² = R²)
+                    float z = sqrt(1.0 - radiusSq);
+                    vec3 normal = normalize(vec3(coord.x, coord.y, z));
+                    
+                    // Posicionamento da Luz no Cenário (Luz vindo do alto e um pouco pela frente e esquerda)
+                    vec3 lightDir = normalize(vec3(-0.6, -0.8, 1.2)); 
+                    
+                    // 1. Luz Ambiente (Luz base para área de sombra)
+                    float ambient = 0.35;
+                    
+                    // 2. Luz Difusa (O relevo batendo o sol)
+                    float diff = max(dot(normal, lightDir), 0.0);
+                    
+                    // 3. Reflexo Especular (Aquele brilho molhado de bilhar)
+                    vec3 viewDir = vec3(0.0, 0.0, 1.0); // Câmera olhando de frente
+                    vec3 halfVector = normalize(lightDir + viewDir);
+                    // Brilho intenso e focado (fator 64.0 é a estreiteza do brilho)
+                    float spec = pow(max(dot(normal, halfVector), 0.0), 32.0);
+                    
+                    // Misturando a Luz com a Cor original do Node
+                    vec3 finalColor = color.rgb * (ambient + diff * 0.75);
+                    
+                    // O brilho especular sempre puxa pro branco
+                    finalColor += vec3(1.0, 1.0, 1.0) * spec * 0.5;
+                    
+                    color.rgb = clamp(finalColor, 0.0, 1.0);
+                `
+            }
+        };
+    }
+}
+
+NeuralNodeLayer.layerName = 'NeuralNodeLayer';
 
 /**
  * 🟣 NodeLayer — As Esferas de Conhecimento
@@ -22,7 +76,7 @@ export function createNodeLayer({
     onDrag,
     onDragEnd
 }) {
-    return new ScatterplotLayer({
+    return new NeuralNodeLayer({
         id: 'graph-nodes',
         coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
         data: [...currentNodes], // Clone para garantir atualização no Deck.gl
