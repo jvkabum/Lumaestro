@@ -8,13 +8,13 @@ import { forceAll } from './CustomForces';
  * a integração manual do eixo Z e os ciclos de resfriamento (alpha).
  */
 
-export function createSimulation({ 
-    nodesData, 
-    linksData, 
-    nodeDegrees, 
-    communityCenters, 
-    parentMap, 
-    onTick 
+export function createSimulation({
+    nodesData,
+    linksData,
+    nodeDegrees,
+    communityCenters,
+    parentMap,
+    onTick
 }) {
     const HUB_PHYS_LIMIT = 40;
     const velocityDecay = 0.35;
@@ -23,35 +23,39 @@ export function createSimulation({
     const simulation = d3.forceSimulation(nodesData, 3)
         .alphaDecay(0.08)       // ← Velocidade de "esfriamento" (convergência)
         .velocityDecay(0.45)    // ← Amortecimento do movimento (estabilidade)
-        
-        // 1. Força de Elástico (Links)
+
+        // 1. Força de Elástico (Links) - Estilo Dente-de-Leão (Árvore/Star)
         .force('link', d3.forceLink(linksData).id(d => d.id)
             .distance(link => {
-                const sType = link.source?.['document-type'] || 'chunk';
-                const tType = link.target?.['document-type'] || 'chunk';
-                if (sType === 'memory' || tType === 'memory') return 80;   // Órbita próxima
-                return 350;  // Distância interestelar para notas
+                // Se ambos são nós centrais/importantes, afaste-os agressivamente (linhas compridas entre os núcleos)
+                const sDeg = nodeDegrees.get(link.source.id) || 0;
+                const tDeg = nodeDegrees.get(link.target.id) || 0;
+                if (sDeg > 3 && tDeg > 3) return 200; // Reduzido de 500 para 200 (aproxima os clusters)
+                
+                // Se for um nó folha ligado a um núcleo, mantenha curto
+                return 25; // Reduzido de 70 para 25 (encurta as hastes das folhas)
             })
-            .strength(0.7)  // ← Rigidez da conexão (0.0 a 1.0)
+            .strength(1.0)  // ← Tensão de chumbo: 1.0 forçará a distância ser obedecida rigorosamente!
         )
 
         // 2. Forças Celestiais (Custom)
-        .force('cosmos', forceAll(communityCenters, parentMap))
+        // DESATIVADO: A força direcional do cosmos estava gerando o efeito "Vassoura/Cone".
+        // Para uma árvore radial perfeita 360º, queremos apenas repulsão natural (ManyBody).
+        // .force('cosmos', forceAll(communityCenters, parentMap))
 
-        // 3. Repulsão (ManyBody)
+        // 3. Repulsão (ManyBody) - Essencial para o formato visual de exploração
         .force('charge', d3.forceManyBody().strength(d => {
-            const importance = (d.pagerank && d.pagerank > 0) ? (d.pagerank * 15) : (nodeDegrees.get(d.id) || 0);
-            const baseRepulsion = -400;
-            return baseRepulsion - (importance * 60);  // ← Mais importante = mais repulsão
+            // Alta repulsão garante que as 'folhas' vizinhas no mesmo hub se isolem e fiquem perfeitamente espaçadas formando uma esfera
+            return -500; 
         }).distanceMax(3000))
         
         // 4. Centro Global (Mínimo)
-        .force('center', d3.forceCenter(0, 0, 0).strength(0.01))
+        .force('center', d3.forceCenter(0, 0, 0).strength(0.015))
 
-        // 5. Colisão física (impede sobreposição visual)
+        // 5. Colisão física (Dita o distanciamento exato entre as folhas)
         .force('collide', d3.forceCollide(node => {
             const importance = (node.pagerank && node.pagerank > 0) ? (node.pagerank * 15) : (nodeDegrees.get(node.id) || 0);
-            return (1 + Math.pow(importance, 0.5) * 4) + 10;  // ← Raio de colisão
+            return (1 + Math.pow(importance, 0.5) * 3.5) + 4;  // +4 gera um bom respiro visual
         }));
 
     let tickCount = 0;

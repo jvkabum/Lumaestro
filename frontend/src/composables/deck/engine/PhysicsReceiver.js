@@ -29,6 +29,13 @@ export function usePhysicsReceiver({ nodeMap, currentLinksRef, syncPositions, on
                 // 3. Notifica o Maestro para redesenhar
                 if (onUpdate) onUpdate();
             }
+            else if (type === 'PRUNED_LINKS') {
+                // Recebendo a Árvore Limpa: 
+                // A física isolou o lixo. Agora ordenamos ao Frontend ignorar as teias extras.
+                currentLinksRef.value = payload.links;
+                console.log(`[PhysicsReceiver] Visão Limpa! Desenhando ${payload.links.length} arestas isoladas.`);
+                if (onUpdate) onUpdate();
+            }
         };
     };
 

@@ -100,3 +100,54 @@ export function mapHierarchy(nodesData, idMap) {
     });
     return parentMap;
 }
+
+/**
+ * 🌳 Poda Mágica: BFS Spanning Forest
+ * Converte qualquer teia/malha complexa em uma árvore radial (Star/Tree Topology)
+ * baseando-se no centro de gravidade (Root) de maior PageRank/Degree.
+ */
+export function convertToBFSTree(nodesData, validLinks, nodeDegrees) {
+    const treeLinks = [];
+    const visited = new Set();
+    
+    // 1. Acha o "Rei" (Raiz) de cada cluster por sua importância
+    const sortedNodes = [...nodesData].sort((a, b) => {
+        const ia = (a.pagerank || 0) + (nodeDegrees.get(a.id) || 0);
+        const ib = (b.pagerank || 0) + (nodeDegrees.get(b.id) || 0);
+        return ib - ia;
+    });
+
+    // 2. Mapa de Adjacência Rápido (O(L))
+    const adj = new Map();
+    validLinks.forEach(l => {
+        const s = typeof l.source === 'object' ? l.source.id : l.source;
+        const t = typeof l.target === 'object' ? l.target.id : l.target;
+        if(!adj.has(s)) adj.set(s, []);
+        if(!adj.has(t)) adj.set(t, []);
+        adj.get(s).push({ target: t, original: l });
+        adj.get(t).push({ target: s, original: l });
+    });
+
+    // 3. BFS (Breadth-First Search) para todos os sub-grafos descolados
+    for (let rootNode of sortedNodes) {
+        if (visited.has(rootNode.id)) continue;
+        
+        const queue = [rootNode.id];
+        visited.add(rootNode.id);
+        
+        while(queue.length) {
+            const current = queue.shift();
+            const neighbors = adj.get(current) || [];
+            
+            for(let edge of neighbors) {
+                if(!visited.has(edge.target)) {
+                    visited.add(edge.target);
+                    queue.push(edge.target); // Quebra o ciclo (descarta as costas)
+                    treeLinks.push(edge.original);
+                }
+            }
+        }
+    }
+    
+    return treeLinks;
+}
