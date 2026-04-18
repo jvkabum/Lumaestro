@@ -1,4 +1,4 @@
-import { bootstrapNodes, repairCoordinates, processDegrees, computeCommunityCenters, mapHierarchy, convertToBFSTree } from './physics/DataProcessor';
+import { bootstrapNodes, computeCommunityCenters, convertToBFSTree, mapHierarchy, processDegrees, repairCoordinates } from './physics/DataProcessor';
 import { createSimulation } from './physics/SimulationEngine';
 
 /**
@@ -30,11 +30,11 @@ self.onmessage = function (event) {
 
         // 2. Extração de Metadados Matemáticos (Graus, Centros, Hierarquia)
         const { nodeDegrees, validLinks } = processDegrees(links, idMap);
-        
+
         // 🌟 3. A PODAGEM MÁGICA (BFS MST)
         // Corta todas as linhas de teia redundantes e força o design 'Dente-de-Leão' do D3
         linksData = convertToBFSTree(nodesData, validLinks, nodeDegrees);
-        
+
         // Envia a teia limpa de volta para o Visualizador Deck.gl parar de desenhar "Miojo" na GPU!
         self.postMessage({ type: 'PRUNED_LINKS', payload: { links: linksData } });
 

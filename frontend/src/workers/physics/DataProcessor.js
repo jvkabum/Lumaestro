@@ -16,7 +16,7 @@ export function bootstrapNodes(nodes, oldMap) {
         const r = Math.pow(Math.random(), 1 / 3) * 500;
         const theta = Math.acos(2 * Math.random() - 1);
         const phi = 2 * Math.PI * Math.random();
-        
+
         return {
             ...n,
             x: r * Math.sin(theta) * Math.cos(phi),
@@ -142,7 +142,7 @@ export function convertToBFSTree(nodesData, validLinks, nodeDegrees) {
             for(let edge of neighbors) {
                 if(!visited.has(edge.target)) {
                     visited.add(edge.target);
-                    queue.push(edge.target); // Quebra o ciclo (descarta as costas)
+                    queue.push(edge.target); 
                     treeLinks.push(edge.original);
                 }
             }

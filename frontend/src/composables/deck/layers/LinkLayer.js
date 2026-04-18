@@ -120,7 +120,7 @@ export function createLinkLayer({ currentLinks, clLinks, hlLinks, animationTime 
             if (l['edge-type'] === 'orbital') return false;
             const sObj = l.sourceObj;
             const tObj = l.targetObj;
-            
+
             // 🛡️ Previne o "Nó Central Invisível" (Buraco Negro)
             // Se a aresta não tem um nó de origem ou destino válido, a ignoramos.
             if (!sObj || !tObj) return false;
@@ -152,7 +152,7 @@ export function createLinkLayer({ currentLinks, clLinks, hlLinks, animationTime 
             if (hlLinks.has(`${s}-${t}`) || hlLinks.has(`${t}-${s}`)) return 1.8;
             return 0.5;
         },
-        getHeight: 0.3,
+        getHeight: 0.3, // Curva quase imperceptível para manter charme orgânico sem entortar a entrada no nó!
         animationTime,
         getOffset: (link, { index }) => index * 1.618,
         updateTriggers: {
