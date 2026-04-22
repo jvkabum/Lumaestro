@@ -26,10 +26,8 @@ export function useStoreContract({
             if (!id) return;
             const targetId = String(id).toLowerCase();
             
-            // 1. Tenta match exato primeiro
             let node = currentNodesRef.value.find(n => String(n.id).toLowerCase() === targetId);
             
-            // 2. Se não achar, tenta match parcial (útil para "sqlite" vs "sqlite.md")
             if (!node) {
                 node = currentNodesRef.value.find(n => {
                     const nid = String(n.id).toLowerCase();
@@ -38,10 +36,32 @@ export function useStoreContract({
             }
 
             if (node) {
-                console.log("[Contract] ✅ Nó encontrado para zoom:", node.id);
+                console.log("[Contract] ✅ Nó encontrado para zoom + detalhes:", node.id);
                 pilotFocus(deckInstanceRef.value, currentViewState, node);
+                
+                // 🧠 AUTO-DETAIL: Abre a descrição do nó automaticamente
+                store.selectedNode = node;
+                store.nodeDetails = { loading: true, path: '', content: '', isVirtual: false };
+
+                const bridge = (window.go?.core?.App) || (window.go?.main?.App);
+                if (bridge && bridge.GetNeuralNodeContext) {
+                    bridge.GetNeuralNodeContext(node.id).then(res => {
+                        if (res && res.success !== false) {
+                            store.nodeDetails = {
+                                loading: false,
+                                path: res.path || 'Memória Virtual',
+                                content: res.content || res.summary || 'Sem metadados',
+                                isVirtual: res.document_type === 'memory'
+                            };
+                        } else {
+                            store.nodeDetails = { loading: false, path: 'Informativo', content: 'Nota identificada, mas conteúdo ainda em processamento.' };
+                        }
+                    }).catch(err => {
+                        console.error("[Contract] Erro ao buscar contexto automático:", err);
+                    });
+                }
             } else {
-                console.warn("[Contract] ❌ Nó não encontrado no grafo para o ID:", id);
+                console.warn("[Contract] ❌ Nó não encontrado para ID:", id);
             }
         };
 

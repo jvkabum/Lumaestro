@@ -108,7 +108,8 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 
 			if jsTarget != "" {
 				binaryPath = "node"
-				args = []string{"--no-warnings=DEP0040", jsTarget, "--acp", "--approval-mode=" + approvalMode}
+				// Adiciona --debug para logs detalhados
+				args = []string{"--no-warnings=DEP0040", jsTarget, "--acp", "--approval-mode=" + approvalMode, "--debug"}
 				fmt.Printf("[ACP] Bypass CMD ativado: Rodando diretamente Node em %s (Modo: %s)\n", jsTarget, approvalMode)
 			}
 		}
@@ -173,8 +174,8 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 
 		cmd.Env = append(cmd.Env, "GEMINI_TELEMETRY_ENABLED=true")
 		cmd.Env = append(cmd.Env, "GEMINI_TELEMETRY_TARGET=local")
-		diagLog := filepath.Join(sessionHome, "gemini-telemetry.json")
-		cmd.Env = append(cmd.Env, "GEMINI_TELEMETRY_OUTFILE="+diagLog)
+		// Salva telemetria na pasta do projeto para fácil inspeção
+		cmd.Env = append(cmd.Env, "GEMINI_TELEMETRY_OUTFILE=.lumaestro/telemetry.json")
 
 		if cfgLoaded != nil {
 			// 🔑 Injeção de Chave de API apenas se o usuário explicitamente optou por este modo
