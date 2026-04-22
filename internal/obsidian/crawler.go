@@ -666,7 +666,7 @@ func (c *Crawler) processFile(ctx context.Context, path string, workspacePath st
 			utils.SafeEmit(c.ctx, "graph:edge", map[string]interface{}{
 				"source": nodeID,
 				"target": strings.ToLower(t.Object),
-				"weight": 1,
+				"weight": 0.3,
 				"edge-type": "semantic",
 			})
 		}

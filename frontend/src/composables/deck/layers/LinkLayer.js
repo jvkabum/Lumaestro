@@ -117,7 +117,10 @@ export function createLinkLayer({ currentLinks, clLinks, hlLinks, animationTime 
         id: 'graph-edges-v9-surgical',
         coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
         data: [...currentLinks].filter(l => {
-            if (l['edge-type'] === 'orbital') return false;
+            // 🚫 [MAGNETISMO INVISÍVEL] Remove links orbitais e semânticos da renderização visual.
+            // Eles continuam existindo na física (puxando nós), mas não poluem a tela com linhas.
+            if (l['edge-type'] === 'orbital' || l['edge-type'] === 'semantic') return false;
+            
             const sObj = l.sourceObj;
             const tObj = l.targetObj;
 
