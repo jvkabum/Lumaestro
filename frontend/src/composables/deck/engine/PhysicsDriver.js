@@ -52,6 +52,13 @@ export function usePhysicsDriver() {
         physicsWorker?.postMessage({ type: 'DRAG_END', payload: { nodeId } });
     };
 
+    const updateForce = (name, params) => {
+        physicsWorker?.postMessage({
+            type: 'UPDATE_FORCE',
+            payload: { name, params }
+        });
+    };
+
     const terminatePhysics = () => {
         physicsWorker?.terminate();
         physicsWorker = null;
@@ -63,7 +70,8 @@ export function usePhysicsDriver() {
         syncPositions, 
         startDrag, 
         handleDrag, 
-        endDrag, 
+        endDrag,
+        updateForce,
         terminatePhysics 
     };
 }

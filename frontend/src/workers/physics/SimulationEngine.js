@@ -12,56 +12,57 @@ export function createSimulation({
     nodesData,
     linksData,
     nodeDegrees,
-    communityCenters,
-    parentMap,
     onTick
 }) {
-    const HUB_PHYS_LIMIT = 40;
-    const velocityDecay = 0.35;
-    const manualVelDecay = 0.3; // Para o eixo Z manual
+    const manualVelDecay = 0.3;
 
+    // 1. Inicializa a simulação
     const simulation = d3.forceSimulation(nodesData, 3)
-        .alphaDecay(0.08)       // ← Velocidade de "esfriamento" (convergência)
-        .velocityDecay(0.45)    // ← Amortecimento do movimento (estabilidade)
+        .alphaDecay(0.08)
+        .velocityDecay(0.45);
 
-        // 1. Força de Elástico (Links) - Estilo Dente-de-Leão (Árvore/Star)
-        .force('link', d3.forceLink(linksData).id(d => d.id)
+    // 2. Registro de Forças (Arsenal Premium - d3-force-registry inspired)
+    const registry = {
+        // Arestas: O "esqueleto" que mantém a estrutura
+        link: d3.forceLink(linksData).id(d => d.id)
             .distance(link => {
-                // Se ambos são nós centrais/importantes, afaste-os agressivamente (linhas compridas entre os núcleos)
                 const sDeg = nodeDegrees.get(link.source.id) || 0;
                 const tDeg = nodeDegrees.get(link.target.id) || 0;
-                if (sDeg > 3 && tDeg > 3) return 200; // Reduzido de 500 para 200 (aproxima os clusters)
-                
-                // Se for um nó folha ligado a um núcleo, mantenha curto
-                return 25; // Reduzido de 70 para 25 (encurta as hastes das folhas)
+                return (sDeg > 3 && tDeg > 3) ? 250 : 35;
             })
-            .strength(1.0)  // ← Tensão de chumbo: 1.0 forçará a distância ser obedecida rigorosamente!
-        )
-
-        // 2. Forças Celestiais (Custom)
-        // DESATIVADO: A força direcional do cosmos estava gerando o efeito "Vassoura/Cone".
-        // Para uma árvore radial perfeita 360º, queremos apenas repulsão natural (ManyBody).
-        // .force('cosmos', forceAll(communityCenters, parentMap))
-
-        // 3. Repulsão (ManyBody) - Essencial para o formato visual de exploração
-        .force('charge', d3.forceManyBody().strength(d => {
-            // Alta repulsão garante que as 'folhas' vizinhas no mesmo hub se isolem e fiquem perfeitamente espaçadas formando uma esfera
-            return -500; 
-        }).distanceMax(3000))
+            .strength(1.0),
         
-        // 4. Centro Global (Mínimo)
-        .force('center', d3.forceCenter(0, 0, 0).strength(0.015))
+        // Repulsão Base (ManyBody): Evita sobreposição imediata
+        charge: d3.forceManyBody().strength(-300).distanceMax(2000),
+        
+        // 🧲 Força Magnética (Inverso do Quadrado): Gera o agrupamento orgânico
+        magnetic: d3.forceManyBody().strength(d => {
+            return (d.weight || 1.0) * -150; 
+        }).distanceMin(20).distanceMax(800),
 
-        // 5. Colisão física (Dita o distanciamento exato entre as folhas)
-        .force('collide', d3.forceCollide(node => {
-            const importance = (node.pagerank && node.pagerank > 0) ? (node.pagerank * 15) : (nodeDegrees.get(node.id) || 0);
-            return (1 + Math.pow(importance, 0.5) * 3.5) + 4;  // +4 gera um bom respiro visual
-        }));
+        // ⭕ Força Radial: Cria o efeito de "Órbita" ao redor do centro (0,0,0)
+        radial: d3.forceRadial(200, 0, 0, 0).strength(0.1),
+        
+        // 🧱 Força de Limite (Boundary): Mantém o cosmos contido em uma esfera
+        limit: d3.forceRadial(0, 0, 0, 0).strength(0.01),
+
+        center: d3.forceCenter(0, 0, 0).strength(0.01),
+        
+        collide: d3.forceCollide(node => {
+            const importance = (node.pagerank && node.pagerank > 0) ? (node.pagerank * 18) : (nodeDegrees.get(node.id) || 0);
+            return (1 + Math.pow(importance, 0.5) * 4.0) + 6;
+        })
+    };
+
+    // 3. Aplica as forças do registro na simulação
+    Object.keys(registry).forEach(key => {
+        simulation.force(key, registry[key]);
+    });
 
     let tickCount = 0;
 
     simulation.on('tick', () => {
-        // Integração Z Manual (Bug fix para d3-force-3d v3)
+        // Integração Z Manual
         for (let i = 0; i < nodesData.length; i++) {
             const n = nodesData[i];
             if (n.fz !== undefined && n.fz !== null) {
@@ -79,5 +80,21 @@ export function createSimulation({
         }
     });
 
-    return simulation;
+    // 4. Retorna a interface de controle (API do Registry)
+    return {
+        simulation,
+        updateForce: (name, params) => {
+            const force = registry[name];
+            if (!force) return;
+            
+            Object.keys(params).forEach(key => {
+                if (typeof force[key] === 'function') {
+                    force[key](params[key]);
+                }
+            });
+            
+            // "Acorda" a simulação para aplicar a mudança
+            simulation.alpha(0.3).restart();
+        }
+    };
 }

@@ -22,7 +22,7 @@ export function useGraphOrchestrator(props) {
   const isUiMinimized = ref(false)
 
   // ── Importações de Sub-Lógicas (Domínio Deck) ──
-  const { initGraph, updateGraph, destroyGraph, currentViewState } = useDeckRender()
+  const { initGraph, updateGraph, destroyGraph, updateForce, currentViewState } = useDeckRender()
   const { transform } = useDataTransformer()
   const { registerKeyboardControls } = useInputDriver()
   const { registerGraphEvents } = useBridgeDriver()
@@ -96,6 +96,7 @@ export function useGraphOrchestrator(props) {
     containerRef,
     logContainerRef,
     isUiMinimized,
+    updateForce,
     currentViewState
   }
 }

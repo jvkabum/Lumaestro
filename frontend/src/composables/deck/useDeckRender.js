@@ -34,7 +34,11 @@ export function useDeckRender() {
     let cleanupKeyboard = null; // ← Segura a lixeira dos listeners de teclado
 
     // ── Instalação dos Especialistas (Atomic Drivers) ──
-    const { initPhysics, updatePhysicsData, syncPositions, startDrag, handleDrag, endDrag, terminatePhysics } = usePhysicsDriver();
+    const { 
+        initPhysics, updatePhysicsData, syncPositions, 
+        startDrag, handleDrag, endDrag, 
+        updateForce, terminatePhysics 
+    } = usePhysicsDriver();
     const { purify, bootstrapCoordinates, syncIncremental, mapLinks } = useDataEngineer();
     const { focusNode: pilotFocus, zoomToFit: pilotZoom, panTarget: pilotPan, setupKeyboardNav } = useInteractionPilot();
     const { startClock, stopClock, getTick } = useAnimationClock();
@@ -124,5 +128,5 @@ export function useDeckRender() {
         document.body.style.cursor = 'default';
     };
 
-    return { initGraph, updateGraph, destroyGraph, currentViewState };
+    return { initGraph, updateGraph, destroyGraph, updateForce, currentViewState };
 }

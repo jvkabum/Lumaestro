@@ -9,7 +9,7 @@ import { createSimulation } from './physics/SimulationEngine';
  * - SimulationEngine (Motor D3-Force-3D)
  */
 
-let simulation = null;
+let engine = null; // Agora guarda o objeto { simulation, updateForce }
 let nodesData = [];
 let linksData = [];
 
@@ -32,41 +32,40 @@ self.onmessage = function (event) {
         const { nodeDegrees, validLinks } = processDegrees(links, idMap);
 
         // 🌟 3. A PODAGEM MÁGICA (BFS MST)
-        // Corta todas as linhas de teia redundantes e força o design 'Dente-de-Leão' do D3
         linksData = convertToBFSTree(nodesData, validLinks, nodeDegrees);
 
-        // Envia a teia limpa de volta para o Visualizador Deck.gl parar de desenhar "Miojo" na GPU!
         self.postMessage({ type: 'PRUNED_LINKS', payload: { links: linksData } });
 
-        const communityCenters = computeCommunityCenters(nodesData);
-        const parentMap = mapHierarchy(nodesData, idMap);
+        // 3. Reinicialização do Motor com Registry
+        if (engine && engine.simulation) engine.simulation.stop();
 
-        console.log(`[Physics] ${nodesData.length} nós, ${parentMap.size} com pai, ${communityCenters.size} comunidades, ${linksData.length} links válidos`);
-
-        // 3. Reinicialização do Motor D3
-        if (simulation) simulation.stop();
-
-        simulation = createSimulation({
+        engine = createSimulation({
             nodesData,
             linksData,
             nodeDegrees,
-            communityCenters,
-            parentMap,
             onTick: (nodes) => {
                 const positions = nodes.map(n => ({ id: n.id, x: n.x, y: n.y, z: n.z || 0 }));
                 self.postMessage({ type: 'TICK', payload: { positions } });
             }
         });
 
-        simulation.tick(100); // Warmup
-        simulation.alpha(0.6).restart();
+        engine.simulation.tick(100); // Warmup
+        engine.simulation.alpha(0.6).restart();
+    }
+
+    else if (type === 'UPDATE_FORCE') {
+        const { name, params } = payload;
+        if (engine && engine.updateForce) {
+            console.log(`[Physics] ⚡ Atualizando força: ${name}`, params);
+            engine.updateForce(name, params);
+        }
     }
 
     else if (type === 'DRAG_START') {
         const { nodeId } = payload;
         const node = nodesData.find(n => n.id === nodeId);
-        if (node && simulation) {
-            simulation.alphaTarget(0.3).restart();
+        if (node && engine) {
+            engine.simulation.alphaTarget(0.3).restart();
             node.fx = node.x; node.fy = node.y; node.fz = node.z;
         }
     }
@@ -78,8 +77,8 @@ self.onmessage = function (event) {
     else if (type === 'DRAG_END') {
         const { nodeId } = payload;
         const node = nodesData.find(n => n.id === nodeId);
-        if (node && simulation) {
-            simulation.alphaTarget(0);
+        if (node && engine) {
+            engine.simulation.alphaTarget(0);
             node.fx = null; node.fy = null; node.fz = null;
         }
     }
