@@ -120,7 +120,7 @@ export function createLinkLayer({ currentLinks, clLinks, hlLinks, animationTime 
             // 🚫 [MAGNETISMO INVISÍVEL] Remove links orbitais e semânticos da renderização visual.
             // Eles continuam existindo na física (puxando nós), mas não poluem a tela com linhas.
             if (l['edge-type'] === 'orbital' || l['edge-type'] === 'semantic') return false;
-            
+
             const sObj = l.sourceObj;
             const tObj = l.targetObj;
 
@@ -137,23 +137,23 @@ export function createLinkLayer({ currentLinks, clLinks, hlLinks, animationTime 
         getSourceColor: link => {
             const s = link.source.id || link.source;
             const t = link.target.id || link.target;
-            if (clLinks.has(`${s}-${t}`) || clLinks.has(`${t}-${s}`)) return [255, 255, 255, 220];
-            if (hlLinks.has(`${s}-${t}`) || hlLinks.has(`${t}-${s}`)) return [...colors.active, 200];
-            return [...colors.page, 60];
+            if (clLinks.has(`${s}-${t}`) || clLinks.has(`${t}-${s}`)) return [0, 242, 255, 160]; // Azul ciano suave
+            if (hlLinks.has(`${s}-${t}`) || hlLinks.has(`${t}-${s}`)) return [...colors.active, 180];
+            return [...colors.page, 60]; // Restaurado para visibilidade normal
         },
         getTargetColor: link => {
             const s = link.source.id || link.source;
             const t = link.target.id || link.target;
-            if (clLinks.has(`${s}-${t}`) || clLinks.has(`${t}-${s}`)) return [255, 255, 255, 220];
-            if (hlLinks.has(`${s}-${t}`) || hlLinks.has(`${t}-${s}`)) return [252, 211, 77, 200];
-            return [40, 180, 180, 60];
+            if (clLinks.has(`${s}-${t}`) || clLinks.has(`${t}-${s}`)) return [0, 242, 255, 160]; // Azul ciano suave
+            if (hlLinks.has(`${s}-${t}`) || hlLinks.has(`${t}-${s}`)) return [252, 211, 77, 180];
+            return [40, 180, 180, 60]; // Restaurado para visibilidade normal
         },
         getWidth: link => {
             const s = link.source.id || link.source;
             const t = link.target.id || link.target;
-            if (clLinks.has(`${s}-${t}`) || clLinks.has(`${t}-${s}`)) return 2.5;
-            if (hlLinks.has(`${s}-${t}`) || hlLinks.has(`${t}-${s}`)) return 1.8;
-            return 0.5;
+            if (clLinks.has(`${s}-${t}`) || clLinks.has(`${t}-${s}`)) return 1.2; // Reduzido
+            if (hlLinks.has(`${s}-${t}`) || hlLinks.has(`${t}-${s}`)) return 1.0; // Reduzido
+            return 1.0; // Restaurado para visibilidade normal
         },
         getHeight: 0.3, // Curva quase imperceptível para manter charme orgânico sem entortar a entrada no nó!
         animationTime,
