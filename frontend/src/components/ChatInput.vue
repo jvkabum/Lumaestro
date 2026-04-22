@@ -98,23 +98,9 @@
               <span class="dot claude"></span> Claude
             </button>
             
-            <button 
-              type="button" 
-              class="agent-pill lmstudio-pill"
-              :class="{ active: selectedAgent === 'lmstudio' }" 
-              @click="selectedAgent = 'lmstudio'"
-            >
-              <span class="dot lmstudio"></span> LM Studio
-            </button>
-
-            <button 
-              type="button" 
-              class="agent-pill native-pill"
-              :class="{ active: selectedAgent === 'native' }" 
-              @click="selectedAgent = 'native'"
-            >
-              <span class="dot native"></span> Nativo
-            </button>
+            <!-- Motores Locais (Escondidos para visual premium) -->
+            <!-- <button ... >LM Studio</button> -->
+            <!-- <button ... >Nativo</button> -->
           </div>
         </div>
 
