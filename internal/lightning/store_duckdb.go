@@ -258,8 +258,7 @@ func (s *DuckDBStore) FindNodeInText(workspacePath, text string) (string, error)
 	queryStrict := `
 		SELECT id 
 		FROM graph_nodes 
-		WHERE workspace_path = ? 
-		  AND length(name) > 2 
+		WHERE length(name) > 2 
 		  AND ? ILIKE '% ' || name || ' %'
 		ORDER BY length(name) DESC 
 		LIMIT 1
@@ -269,7 +268,7 @@ func (s *DuckDBStore) FindNodeInText(workspacePath, text string) (string, error)
 	cleanText := " " + text + " "
 	cleanText = strings.NewReplacer("/", " ", "?", " ", ".", " ", ",", " ", "!", " ", ":", " ", ";", " ", "\"", " ", "'", " ").Replace(cleanText)
 	
-	err := s.db.QueryRow(queryStrict, workspacePath, cleanText).Scan(&id)
+	err := s.db.QueryRow(queryStrict, cleanText).Scan(&id)
 	if err == nil {
 		return id, nil
 	}
@@ -280,13 +279,12 @@ func (s *DuckDBStore) FindNodeInText(workspacePath, text string) (string, error)
 	queryLoose := `
 		SELECT id 
 		FROM graph_nodes 
-		WHERE workspace_path = ? 
-		  AND length(name) > 3 
+		WHERE length(name) > 3 
 		  AND ? ILIKE '%' || name || '%'
 		ORDER BY length(name) DESC 
 		LIMIT 1
 	`
-	err = s.db.QueryRow(queryLoose, workspacePath, text).Scan(&id)
+	err = s.db.QueryRow(queryLoose, text).Scan(&id)
 	return id, err
 }
 

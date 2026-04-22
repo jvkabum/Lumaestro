@@ -113,45 +113,47 @@ func (a *App) SendAgentInput(agent string, input string, images []map[string]str
 		
 		var fastNodeFound bool
 		// 🏁 FAST-PATH: DuckDB (Busca Léxica Instantânea por Nome)
-		if a.LStore != nil {
-			fastNodeId, err := a.LStore.FindNodeInText(a.executor.Workspace, input)
+		if a.LStore != nil && a.config.ObsidianVaultPath != "" {
+			fastNodeId, err := a.LStore.FindNodeInText(a.config.ObsidianVaultPath, input)
 			if err == nil && fastNodeId != "" {
-				fmt.Printf("[RAG] ⚡ Fast-Path DuckDB: Match no texto -> Focando %s\n", fastNodeId)
+				fmt.Printf("[RAG] ⚡ Fast-Path DuckDB: Match PERFEITO -> Focando %s\n", fastNodeId)
 				a.emitEvent("node:active", fastNodeId)
 				fastNodeFound = true
+			} else {
+				fmt.Printf("[RAG] ⚠️ Fast-Path falhou ao encontrar '%s' no DuckDB (erro: %v)\n", input, err)
 			}
 		}
 
+		// 🐌 SLOW-PATH & RAG: Busca Semântica por Similaridade e Expansão de Contexto
 		vector, err := a.embedder.GenerateEmbedding(a.ctx, input, true)
 		if err == nil {
 			a.emitAgentStatus(agent, "Buscando referências semânticas relevantes", "memory")
-			nodes, err := a.qdrant.Search("obsidian_knowledge", vector, 3)
-			if err == nil && len(nodes) > 0 {
-				var finalNodeId string
+			
+			// Busca 3 nós para formar o contexto, usando Scores para filtrar zooms ruins
+			points, err := a.qdrant.SearchWithScores("obsidian_knowledge", vector, 3)
+			if err == nil && len(points) > 0 {
 				
-				// Tenta ID primeiro, depois Nome (como fallback seguro)
-				rawId := nodes[0]["id"]
-				if rawId == nil {
-					rawId = nodes[0]["name"] // Se o ID não está no payload, o Nome geralmente serve como ID no Grafo
+				// 🎯 FOCO DE CÂMERA (ZOOM)
+				if !fastNodeFound {
+					topPoint := points[0]
+					score, _ := topPoint["_score"].(float64)
+					fmt.Printf("[RAG] 🐌 Qdrant Top Result: %+v (Score: %.2f)\n", topPoint["name"], score)
+					
+					// Evita pulos aleatórios para nós irrelevantes se a similaridade for baixa
+					if score > 0.5 {
+						if name, ok := topPoint["name"].(string); ok && name != "" {
+							slowNodeId := strings.ToLower(name)
+							fmt.Printf("[RAG] 🐌 Slow-Path Qdrant: Similaridade Alta -> Focando %s\n", slowNodeId)
+							a.emitEvent("node:active", slowNodeId)
+						}
+					} else {
+						fmt.Printf("[RAG] ⚠️ Qdrant score muito baixo (%.2f). Ignorando zoom semântico para não confundir o usuário.\n", score)
+					}
 				}
 
-				switch v := rawId.(type) {
-				case string:
-					finalNodeId = v
-				case float64:
-					finalNodeId = fmt.Sprintf("%.0f", v)
-				case int, int64:
-					finalNodeId = fmt.Sprintf("%v", v)
-				}
-
-				if finalNodeId != "" && !fastNodeFound {
-					fmt.Printf("[RAG] 🎯 Focando no nó semântico: %s\n", finalNodeId)
-					a.emitEvent("node:active", finalNodeId)
-				}
-
+				// 🧠 EXPANSÃO DE CONTEXTO RAG
 				a.emitAgentStatus(agent, "Expandindo contexto com memória conectada", "memory")
-				// 2. Navegação de Sinapses: Expandir o contexto seguindo os links neurais
-				fullContext := a.navigator.ExpandContext(a.ctx, nodes)
+				fullContext := a.navigator.ExpandContext(a.ctx, points)
 				contextInfo = "\n\n[CONHECIMENTO ORQUESTRADO (OBSIDIAN + SINAPSES)]\n"
 				maxContextChars := 3000000 // Limite seguro para ~800k tokens do Gemini
 				for _, ctxPart := range fullContext {
@@ -162,10 +164,14 @@ func (a *App) SendAgentInput(agent string, input string, images []map[string]str
 					contextInfo += ctxPart + "\n\n"
 				}
 				fmt.Printf("[RAG] Contexto expandido via Grafo com %d fontes (Tamanho: %d chars).\n", len(fullContext), len(contextInfo))
+				
+			} else {
+				fmt.Printf("[RAG] ⚠️ Qdrant não retornou pontos úteis. Erro: %v\n", err)
 			}
 		} else {
 			// 🚀 Se falhou por cota (429) ou hibernação, não bloqueamos o chat.
-			fmt.Printf("[RAG] Fast-track ativado: Pulando busca de contexto (%v)\n", err)
+			fmt.Printf("[RAG] ⚠️ Erro ao gerar embedding para RAG: %v\n", err)
+			fmt.Println("[RAG] Fast-track ativado: Pulando busca de contexto.")
 		}
 	}
 

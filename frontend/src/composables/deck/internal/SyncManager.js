@@ -23,7 +23,11 @@ export function useSyncManager() {
       }
 
       // 🧠 [ESSENCIAL] Solicita ao backend o envio em lote de todos os nós persistidos
-      if (bridge && bridge.SyncAllNodes) {
+      // Usa LoadFastGraph por padrão, pois não depende do Qdrant estar 100% online
+      if (bridge && bridge.LoadFastGraph) {
+        await bridge.LoadFastGraph()
+        console.log("[Sync] Gatilho LoadFastGraph disparado.")
+      } else if (bridge && bridge.SyncAllNodes) {
         await bridge.SyncAllNodes()
         console.log("[Sync] Gatilho SyncAllNodes disparado.")
       }
