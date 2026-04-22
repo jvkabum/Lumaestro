@@ -119,6 +119,10 @@ func (s *DuckDBStore) InitSchema() error {
 			relation_type VARCHAR DEFAULT 'mentions',
 			created_at DOUBLE
 		)`,
+		// Migração automática: Adiciona colunas de posição se não existirem (v20)
+		`ALTER TABLE graph_nodes ADD COLUMN IF NOT EXISTS pos_x DOUBLE DEFAULT 0.0`,
+		`ALTER TABLE graph_nodes ADD COLUMN IF NOT EXISTS pos_y DOUBLE DEFAULT 0.0`,
+		`ALTER TABLE graph_nodes ADD COLUMN IF NOT EXISTS pos_z DOUBLE DEFAULT 0.0`,
 	}
 
 	for _, q := range queries {

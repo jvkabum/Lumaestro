@@ -12,6 +12,9 @@ func (a *App) bootSequence() {
 	// 🔌 Injeção imediata de contexto para habilitar comunicações seguras
 	a.injectContexts()
 	
+	// ⚡ Início a Frio: Carrega o mapa instantaneamente do cache enquanto o resto inicializa
+	go a.LoadFastGraph()
+
 	time.Sleep(500 * time.Millisecond)
 	a.emitBoot("config", "⚙️", "Carregando configurações...")
 

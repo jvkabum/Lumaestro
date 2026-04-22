@@ -273,6 +273,34 @@ func (a *App) loadTopologyCache() *TopologyCache {
 	return &cache
 }
 
+// LoadFastGraph realiza o "Início a Frio": emite o grafo do cache/DuckDB instantaneamente (v20)
+func (a *App) LoadFastGraph() {
+	fmt.Println("[Sync] ⚡ Acionando Início a Frio (Fast-Track)...")
+	
+	// 1. Tenta carregar do Cache de Topologia (Nós + Arestas)
+	cache := a.loadTopologyCache()
+	if cache != nil && len(cache.Nodes) > 0 {
+		fmt.Printf("[Sync] 🚀 Emitindo %d nós do cache para carregamento instantâneo.\n", len(cache.Nodes))
+		a.emitEvent("graph:nodes:batch", cache.Nodes)
+		
+		// Pequeno delay para garantir que o frontend processou os nós antes de tentar desenhar as arestas
+		time.Sleep(100 * time.Millisecond)
+		for _, edge := range cache.Edges {
+			a.emitEvent("graph:edge", edge)
+		}
+		return
+	}
+
+	// 2. Fallback: Se não houver cache, tenta ler apenas os nós do DuckDB
+	if a.LStore != nil {
+		nodes, _, err := a.LStore.GetFullGraph("")
+		if err == nil && len(nodes) > 0 {
+			fmt.Printf("[Sync] 💾 Fallback: Emitindo %d nós do DuckDB.\n", len(nodes))
+			a.emitEvent("graph:nodes:batch", nodes)
+		}
+	}
+}
+
 // UpdateNodePositions recebe as coordenadas atuais do Frontend e persiste no DuckDB e Cache.
 func (a *App) UpdateNodePositions(nodes []map[string]interface{}) string {
 	fmt.Printf("[Sync] 💾 Recebendo atualização de layout para %d nós...\n", len(nodes))

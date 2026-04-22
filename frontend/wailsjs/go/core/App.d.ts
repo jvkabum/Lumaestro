@@ -108,6 +108,8 @@ export function ListMCPServers():Promise<string>;
 
 export function LoadAgentSession(arg1:string,arg2:string):Promise<void>;
 
+export function LoadFastGraph():Promise<void>;
+
 export function LoginIdentity(arg1:string,arg2:string):Promise<void>;
 
 export function NewAgentSession(arg1:string):Promise<void>;

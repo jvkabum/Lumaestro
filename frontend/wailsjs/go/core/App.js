@@ -206,6 +206,10 @@ export function LoadAgentSession(arg1, arg2) {
   return window['go']['core']['App']['LoadAgentSession'](arg1, arg2);
 }
 
+export function LoadFastGraph() {
+  return window['go']['core']['App']['LoadFastGraph']();
+}
+
 export function LoginIdentity(arg1, arg2) {
   return window['go']['core']['App']['LoginIdentity'](arg1, arg2);
 }
