@@ -35,6 +35,11 @@ export function useBridgeDriver() {
     window.runtime.EventsOn("graph:health:update", (stats) => {
       store.graphHealth = stats
     })
+    
+    // 🎯 Foco em Nó (Zoom Ativo)
+    window.runtime.EventsOn("node:active", (nodeId) => {
+      if (nodeId) focusNode(nodeId)
+    })
 
     // 4. Percurso Cinematográfico (Traverse)
     window.runtime.EventsOn("graph:traverse", (data) => {
