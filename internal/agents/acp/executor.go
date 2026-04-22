@@ -161,7 +161,7 @@ func (e *ACPExecutor) SubmitReview(reviewID string, approved bool) {
 	}
 }
 
-// SetSessionModel altera o modelo da IA em runtime via RPC 'unstable_setSessionModel'.
+// SetSessionModel altera o modelo da IA em runtime via RPC (v20 - Baseado no Source).
 func (e *ACPExecutor) SetSessionModel(sessionID string, model string) error {
 	e.Mu.Lock()
 	session, ok := e.ActiveSessions[sessionID]
@@ -175,11 +175,12 @@ func (e *ACPExecutor) SetSessionModel(sessionID string, model string) error {
 		return fmt.Errorf("sessão ainda não inicializada via ACP")
 	}
 
+	// 🧪 Conforme bundle/gemini.js: método é 'unstable_setSessionModel' e exige 'modelId'
 	fmt.Printf("[ACP] >> Solicitando troca de modelo para: %s (Sessão: %s)\n", model, session.ACPSessID)
 
 	params, _ := json.Marshal(map[string]interface{}{
 		"sessionId": session.ACPSessID,
-		"model":     model,
+		"modelId":   model, // 🔍 Corrigido: Source espera 'modelId'
 	})
 
 	id := e.getNextID()
@@ -194,9 +195,19 @@ func (e *ACPExecutor) SetSessionModel(sessionID string, model string) error {
 		return err
 	}
 
-	// Aguarda um breve retorno ou timeout para confirmar o recebimento
-	_, err = e.waitForResponse(id, 5*time.Second)
-	return err
+	// Aguarda a resposta (3s é suficiente para uma troca de modelo)
+	msg, err := e.waitForResponse(id, 3*time.Second)
+	if err != nil {
+		return err
+	}
+
+	// Valida se houve erro reportado pelo motor Gemini
+	if msg.Error != nil {
+		return fmt.Errorf("erro RPC [%d]: %s", msg.Error.Code, msg.Error.Message)
+	}
+
+	fmt.Printf("[ACP] ✅ Modelo alterado com sucesso via RPC.\n")
+	return nil
 }
 // HandleQuotaExhausted aciona a rotação da frota de resiliência.
 func (e *ACPExecutor) HandleQuotaExhausted(sessionID string) {

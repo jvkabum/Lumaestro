@@ -15,73 +15,61 @@
               <span class="agent-label">Gemini</span>
               <span class="chevron-icon" :class="{ rotate: showModelMenu }">▾</span>
 
-              <!-- Dropdown List -->
+              <!-- Dropdown List Premium (Geração 3) -->
               <Transition name="menu-pop">
                 <div v-if="showModelMenu" class="model-dropdown-menu glass" @click.stop>
-                  <!-- ... (seções do menu permanecem iguais) ... -->
                   <div class="menu-section">
-                    <label>⚡ AUTOMÁTICO</label>
-                    <div 
-                      class="menu-item" 
-                      :class="{ selected: activeGeminiModel === 'auto-gemini-2.5' }"
-                      @click="selectModel('auto-gemini-2.5')"
-                    >
-                      <span class="item-icon">⚡</span>
-                      <div class="item-info">
-                        <span class="item-name">Auto (Gemini 2.5)</span>
-                        <span class="item-desc">Equilíbrio sugerido</span>
-                      </div>
-                    </div>
+                    <label>✨ INTELIGÊNCIA ATIVA</label>
                     <div 
                       class="menu-item" 
                       :class="{ selected: activeGeminiModel === 'auto-gemini-3' }"
                       @click="selectModel('auto-gemini-3')"
                     >
-                      <span class="item-icon">🧪</span>
+                      <span class="item-icon">✨</span>
                       <div class="item-info">
                         <span class="item-name">Auto (Gemini 3)</span>
-                        <span class="item-desc">Experimental / Preview</span>
+                        <span class="item-desc">Roteamento inteligente para 3.1</span>
                       </div>
                     </div>
                   </div>
 
                   <div class="menu-section">
-                    <label>🧠 RACIOCÍNIO (PRO)</label>
+                    <label>🧠 RACIOCÍNIO AVANÇADO</label>
                     <div 
                       class="menu-item" 
-                      :class="{ selected: activeGeminiModel === 'gemini-2.5-pro' }"
-                      @click="selectModel('gemini-2.5-pro')"
+                      :class="{ selected: activeGeminiModel === 'gemini-3.1-pro-preview' }"
+                      @click="selectModel('gemini-3.1-pro-preview')"
                     >
                       <span class="item-icon">🧠</span>
                       <div class="item-info">
-                        <span class="item-name">2.5 Pro</span>
-                        <span class="item-desc">Lógica complexa</span>
+                        <span class="item-name">3.1 Pro</span>
+                        <span class="item-desc">Máxima lógica e codificação</span>
                       </div>
                     </div>
                   </div>
 
                   <div class="menu-section">
-                    <label>🚀 VELOCIDADE (FLASH)</label>
+                    <label>🚀 ALTA VELOCIDADE</label>
                     <div 
                       class="menu-item" 
-                      :class="{ selected: activeGeminiModel === 'gemini-2.5-flash' }"
-                      @click="selectModel('gemini-2.5-flash')"
+                      :class="{ selected: activeGeminiModel === 'gemini-3.1-flash' }"
+                      @click="selectModel('gemini-3.1-flash')"
                     >
                       <span class="item-icon">🚀</span>
                       <div class="item-info">
-                        <span class="item-name">2.5 Flash</span>
-                        <span class="item-desc">Respostas rápidas</span>
+                        <span class="item-name">3.1 Flash</span>
+                        <span class="item-desc">Respostas em milissegundos</span>
                       </div>
                     </div>
                     <div 
                       class="menu-item" 
-                      :class="{ selected: activeGeminiModel === 'gemini-2.5-flash-lite' }"
-                      @click="selectModel('gemini-2.5-flash-lite')"
+                      :class="{ selected: activeGeminiModel === 'gemini-3.1-flash-lite' }"
+                      @click="selectModel('gemini-3.1-flash-lite')"
                     >
                       <span class="item-icon">⚡</span>
                       <div class="item-info">
-                        <span class="item-name">Flash Lite</span>
-                        <span class="item-desc">Ultra leve</span>
+                        <span class="item-name">3.1 Flash Lite</span>
+                        <span class="item-desc">Eficiência máxima / Latência zero</span>
                       </div>
                     </div>
                   </div>
@@ -219,7 +207,7 @@ import { useSettingsStore } from '../stores/settings';
 
 const settings = useSettingsStore();
 const orchestrator = useOrchestratorStore();
-const activeGeminiModel = ref('auto-gemini-2.5');
+const activeGeminiModel = ref('auto-gemini-3');
 
 onMounted(() => {
   if (settings.config.gemini_model) {

@@ -243,18 +243,19 @@ func (a *App) SetAgentModel(agent string, model string) error {
 				return nil
 			}
 
-			// Se falhou (ex: método não suportado no binário atual), fazemos o fallback para Reinício
-			fmt.Printf("[App] ⚠️ Falha na troca dinâmica (%v). Fazendo fallback para reinício do motor...\n", errRPC)
-			if s, ok := a.executor.ActiveSessions[agent]; ok {
-				if s.Cancel != nil {
-					s.Cancel()
+			// Fallback silencioso para reinício se a troca dinâmica não for suportada
+			if errRPC != nil {
+				if s, ok := a.executor.ActiveSessions[agent]; ok {
+					if s.Cancel != nil {
+						s.Cancel()
+					}
+					delete(a.executor.ActiveSessions, agent)
+					
+					a.emitEvent("agent:log", map[string]string{
+						"source":  "SYSTEM",
+						"content": "🔄 Aplicando novo modelo via reinício: " + model,
+					})
 				}
-				delete(a.executor.ActiveSessions, agent)
-				
-				a.emitEvent("agent:log", map[string]string{
-					"source":  "SYSTEM",
-					"content": "🔄 Reiniciando motor para aplicar novo modelo: " + model,
-				})
 			}
 		}
 	}

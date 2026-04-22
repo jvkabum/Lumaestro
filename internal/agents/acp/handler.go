@@ -103,15 +103,9 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 
 				msgType := "message"
 				if update.Content.Type == "user" || update.SessionUpdate == "user_message" || update.SessionUpdate == "user_message_chunk" {
-					msgType = "user"
-					
-					// 🧹 LIMPEZA DE HISTÓRICO: Remove diretrizes de sistema do prompt restaurado
-					if strings.Contains(txt, "OBJETIVO ATUAL:") {
-						parts := strings.Split(txt, "OBJETIVO ATUAL:")
-						if len(parts) > 1 {
-							txt = strings.TrimSpace(parts[1])
-						}
-					}
+					// 🚫 Ignoramos o eco de mensagens do usuário para evitar duplicidade no chat,
+					// já que o frontend já exibe o input localmente.
+					return 
 				}
 
 				if txt != "" && !isBg {
