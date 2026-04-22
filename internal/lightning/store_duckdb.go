@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -247,17 +248,45 @@ func (s *DuckDBStore) ApproveCandidate(candidateID string) error {
 	return err
 }
 
-// FindNodeByName busca um nó no grafo pelo nome exato ou similar (Busca Rápida/Léxica).
-func (s *DuckDBStore) FindNodeByName(workspacePath, name string) (string, error) {
+// FindNodeInText busca o nó mais relevante cujo nome está contido no texto fornecido.
+func (s *DuckDBStore) FindNodeInText(workspacePath, text string) (string, error) {
 	var id string
-	// Tenta busca exata primeiro
-	err := s.db.QueryRow(`SELECT id FROM graph_nodes WHERE workspace_path = ? AND name = ? LIMIT 1`, workspacePath, name).Scan(&id)
+	
+	// Busca nós cujo nome (case insensitive) apareça no texto do usuário.
+	// Primeiro tentamos com word boundaries rudimentares (com espaços) para evitar falsos positivos
+	// Ex: "Go" não deve dar match dentro de "algoritmo longo".
+	queryStrict := `
+		SELECT id 
+		FROM graph_nodes 
+		WHERE workspace_path = ? 
+		  AND length(name) > 2 
+		  AND ? ILIKE '% ' || name || ' %'
+		ORDER BY length(name) DESC 
+		LIMIT 1
+	`
+	
+	// Normaliza o texto para que a pontuação não quebre o match com espaços
+	cleanText := " " + text + " "
+	cleanText = strings.NewReplacer("/", " ", "?", " ", ".", " ", ",", " ", "!", " ", ":", " ", ";", " ", "\"", " ", "'", " ").Replace(cleanText)
+	
+	err := s.db.QueryRow(queryStrict, workspacePath, cleanText).Scan(&id)
 	if err == nil {
 		return id, nil
 	}
 
-	// Tenta busca por similaridade (ILIKE) se a exata falhar
-	err = s.db.QueryRow(`SELECT id FROM graph_nodes WHERE workspace_path = ? AND name ILIKE ? LIMIT 1`, workspacePath, "%"+name+"%").Scan(&id)
+	// Fallback loose: ILIKE normal sem espaços.
+	// Útil para nodes que possuem pontuação no nome (ex: Next.js) que foi apagada no cleanText.
+	// Exigimos length > 3 para evitar matches muito curtos ("API", "Go", "Vue" já teriam sido pegos no strict).
+	queryLoose := `
+		SELECT id 
+		FROM graph_nodes 
+		WHERE workspace_path = ? 
+		  AND length(name) > 3 
+		  AND ? ILIKE '%' || name || '%'
+		ORDER BY length(name) DESC 
+		LIMIT 1
+	`
+	err = s.db.QueryRow(queryLoose, workspacePath, text).Scan(&id)
 	return id, err
 }
 

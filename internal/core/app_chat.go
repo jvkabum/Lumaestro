@@ -111,21 +111,14 @@ func (a *App) SendAgentInput(agent string, input string, images []map[string]str
 		// para não travar o envio da mensagem por 30s.
 		fmt.Println("[RAG] Explorando ligações nervosas no Grafo de Conhecimento...")
 		
+		var fastNodeFound bool
 		// 🏁 FAST-PATH: DuckDB (Busca Léxica Instantânea por Nome)
 		if a.LStore != nil {
-			cleanInput := strings.ToLower(input)
-			// Remove caracteres que podem sujar a busca (ex: barras, pontos, interrogações)
-			cleanInput = strings.NewReplacer("/", " ", "?", " ", ".", " ", ",", " ", "!", " ").Replace(cleanInput)
-			words := strings.Fields(cleanInput)
-			
-			for _, word := range words {
-				if len(word) < 3 { continue }
-				fastNodeId, err := a.LStore.FindNodeByName(a.executor.Workspace, word)
-				if err == nil && fastNodeId != "" {
-					fmt.Printf("[RAG] ⚡ Fast-Path DuckDB: Match em '%s' -> Focando %s\n", word, fastNodeId)
-					a.emitEvent("node:active", fastNodeId)
-					break 
-				}
+			fastNodeId, err := a.LStore.FindNodeInText(a.executor.Workspace, input)
+			if err == nil && fastNodeId != "" {
+				fmt.Printf("[RAG] ⚡ Fast-Path DuckDB: Match no texto -> Focando %s\n", fastNodeId)
+				a.emitEvent("node:active", fastNodeId)
+				fastNodeFound = true
 			}
 		}
 
@@ -151,7 +144,7 @@ func (a *App) SendAgentInput(agent string, input string, images []map[string]str
 					finalNodeId = fmt.Sprintf("%v", v)
 				}
 
-				if finalNodeId != "" {
+				if finalNodeId != "" && !fastNodeFound {
 					fmt.Printf("[RAG] 🎯 Focando no nó semântico: %s\n", finalNodeId)
 					a.emitEvent("node:active", finalNodeId)
 				}
