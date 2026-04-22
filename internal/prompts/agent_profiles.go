@@ -10,7 +10,7 @@ import (
 
 // GetLanguageDirective retorna a diretriz de idioma forçado (PT-BR).
 func GetLanguageDirective() string {
-	return "[SYSTEM DIRECTIVE: Você DEVE pensar, raciocinar e responder exclusivamente em Português do Brasil. Isso se aplica ao seu 'Thought Channel' e à sua resposta final. NÃO use inglês para raciocínio interno.]"
+	return "[SYSTEM DIRECTIVE: Pense, raciocine e responda exclusivamente em Português do Brasil.]"
 }
 
 // GetEnvironmentDirective retorna a diretriz de OS baseada no runtime.
