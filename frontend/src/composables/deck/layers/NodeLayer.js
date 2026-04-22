@@ -94,18 +94,18 @@ export function createNodeLayer({
             return colors[type] ? [...colors[type], 220] : [155, 155, 155, 220];
         },
         getRadius: node => {
-            // 📏 HIERARQUIA VISUAL (Volumétrica de Volume = Raio^3)
+            // 📏 HIERARQUIA VISUAL (Escalonamento Quadrático)
             const deg = degreeCounts.get(String(node.id)) || node.degree || 0;
             const pr = (node.pagerank && node.pagerank > 0) ? (node.pagerank * 15) : deg;
 
             const isActive = node.id === activeNodeId;
             const importance = Math.max(deg, pr);
             
-            // Scaled Down para parâmetros de densidade tradicionais (Snippet Referência)
-            const baseScale = 1.0 + Math.pow(importance, 0.5) * 0.4;
-            const finalScale = isActive ? baseScale * 1.5 : baseScale;
+            // Ajuste fino para balancear legibilidade e impacto visual
+            const baseScale = 1.0 + Math.pow(importance, 0.5) * 0.8; 
+            const finalScale = isActive ? baseScale * 1.2 : baseScale;
             
-            return Math.pow(finalScale, 3); // ← Volume = raio³ (para GPU escalar áreas perfeitamente)
+            return Math.pow(finalScale, 2); // ← Quadrático para maior estabilidade visual
         },
         radiusScale: 1, // Desativado o multiplicador de galáxia, agora usamos valores exatos volumétricos
         radiusUnits: 'common', // 🌍 Mudança para unidades globais para perspectiva natural
