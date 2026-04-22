@@ -64,16 +64,19 @@ func (a *App) AnalyzeGraphHealth() (map[string]interface{}, error) {
 	if a.qdrant == nil {
 		return nil, fmt.Errorf("banco vetorial offline")
 	}
-	obsidianCount, err := a.qdrant.CountPoints("obsidian_knowledge")
-	if err != nil {
-		return nil, err
+	// 📂 Contagem Isolada por Projeto (Órbita Atual)
+	count := 0
+	if a.LStore != nil && a.executor.Workspace != "" {
+		c, err := a.LStore.GetNodeCount(a.executor.Workspace)
+		if err == nil {
+			count = c
+		}
+	} else {
+		// Fallback para global se não houver workspace (Obsidian Base)
+		obsidianCount, _ := a.qdrant.CountPoints("obsidian_knowledge")
+		memoryCount, _ := a.qdrant.CountPoints("knowledge_graph")
+		count = obsidianCount + memoryCount
 	}
-	memoryCount, err := a.qdrant.CountPoints("knowledge_graph")
-	if err != nil {
-		return nil, err
-	}
-
-	count := obsidianCount + memoryCount
 
 	// Cálculo de Densidade Orgânica (Progressão Logarítmica)
 	// Com 816 notas, queremos um valor que faça sentido visual.
@@ -220,7 +223,7 @@ func (a *App) RunReconScan() string {
 		return "🔴 Agente Recon offline."
 	}
 
-	proposals, err := a.Recon.ScanMissingLinks(a.ctx)
+	proposals, err := a.Recon.ScanMissingLinks(a.ctx, a.executor.Workspace)
 	if err != nil {
 		return "🔴 Erro no Scan: " + err.Error()
 	}

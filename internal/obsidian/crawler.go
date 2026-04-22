@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"Lumaestro/internal/config"
+	"Lumaestro/internal/lightning"
 	"Lumaestro/internal/provider"
 	"Lumaestro/internal/utils"
 )
@@ -30,6 +31,7 @@ type Crawler struct {
 	Embedder  provider.Embedder
 	Qdrant    *provider.QdrantClient
 	Ontology  *provider.OntologyService
+	LStore    *lightning.DuckDBStore // 📊 Banco analítico para isolamento de projetos
 	cachePath string
 	cache     IndexCache
 	mu        sync.Mutex
@@ -38,6 +40,7 @@ type Crawler struct {
 
 type crawlTask struct {
 	path          string
+	workspacePath string // 📂 Identificador da órbita do projeto
 	info          os.FileInfo
 	docType       string
 	implicitLinks []string
@@ -48,16 +51,17 @@ func (c *Crawler) SetContext(ctx context.Context) {
 	c.ctx = ctx
 }
 
-// NewCrawler inicializa o crawler com suporte a cache de indexação.
-func NewCrawler(vaultPath string, embedder provider.Embedder, qdrant *provider.QdrantClient, ontology *provider.OntologyService) *Crawler {
+// NewCrawler inicializa o crawler com suporte a cache de indexação e banco analítico.
+func NewCrawler(vaultPath string, embedder provider.Embedder, qdrant *provider.QdrantClient, ontology *provider.OntologyService, lStore *lightning.DuckDBStore) *Crawler {
 	c := &Crawler{
 		VaultPath:   vaultPath,
 		Embedder:    embedder,
 		Qdrant:      qdrant,
 		Ontology:    ontology,
+		LStore:      lStore,
 		cachePath:   ".context/index_cache.json",
 		cache:       make(IndexCache),
-		workerCount: 2, // ⚙️ Reduzido para 2 — evita burst de cota em chaves gratuitas
+		workerCount: 2,
 	}
 	c.loadCache()
 	return c
@@ -126,6 +130,9 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 		"summary":       "Nó central do vault; organiza pastas e documentos orbitais.",
 		"what-it-does":  "Funciona como raiz estrutural da base de conhecimento no grafo 3D.",
 	})
+	if c.LStore != nil {
+		c.LStore.UpsertGraphNode(c.VaultPath, galaxyID, galaxyName, "galaxy-core", nil)
+	}
 
 	err := filepath.Walk(c.VaultPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil { return nil }
@@ -163,6 +170,9 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 					"summary":       fmt.Sprintf("Entidade astronômica '%s' (Tipo: %s).", folderName, celestialType),
 					"what-it-does":  "Atua como centro de gravidade local para documentos e subpastas orbitais.",
 				})
+				if c.LStore != nil {
+					c.LStore.UpsertGraphNode(c.VaultPath, folderID, folderName, "folder", nil)
+				}
 				// Aresta de Órbita Física (Parentesco)
 				utils.SafeEmit(c.ctx, "graph:edge", map[string]interface{}{
 					"source": parentID,
@@ -170,6 +180,9 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 					"weight": 5, // Aresta forte de gravidade
 					"edge-type": "orbital",
 				})
+				if c.LStore != nil {
+					c.LStore.InsertGraphEdge(c.VaultPath, parentID, folderID, 5, "orbital")
+				}
 				processedFolders[folderID] = true
 			}
 			return nil
@@ -206,6 +219,9 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 			"weight": 3, // Gravidade local
 			"edge-type": "orbital",
 		})
+		if c.LStore != nil {
+			c.LStore.InsertGraphEdge(c.VaultPath, parentID, nodeID, 3, "orbital")
+		}
 
 		// Lê conteúdo (md/código) para gerar resumo real e extrair links
 		var fileSummary, fileWhatItDoes string
@@ -243,6 +259,9 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 						"summary":        fileSummary,
 						"what-it-does":   fileWhatItDoes,
 					})
+					if c.LStore != nil {
+						c.LStore.UpsertGraphNode(c.VaultPath, nodeID, nodeName, docType, nil)
+					}
 					return nil
 				}
 			}
@@ -295,7 +314,7 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 		go func() {
 			defer wg.Done()
 			for task := range tasks {
-				indexed, processErr := c.processFile(ctx, task.path, task.info, task.docType, task.implicitLinks)
+				indexed, processErr := c.processFile(ctx, task.path, c.VaultPath, task.info, task.docType, task.implicitLinks)
 				if processErr == nil && indexed {
 					atomic.AddInt32(&totalIndexed, 1)
 				}
@@ -332,7 +351,7 @@ func (c *Crawler) IndexSystemDocs(ctx context.Context, rootPath string) error {
 		go func() {
 			defer wg.Done()
 			for task := range tasks {
-				indexed, err := c.processFile(ctx, task.path, task.info, task.docType, nil)
+				indexed, err := c.processFile(ctx, task.path, rootPath, task.info, task.docType, nil)
 				if err == nil && indexed {
 					atomic.AddInt32(&totalIndexed, 1)
 				}
@@ -401,6 +420,9 @@ func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.P
 			"summary":       fmt.Sprintf("Núcleo do repositório satélite '%s'.", repo.CoreNode),
 			"what-it-does":  "Conecta código/projetos externos ao RAG radial sem misturar domínios.",
 		})
+		if c.LStore != nil {
+			c.LStore.UpsertGraphNode(repo.Path, galaxyID, repo.CoreNode, "galaxy-core", nil)
+		}
 
 		fmt.Printf("[Crawler] 🪐 Expandindo Galáxia Radial: %s\n", repo.CoreNode)
 
@@ -409,7 +431,7 @@ func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.P
 			go func() {
 				defer wg.Done()
 				for task := range tasks {
-					indexed, err := c.processFile(ctx, task.path, task.info, task.docType, task.implicitLinks)
+					indexed, err := c.processFile(ctx, task.path, task.workspacePath, task.info, task.docType, task.implicitLinks)
 					if err == nil && indexed {
 						atomic.AddInt32(&totalIndexed, 1)
 					}
@@ -525,6 +547,7 @@ func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.P
 
 			tasks <- crawlTask{
 				path: path, 
+				workspacePath: repo.Path,
 				info: info, 
 				docType: docType, 
 				implicitLinks: []string{repo.CoreNode},
@@ -545,9 +568,8 @@ func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.P
 	return nil
 }
 
-// processFile é o núcleo de inteligência que processa, extrai triplas e salva no Qdrant.
-// Otimizado: pula extração de triplas para notas pequenas e adiciona throttle entre chamadas.
-func (c *Crawler) processFile(ctx context.Context, path string, info os.FileInfo, forcedDocType string, implicitLinks []string) (bool, error) {
+// processFile é o núcleo de inteligência que processa, extrai triplas e salva no Qdrant e DuckDB.
+func (c *Crawler) processFile(ctx context.Context, path string, workspacePath string, info os.FileInfo, forcedDocType string, implicitLinks []string) (bool, error) {
 	ext := strings.ToLower(filepath.Ext(path))
 	isMD := ext == ".md"
 	isImage := ext == ".png" || ext == ".jpg" || ext == ".jpeg"
@@ -705,6 +727,9 @@ func (c *Crawler) processFile(ctx context.Context, path string, info os.FileInfo
 		"summary":       nodeSummary,
 		"what-it-does":  nodeWhatItDoes,
 	})
+	if c.LStore != nil {
+		c.LStore.UpsertGraphNode(workspacePath, nodeID, nodeName, forcedDocType, nil)
+	}
 
 	// Atualiza o cache com o hash do conteúdo
 	c.mu.Lock()

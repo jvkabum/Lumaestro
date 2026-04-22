@@ -27,7 +27,7 @@ func (a *App) initRAGInfrastructure(cfg *config.Config) {
 	a.Recon = rag.NewAgentRecon(a.LStore, a.GEngine, a.qdrant)
 
 	if a.embedder != nil && a.ontology != nil {
-		a.crawler = obsidian.NewCrawler(cfg.ObsidianVaultPath, a.embedder, a.qdrant, a.ontology)
+		a.crawler = obsidian.NewCrawler(cfg.ObsidianVaultPath, a.embedder, a.qdrant, a.ontology, a.LStore)
 		
 		// 🏗️ [CRÍTICO] Garante que as coleções existem no banco vetorial imediatamente
 		go func() {
@@ -41,8 +41,8 @@ func (a *App) initRAGInfrastructure(cfg *config.Config) {
 	}
 
 	// Sincronização do Grafo a partir do LStore (DuckDB)
-	if a.LStore != nil {
-		nodes, edges, err := a.LStore.GetFullGraph()
+	if a.LStore != nil && a.executor.Workspace != "" {
+		nodes, edges, err := a.LStore.GetFullGraph(a.executor.Workspace)
 		if err == nil {
 			for _, n := range nodes {
 				a.GEngine.AddNode(n["id"].(string), n["name"].(string), n["type"].(string))

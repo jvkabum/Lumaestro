@@ -102,12 +102,14 @@ func (s *DuckDBStore) InitSchema() error {
 		)`,
 		`CREATE TABLE IF NOT EXISTS graph_nodes (
 			id VARCHAR PRIMARY KEY,
+			workspace_path VARCHAR,
 			name VARCHAR,
 			type VARCHAR,
 			metadata JSON,
 			created_at DOUBLE
 		)`,
 		`CREATE TABLE IF NOT EXISTS graph_edges (
+			workspace_path VARCHAR,
 			source_id VARCHAR,
 			target_id VARCHAR,
 			weight DOUBLE DEFAULT 1.0,
@@ -273,40 +275,51 @@ func (s *DuckDBStore) Close() error {
 
 // --- Métodos do Cérebro Relacional (Grafo) ---
 
-// UpsertGraphNode insere ou atualiza um nó no grafo analítico.
-func (s *DuckDBStore) UpsertGraphNode(id, name, nodeType string, metadata map[string]interface{}) error {
+// UpsertGraphNode insere ou atualiza um nó no grafo analítico vinculado a um workspace.
+func (s *DuckDBStore) UpsertGraphNode(workspacePath, id, name, nodeType string, metadata map[string]interface{}) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	metaJSON, _ := json.Marshal(metadata)
-	query := `INSERT INTO graph_nodes (id, name, type, metadata, created_at)
-			  VALUES (?, ?, ?, ?, ?)
+	query := `INSERT INTO graph_nodes (id, workspace_path, name, type, metadata, created_at)
+			  VALUES (?, ?, ?, ?, ?, ?)
 			  ON CONFLICT (id) DO UPDATE SET 
-			  name = excluded.name, type = excluded.type, metadata = excluded.metadata`
+			  workspace_path = excluded.workspace_path, name = excluded.name, 
+			  type = excluded.type, metadata = excluded.metadata`
 	
-	_, err := s.db.Exec(query, id, name, nodeType, string(metaJSON), time.Now().UnixNano())
+	_, err := s.db.Exec(query, id, workspacePath, name, nodeType, string(metaJSON), time.Now().UnixNano())
 	return err
 }
 
-// InsertGraphEdge insere uma relação semântica entre dois nós.
-func (s *DuckDBStore) InsertGraphEdge(sourceID, targetID string, weight float64, relationType string) error {
+// InsertGraphEdge insere uma relação semântica entre dois nós em um workspace.
+func (s *DuckDBStore) InsertGraphEdge(workspacePath, sourceID, targetID string, weight float64, relationType string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	query := `INSERT INTO graph_edges (source_id, target_id, weight, relation_type, created_at)
-			  VALUES (?, ?, ?, ?, ?)`
+	query := `INSERT INTO graph_edges (workspace_path, source_id, target_id, weight, relation_type, created_at)
+			  VALUES (?, ?, ?, ?, ?, ?)`
 	
-	_, err := s.db.Exec(query, sourceID, targetID, weight, relationType, time.Now().UnixNano())
+	_, err := s.db.Exec(query, workspacePath, sourceID, targetID, weight, relationType, time.Now().UnixNano())
 	return err
 }
 
-// GetFullGraph recupera todos os nós e arestas para carregar na RAM (Gonum).
-func (s *DuckDBStore) GetFullGraph() ([]map[string]interface{}, []map[string]interface{}, error) {
+// GetNodeCount retorna o número de notas vinculadas a um workspace específico.
+func (s *DuckDBStore) GetNodeCount(workspacePath string) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// 1. Recuperar Nós
-	rowsN, err := s.db.Query(`SELECT id, name, type FROM graph_nodes`)
+	var count int
+	err := s.db.QueryRow(`SELECT count(*) FROM graph_nodes WHERE workspace_path = ?`, workspacePath).Scan(&count)
+	return count, err
+}
+
+// GetFullGraph recupera todos os nós e arestas de um workspace específico.
+func (s *DuckDBStore) GetFullGraph(workspacePath string) ([]map[string]interface{}, []map[string]interface{}, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// 1. Recuperar Nós do Workspace
+	rowsN, err := s.db.Query(`SELECT id, name, type FROM graph_nodes WHERE workspace_path = ?`, workspacePath)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -320,8 +333,8 @@ func (s *DuckDBStore) GetFullGraph() ([]map[string]interface{}, []map[string]int
 		}
 	}
 
-	// 2. Recuperar Arestas
-	rowsE, err := s.db.Query(`SELECT source_id, target_id, weight, relation_type FROM graph_edges`)
+	// 2. Recuperar Arestas do Workspace
+	rowsE, err := s.db.Query(`SELECT source_id, target_id, weight, relation_type FROM graph_edges WHERE workspace_path = ?`, workspacePath)
 	if err != nil {
 		return nil, nil, err
 	}

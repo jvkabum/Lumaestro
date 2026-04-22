@@ -32,8 +32,8 @@ type ReconProposal struct {
 	Auto       bool    `json:"auto"` // Se true, foi conectada automaticamente
 }
 
-// ScanMissingLinks procura por notas similares que não possuem conexão no grafo.
-func (r *AgentRecon) ScanMissingLinks(ctx context.Context) ([]ReconProposal, error) {
+// ScanMissingLinks procura por notas similares que não possuem conexão no grafo dentro de um workspace.
+func (r *AgentRecon) ScanMissingLinks(ctx context.Context, workspacePath string) ([]ReconProposal, error) {
 	if r.Qdrant == nil || r.Graph == nil {
 		return nil, fmt.Errorf("infraestrutura incompleta")
 	}
@@ -79,7 +79,7 @@ func (r *AgentRecon) ScanMissingLinks(ctx context.Context) ([]ReconProposal, err
 				if auto {
 					r.Graph.AddEdge(sourceID, targetID, sim, "recon_auto")
 					if r.Store != nil {
-						r.Store.InsertGraphEdge(sourceID, targetID, sim, "recon_auto")
+						r.Store.InsertGraphEdge(workspacePath, sourceID, targetID, sim, "recon_auto")
 					}
 				}
 			}
