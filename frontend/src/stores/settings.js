@@ -55,7 +55,8 @@ export const useSettingsStore = defineStore('settings', () => {
     failover_priority: ['groq', 'gemini', 'native'],
     active_groq_models: [],            // 🚀 Frota de Resiliência Groq
     active_google_models: [],          // 🌟 Frota de Resiliência Google
-    external_projects: []              // 🪐 Projetos Satélite
+    external_projects: [],             // 🪐 Projetos Satélite
+    active_workspace: ''               // 📂 Workspace ativo (diretório do projeto alvo)
   })
 
   // ── Status de Ferramentas ──

@@ -78,6 +78,12 @@ func (a *App) initServices() error {
 	}
 	a.config = cfg
 
+	// 📂 Restaurar workspace salvo
+	if cfg.ActiveWorkspace != "" {
+		a.executor.Workspace = cfg.ActiveWorkspace
+		fmt.Printf("[Boot] 📂 Workspace restaurado: %s\n", cfg.ActiveWorkspace)
+	}
+
 	// 1. LM Studio
 	if cfg.LMStudioEnabled && cfg.LMStudioURL != "" {
 		a.lmStudio = provider.NewLMStudioClient(cfg.LMStudioURL)

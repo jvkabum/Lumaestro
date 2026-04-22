@@ -11,7 +11,7 @@ export function useSettingsMCP() {
 
   const addMCPServer = async () => {
     if (!store.mcpName || !store.mcpCommand) {
-      alert("Preencha o Nome e o Comando para o MCP")
+      store.notify("Preencha o Nome e o Comando para configurar o servidor MCP.", "error")
       return
     }
     store.installLogs = []
@@ -21,7 +21,7 @@ export function useSettingsMCP() {
     store.installStatus = "Instalação do MCP Finalizada."
     store.mcpName = ''
     store.mcpCommand = ''
-    alert("Retorno do Terminal:\n" + res)
+    store.notify("Configuração MCP: " + res, "success")
   }
 
   const listMCPServers = async () => {

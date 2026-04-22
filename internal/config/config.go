@@ -89,6 +89,9 @@ type Config struct {
 	GroqModel             string   `json:"groq_model"`        // Modelo padrão para Groq (ex: qwen/qwen3-32b)
 	ActiveGroqModels      []string `json:"active_groq_models"` // 🚀 Lista de modelos ativos na Frota de Resiliência Groq
 	ActiveGoogleModels    []string `json:"active_google_models"` // 🌟 Lista de modelos ativos na Frota de Resiliência Google
+
+	// 📂 Workspace Ativo (diretório de trabalho da IA)
+	ActiveWorkspace       string   `json:"active_workspace"` // Caminho absoluto do projeto alvo (vazio = raiz do Lumaestro)
 }
 
 // NormalizeProviders garante defaults seguros para o pool de provedores e motores.

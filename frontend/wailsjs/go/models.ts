@@ -132,6 +132,7 @@ export namespace config {
 	    groq_model: string;
 	    active_groq_models: string[];
 	    active_google_models: string[];
+	    active_workspace: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Config(source);
@@ -179,6 +180,7 @@ export namespace config {
 	        this.groq_model = source["groq_model"];
 	        this.active_groq_models = source["active_groq_models"];
 	        this.active_google_models = source["active_google_models"];
+	        this.active_workspace = source["active_workspace"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

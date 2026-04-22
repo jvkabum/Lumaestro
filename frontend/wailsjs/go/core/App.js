@@ -46,6 +46,10 @@ export function CheckConnection() {
   return window['go']['core']['App']['CheckConnection']();
 }
 
+export function ClearWorkspace() {
+  return window['go']['core']['App']['ClearWorkspace']();
+}
+
 export function ConsolidateChatKnowledge(arg1, arg2) {
   return window['go']['core']['App']['ConsolidateChatKnowledge'](arg1, arg2);
 }
@@ -170,6 +174,10 @@ export function GetToolsStatus() {
   return window['go']['core']['App']['GetToolsStatus']();
 }
 
+export function GetWorkspace() {
+  return window['go']['core']['App']['GetWorkspace']();
+}
+
 export function HandleNodeClick(arg1) {
   return window['go']['core']['App']['HandleNodeClick'](arg1);
 }
@@ -266,6 +274,10 @@ export function SelectDirectory() {
   return window['go']['core']['App']['SelectDirectory']();
 }
 
+export function SelectWorkspace() {
+  return window['go']['core']['App']['SelectWorkspace']();
+}
+
 export function SendAgentInput(arg1, arg2, arg3) {
   return window['go']['core']['App']['SendAgentInput'](arg1, arg2, arg3);
 }
@@ -296,6 +308,10 @@ export function SetExplorationMode(arg1) {
 
 export function SetPlanMode(arg1, arg2) {
   return window['go']['core']['App']['SetPlanMode'](arg1, arg2);
+}
+
+export function SetWorkspace(arg1) {
+  return window['go']['core']['App']['SetWorkspace'](arg1);
 }
 
 export function SetupTool(arg1) {
@@ -332,6 +348,10 @@ export function SyncAllNodes() {
 
 export function TestLMStudioModel(arg1, arg2) {
   return window['go']['core']['App']['TestLMStudioModel'](arg1, arg2);
+}
+
+export function ToggleProjectCodeRAG(arg1) {
+  return window['go']['core']['App']['ToggleProjectCodeRAG'](arg1);
 }
 
 export function TriggerReflection(arg1) {

@@ -52,26 +52,36 @@ export function useSettingsProjects() {
 
   const handleAddProject = async () => {
     if (!store.repoPathInput || !store.coreNodeInput) {
-      alert("Preencha todos os campos obrigatórios do Projeto Satélite.")
+      store.notify("Campos obrigatórios ausentes. Verifique o caminho e o núcleo radial do projeto.", "error")
       return
     }
-    store.repoStatusMsg = "Aguarde... Engajando Crawlers no Repositório (Isso pode demorar dependendo da codebase)..."
+    store.repoStatusMsg = "Aguarde... Engajando Crawlers no Repositório (isso pode demorar dependendo do tamanho da codebase)..."
     try {
+      console.log("[Projects] Tentando vincular:", store.repoPathInput)
       const res = await safeAddExternalProject(store.repoPathInput, store.coreNodeInput, store.includeCodeToggle)
+      
       if (res.success) {
-        alert("🪐 " + res.message)
-        const cfg = await safeGetConfig()
-        if (cfg) store.config = Object.assign({}, store.config, cfg)
+        console.log("[Projects] Sucesso:", res.message)
+        store.notify("🪐 Sinfonia sincronizada: Projeto Satélite integrado ao enxame.", "success")
+        
+        // Limpa os inputs imediatamente
         store.repoPathInput = ''
         store.coreNodeInput = ''
         store.includeCodeToggle = false
+
+        // Recarrega a configuração global para atualizar a lista na UI
+        const cfg = await safeGetConfig()
+        if (cfg) {
+          console.log("[Projects] Nova configuração carregada. Projetos:", cfg.external_projects?.length)
+          store.config = cfg
+        }
       } else {
-        alert("Erro: " + res.error)
+        console.error("[Projects] Falha na Órbita:", res.error)
+        store.notify("Falha na Órbita: " + res.error, "error")
       }
     } catch (e) {
-      const bridge = resolveBridge()
-      const hint = bridge ? 'bridge ok' : 'bridge indisponível (window.go não inicializado)'
-      alert("Falha Crítica ao vincular repositório: " + e + " | " + hint)
+      console.error("[Projects] Erro Crítico:", e)
+      store.notify("Erro Crítico ao vincular repositório: " + e, "error")
     }
     store.repoStatusMsg = ''
   }

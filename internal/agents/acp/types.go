@@ -54,6 +54,9 @@ type ACPExecutor struct {
 	// ✨ Motores de Elite (Lightning)
 	LStore         *lightning.DuckDBStore
 	RewardEngine   *lightning.RewardEngine
+
+	// 📂 Workspace Ativo (diretório de trabalho da IA, isolamento de projeto)
+	Workspace      string
 }
 
 // ACPSession representa a conexão JSON-RPC ativa com um Agent Server.

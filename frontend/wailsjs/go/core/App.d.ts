@@ -28,6 +28,8 @@ export function BindLightning(arg1:lightning.DuckDBStore):Promise<void>;
 
 export function CheckConnection():Promise<boolean>;
 
+export function ClearWorkspace():Promise<Record<string, string>>;
+
 export function ConsolidateChatKnowledge(arg1:string,arg2:string):Promise<string>;
 
 export function CreateAgent(arg1:string,arg2:string,arg3:string,arg4:number):Promise<string>;
@@ -90,6 +92,8 @@ export function GetSkeletalGraph():Promise<Record<string, any>>;
 
 export function GetToolsStatus():Promise<Record<string, boolean>>;
 
+export function GetWorkspace():Promise<Record<string, string>>;
+
 export function HandleNodeClick(arg1:string):Promise<void>;
 
 export function InstallTool(arg1:string):Promise<string>;
@@ -138,6 +142,8 @@ export function ScanVault():Promise<string>;
 
 export function SelectDirectory():Promise<string>;
 
+export function SelectWorkspace():Promise<Record<string, string>>;
+
 export function SendAgentInput(arg1:string,arg2:string,arg3:Array<Record<string, string>>):Promise<void>;
 
 export function SendMessageToSwarm(arg1:string,arg2:string):Promise<string>;
@@ -153,6 +159,8 @@ export function SetAutonomousMode(arg1:boolean):Promise<string>;
 export function SetExplorationMode(arg1:boolean):Promise<string>;
 
 export function SetPlanMode(arg1:string,arg2:boolean):Promise<boolean>;
+
+export function SetWorkspace(arg1:string):Promise<void>;
 
 export function SetupTool(arg1:string):Promise<string>;
 
@@ -171,6 +179,8 @@ export function SwitchIdentity(arg1:string,arg2:string):Promise<void>;
 export function SyncAllNodes():Promise<void>;
 
 export function TestLMStudioModel(arg1:string,arg2:string):Promise<Record<string, any>>;
+
+export function ToggleProjectCodeRAG(arg1:string):Promise<Record<string, any>>;
 
 export function TriggerReflection(arg1:string):Promise<string>;
 

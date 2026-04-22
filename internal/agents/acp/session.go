@@ -41,7 +41,11 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 	}
 	e.Mu.Unlock()
 
-	cwd, _ := os.Getwd()
+	// 📂 Workspace: Usa o diretório de projeto ativo, ou fallback para CWD do Lumaestro
+	cwd := e.Workspace
+	if cwd == "" {
+		cwd, _ = os.Getwd()
+	}
 	sessionHome := cwd
 	cfgLoaded, _ := config.Load()
 
@@ -116,7 +120,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		fmt.Printf("[ACP] Executando: %s %v\n", binaryPath, args)
 
 		cmd := exec.CommandContext(cmdCtx, binaryPath, args...)
-		cmd.Dir, _ = os.Getwd()
+		cmd.Dir = cwd
 		cmd.Env = os.Environ()
 
 		isUsingOAuth := true

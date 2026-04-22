@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -66,20 +67,27 @@ func (a *App) ScanVault() string {
 			fmt.Printf("[BACKEND] Aviso: Erro ao indexar docs do sistema: %v\n", err)
 		}
 
-		// 3. Indexar Repositórios Dinâmicos Importados e fazer Code Crawl
-		if len(a.config.ExternalProjects) > 0 {
-			fmt.Println("[BACKEND] Iniciando expansão radial (Projetos satélites)...")
-			err = a.crawler.IndexRepositories(a.ctx, a.config.ExternalProjects)
-			if err != nil {
-				fmt.Printf("[BACKEND] Erro ao sincronizar external projects: %v\n", err)
-			}
+		// 3. Indexar Repositórios Dinâmicos e o Workspace Ativo (Devorador de Código)
+		projectsToScan := append([]config.ProjectScan{}, a.config.ExternalProjects...)
+
+		// 🚀 INTEGRAÇÃO WORKSPACE: Se houver um workspace ativo, ele entra como prioridade no Devorador
+		if a.executor.Workspace != "" {
+			projectName := filepath.Base(a.executor.Workspace)
+			projectsToScan = append(projectsToScan, config.ProjectScan{
+				Path:        a.executor.Workspace,
+				CoreNode:    projectName,
+				IncludeCode: true, // Força o "Devorador de Código" no workspace
+			})
+			fmt.Printf("[Sync] 📂 Workspace '%s' adicionado à fila do Devorador de Código.\n", projectName)
 		}
 
-		// Silenciado para não sujar o Chat interativo
-		// runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
-		// 	"source":  "CRAWLER",
-		// 	"content": "🏖️ Sincronização semântica completa concluída com sucesso!",
-		// })
+		if len(projectsToScan) > 0 {
+			fmt.Println("[BACKEND] Iniciando expansão radial (Projetos satélites e Workspace)...")
+			err = a.crawler.IndexRepositories(a.ctx, projectsToScan)
+			if err != nil {
+				fmt.Printf("[BACKEND] Erro ao sincronizar projetos: %v\n", err)
+			}
+		}
 
 		// 3. Força a atualização visual de todos os nós (isolados e conectados)
 		os.Remove(".lumaestro_topology.json") // Invalida Topology Cache
@@ -128,6 +136,35 @@ func (a *App) AddExternalProject(path string, coreNode string, includeCode bool)
 	_ = a.ScanVault()
 
 	return map[string]interface{}{"success": true, "message": "Projetos satélite vinculados e auto-scan de gravidade acionado."}
+}
+
+// ToggleProjectCodeRAG alterna entre modo Documentação e Código Fonte para um repositório existente
+func (a *App) ToggleProjectCodeRAG(path string) map[string]interface{} {
+	cfg, err := config.Load()
+	if err != nil {
+		return map[string]interface{}{"success": false, "error": "Erro de config interno"}
+	}
+
+	found := false
+	for i, p := range cfg.ExternalProjects {
+		if p.Path == path {
+			cfg.ExternalProjects[i].IncludeCode = !p.IncludeCode
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return map[string]interface{}{"success": false, "error": "Projeto não encontrado"}
+	}
+
+	config.Save(*cfg)
+	a.config = cfg
+	
+	// Re-sincroniza o grafo para refletir a nova profundidade semântica
+	_ = a.ScanVault()
+
+	return map[string]interface{}{"success": true, "message": "Modo de análise do projeto atualizado."}
 }
 
 // GetExternalProjects retorna os repositórios em formato JSON para Renderização no frontend (Settings)

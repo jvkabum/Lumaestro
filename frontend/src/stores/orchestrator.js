@@ -41,6 +41,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   const isPlanMode = ref(false); // 🔒 Modo de segurança: leitura apenas
   const showPlanOverlay = ref(false); // 🖼️ Overlay dedicado para visualização de planos
   const subagents = ref(new Map()); // 🌳 Árvore de subagentes ativos {sessionId: {agentName, goal, status}}
+  const workspace = ref({ path: '', name: 'Lumaestro (Padrão)' }); // 📂 Workspace ativo
 
   const togglePlanMode = async (agent) => {
     isPlanMode.value = !isPlanMode.value;
@@ -98,12 +99,56 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     }
   };
 
+  // 📂 Workspace Management
+  const selectWorkspace = async () => {
+    try {
+      const result = await safeCall('main', 'SelectWorkspace');
+      if (result) {
+        workspace.value = result;
+        pushStatus(`📂 Projeto: ${result.name}`, 'status');
+      }
+    } catch (err) {
+      console.error('[Workspace] Erro ao selecionar:', err);
+    }
+  };
+
+  const clearWorkspace = async () => {
+    try {
+      const result = await safeCall('main', 'ClearWorkspace');
+      if (result) {
+        workspace.value = result;
+        pushStatus('📂 Workspace limpo. IA no modo Lumaestro.', 'status');
+      }
+    } catch (err) {
+      console.error('[Workspace] Erro ao limpar:', err);
+    }
+  };
+
+  const loadWorkspace = async () => {
+    try {
+      const result = await safeCall('main', 'GetWorkspace');
+      if (result) workspace.value = result;
+    } catch (err) {
+      console.error('[Workspace] Erro ao carregar:', err);
+    }
+  };
+
   const initListeners = () => {
     if (listenersInitialized.value) {
       console.log('[Store] Listeners já inicializados. Ignorando nova inscrição para evitar duplicidade.');
       return;
     }
     listenersInitialized.value = true;
+
+    // 📂 Carregar workspace salvo ao iniciar
+    loadWorkspace();
+
+    // 📂 Listener de mudança de Workspace
+    EventsOn('workspace:changed', (data) => {
+      if (data) {
+        workspace.value = { path: data.path || '', name: data.name || 'Lumaestro (Padrão)' };
+      }
+    });
 
     // 0. Sinal de Início do Motor (Recuperação de Sessão)
     EventsOn('agent:starting', (agent) => {
@@ -558,8 +603,9 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   return {
     messages, isThinking, isTerminalMode, isWeaving, activeAgent, runningSessions, pendingReview, modelStats,
     sessions, currentACPID, isSidebarOpen, currentStatus, isNavigating, currentStatusKind, statusTimeline, statusFilter,
-    isPlanMode, togglePlanMode, subagents, showPlanOverlay,
+    isPlanMode, togglePlanMode, subagents, showPlanOverlay, workspace,
     initListeners, ask, startSession, sendInput, submitReview, switchAgent, stopSession, forceUnlock,
-    fetchSessions, loadSession, newSession, toggleSidebar, clearStatusTimeline, sendSteeringHint
+    fetchSessions, loadSession, newSession, toggleSidebar, clearStatusTimeline, sendSteeringHint,
+    selectWorkspace, clearWorkspace, loadWorkspace
   };
 });

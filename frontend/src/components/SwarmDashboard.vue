@@ -1,6 +1,9 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { GetExecutiveSummary, GetPendingApprovals, ApproveAction, RejectAction, GetLightningStats, GetLatestSpans, ExportTelemetry, GetPromptCandidates, ApprovePromptVariant, ExportRLHFDataset } from '../../wailsjs/go/core/App'
+import { useSettingsStore } from '../stores/settings'
+
+const settings = useSettingsStore()
 
 const summary = ref({
   total_spent_cents: 0,
@@ -70,17 +73,17 @@ const handleReject = async (id) => {
 
 const handleExport = async () => {
   const result = await ExportTelemetry()
-  alert(result)
+  settings.notify("Telemetria exportada: " + result, "success")
 }
 
 const handleExportRLHF = async () => {
   const result = await ExportRLHFDataset()
-  alert(result)
+  settings.notify("Dataset RLHF gerado: " + result, "success")
 }
 
 const handleApproveVariant = async (id) => {
   const result = await ApprovePromptVariant(id)
-  alert(result)
+  settings.notify("Variante de Prompt ativada: " + result, "success")
   await loadDashboard()
 }
 

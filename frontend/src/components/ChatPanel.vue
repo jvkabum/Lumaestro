@@ -16,7 +16,7 @@ const emit = defineEmits(['toggle-minimize'])
 
 // --- Uso da Store (Pinia) ---
 const orchestrator = useOrchestratorStore()
-const settings = useSettingsStore()
+const settingsStore = useSettingsStore()
 const { messages, isThinking, isNavigating, isTerminalMode, activeAgent, runningSessions, pendingReview, modelStats } = storeToRefs(orchestrator)
 
 const getAgentStatusLabel = () => {
@@ -27,13 +27,13 @@ const getAgentStatusLabel = () => {
 
   // Se for LM Studio, checamos apenas se está habilitado
   if (agent === 'lmstudio') {
-    return (settings.config.lmstudio_enabled && settings.config.lmstudio_url) ? 'PRONTO' : 'OFFLINE'
+    return (settingsStore.config.lmstudio_enabled && settingsStore.config.lmstudio_url) ? 'PRONTO' : 'OFFLINE'
   }
 
   // Checa instalação e autenticação via status centralizado
-  const toolStatus = settings.status.tools[agent]
-  const authStatus = settings.status.tools[agent + '_auth']
-  const useKey = settings.config[`use_${agent}_api_key`]
+  const toolStatus = settingsStore.status.tools[agent]
+  const authStatus = settingsStore.status.tools[agent + '_auth']
+  const useKey = settingsStore.config[`use_${agent}_api_key`]
 
   if (!toolStatus) return 'NÃO INSTALADO'
   if (!useKey && !authStatus) return 'ERRO AUTH'
@@ -44,6 +44,7 @@ const getAgentStatusLabel = () => {
 // --- Estados Locais de UI ---
 const logContainer = ref(null)
 const showRawTerminal = ref(false)
+const showProjectDropdown = ref(false)
 
 // O Terminal Bruto (Raw) só deve abrir via botão ou comando explícito (/cmd)
 // para garantir que a experiência primária (Chat) não seja interrompida.
@@ -106,6 +107,19 @@ const sendChatMessage = async (payload) => {
   }
 }
 
+const handleSwitchProject = async (proj) => {
+  showProjectDropdown.value = false
+  const { SetWorkspace, GetWorkspace } = await import('../../wailsjs/go/core/App')
+  try {
+    await SetWorkspace(proj.path)
+    const updatedWs = await GetWorkspace()
+    orchestrator.workspace = updatedWs
+    settingsStore.notify(`🚀 Órbita alterada para: ${proj.core_node}`, "success")
+  } catch (err) {
+    settingsStore.notify(`❌ Falha na transição: ${err}`, "error")
+  }
+}
+
 const handleSessionEnded = (agent) => {
     console.log('[ChatPanel] Sessão encerrada:', agent)
 }
@@ -126,28 +140,57 @@ const handleSessionEnded = (agent) => {
     <PlanView />
 
     <header class="panel-header glass" :class="{ 'is-minimized': props.isMinimized }">
-      <div class="header-left" v-show="!props.isMinimized">
-        <span class="orchestra-icon">🎻</span>
-        <div class="header-titles">
-          <h2>MAESTRO</h2>
-          <span 
-            v-if="orchestrator.activeProfile" 
-            class="active-agent-badge" 
-            :class="orchestrator.activeProfile.name.toLowerCase()"
-          >
-            {{ orchestrator.activeProfile.name.toUpperCase() }}
-          </span>
-          <span v-else-if="orchestrator.isTerminalMode" class="active-agent-badge gemini">ACP ACTIVE</span>
-          <span v-else class="active-agent-badge standby">STANDBY</span>
-          
-          <!-- 📊 Badge de Cota Diária (Injetado via ACP Stats) -->
-          <div v-if="activeAgent" class="quota-badge glass" :title="modelStats.agent === activeAgent ? 'Performance e Uso do Modelo' : 'Sessão Ativa'">
-             <span class="quota-icon">⚡</span>
-             <span class="quota-value">{{ getAgentStatusLabel() }}</span>
+      <!-- 🚀 LADO ESQUERDO: Identidade e Status Compacto -->
+      <div class="header-section section-left" v-show="!props.isMinimized">
+        <div class="maestro-brand">
+          <span class="orchestra-icon">🎻</span>
+          <div class="brand-text">
+            <h2>MAESTRO</h2>
+            <div class="status-indicator">
+              <span class="status-led" :class="getAgentStatusLabel().toLowerCase() === 'pronto' ? 'led-ready' : 'led-busy'"></span>
+              <span class="status-label">{{ getAgentStatusLabel() }}</span>
+            </div>
+          </div>
+        </div>
+        <div v-if="orchestrator.activeProfile" class="agent-tag" :class="orchestrator.activeProfile.name.toLowerCase()">
+          {{ orchestrator.activeProfile.name.toUpperCase() }}
+        </div>
+      </div>
+
+      <!-- 🪐 CENTRO: Ilha Flutuante de Órbita -->
+      <div class="header-section section-center" v-show="!props.isMinimized">
+        <div class="workspace-island glass">
+          <span class="ws-icon" @click="orchestrator.selectWorkspace()" title="Escolher Nova Pasta...">📂</span>
+          <div class="ws-selector" @click="showProjectDropdown = !showProjectDropdown" title="Alternar entre Sistemas Solares">
+            <span class="ws-name">{{ orchestrator.workspace.name }}</span>
+            <span class="ws-arrow">▼</span>
+            
+            <Transition name="slide-up">
+              <div v-if="showProjectDropdown" class="orbit-dropdown glass" @click.stop>
+                <div class="dropdown-header">SISTEMAS EM ÓRBITA</div>
+                <div 
+                  v-for="proj in settingsStore.config.external_projects" 
+                  :key="proj.path" 
+                  class="orbit-item"
+                  :class="{ 'is-active': proj.path === orchestrator.workspace.path }"
+                  @click="handleSwitchProject(proj)"
+                >
+                  <span class="item-icon">🪐</span>
+                  <div class="item-info">
+                    <span class="item-name">{{ proj.core_node }}</span>
+                    <span class="item-path">{{ proj.path }}</span>
+                  </div>
+                </div>
+                <div class="dropdown-footer" @click="orchestrator.setView('repos'); showProjectDropdown = false">
+                  + GERENCIAR PROJETOS
+                </div>
+              </div>
+            </Transition>
           </div>
         </div>
       </div>
-      <div class="header-actions" :class="{ 'actions-vertical': props.isMinimized }">
+
+      <div class="header-section section-right" :class="{ 'actions-vertical': props.isMinimized }">
         <!-- Toggle Terminal View -->
         <button v-show="!props.isMinimized" @click="showRawTerminal = !showRawTerminal" class="action-btn" :class="{ 'btn-active': showRawTerminal }" title="Alternar Terminal Bruto">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
@@ -299,16 +342,16 @@ const handleSessionEnded = (agent) => {
 }
 
 .panel-header {
-  height: 64px;
-  min-height: 64px;
-  display: flex;
+  height: 70px;
+  display: grid;
+  grid-template-columns: 1fr 2fr 1fr;
   align-items: center;
-  justify-content: space-between;
   padding: 0 20px;
-  z-index: 10;
-  background: rgba(15, 23, 42, 0.7);
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(20px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 100;
+  position: relative;
 }
 
 /* Quando o painel está minimizado: header vira coluna vertical */
@@ -322,27 +365,79 @@ const handleSessionEnded = (agent) => {
 }
 
 
-.header-left { display: flex; align-items: center; gap: 14px; }
-.orchestra-icon { font-size: 1.2rem; filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.5)); }
-
-.header-titles h2 {
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 3px;
-  margin: 0;
-  color: #94a3b8;
+.header-section {
+  display: flex;
+  align-items: center;
 }
 
-.active-agent-badge {
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 1px;
-  padding: 2px 6px;
-  border-radius: 100px;
-  background: rgba(255, 255, 255, 0.05);
-  color: #64748b;
+.section-center {
+  justify-content: center;
+}
+
+.section-right {
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+/* 🎻 LADO ESQUERDO: Estilo Compacto */
+.maestro-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.orchestra-icon { font-size: 1.2rem; filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.5)); }
+
+.brand-text h2 {
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  margin: 0;
+  color: #fff;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   margin-top: 2px;
-  display: inline-block;
+}
+
+.status-led {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  box-shadow: 0 0 5px rgba(255,255,255,0.2);
+}
+
+.led-ready { background: #10b981; box-shadow: 0 0 8px #10b981; animation: led-pulse 2s infinite; }
+.led-busy { background: #f59e0b; box-shadow: 0 0 8px #f59e0b; }
+
+@keyframes led-pulse {
+  0% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.8); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.status-label {
+  font-size: 8px;
+  font-weight: 800;
+  color: #94a3b8;
+  letter-spacing: 0.5px;
+}
+
+.agent-tag {
+  margin-left: 12px;
+  font-size: 8px;
+  font-weight: 900;
+  padding: 1px 8px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.05);
+  color: #64748b;
+  border: 1px solid rgba(255,255,255,0.05);
+  height: 16px;
+  display: flex;
+  align-items: center;
 }
 
 .active-agent-badge.gemini { background: rgba(59, 130, 246, 0.1); color: #60a5fa; }
@@ -572,4 +667,184 @@ const handleSessionEnded = (agent) => {
   transform: translateY(10px);
 }
 
+/* 🪐 CENTRO: Ilha Flutuante de Órbita */
+.workspace-island {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 16px;
+  border-radius: 100px;
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+  transition: all 0.3s;
+}
+
+.workspace-island:hover {
+  background: rgba(30, 41, 59, 0.8);
+  border-color: rgba(168, 85, 247, 0.4);
+}
+
+.ws-icon { cursor: pointer; font-size: 14px; transition: transform 0.2s; }
+.ws-icon:hover { transform: scale(1.2); }
+
+.ws-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  position: relative;
+}
+
+.ws-name {
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.5px;
+}
+
+.ws-arrow { font-size: 8px; opacity: 0.5; }
+
+.ws-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 12px;
+  border-left: 1px solid rgba(255,255,255,0.1);
+}
+
+.tool-btn {
+  background: none; border: none; cursor: pointer; color: #fff; opacity: 0.6;
+  font-size: 12px; transition: all 0.2s;
+}
+
+.tool-btn:hover { opacity: 1; transform: scale(1.2); }
+.btn-clear { color: #ef4444; }
+
+.workspace-selector {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  position: relative;
+  padding: 2px 6px;
+  border-radius: 6px;
+  transition: background 0.2s;
+}
+
+.workspace-selector:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.dropdown-arrow {
+  font-size: 8px;
+  opacity: 0.5;
+  transition: transform 0.3s;
+}
+
+.workspace-selector:hover .dropdown-arrow {
+  opacity: 1;
+  transform: translateY(1px);
+}
+
+/* 🛰️ Orbit Dropdown Styles */
+.orbit-dropdown {
+  position: absolute;
+  top: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 280px;
+  background: rgba(15, 23, 42, 0.95) !important;
+  border: 1px solid rgba(168, 85, 247, 0.3) !important;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+  z-index: 1000;
+  overflow: hidden;
+  padding: 8px 0;
+}
+
+.dropdown-header {
+  font-size: 9px;
+  font-weight: 900;
+  color: #a855f7;
+  padding: 8px 16px;
+  letter-spacing: 2px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  margin-bottom: 4px;
+}
+
+.orbit-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.orbit-item:hover {
+  background: rgba(168, 85, 247, 0.1);
+}
+
+.orbit-item.is-active {
+  background: rgba(168, 85, 247, 0.15);
+  border-left: 3px solid #a855f7;
+}
+
+.item-icon {
+  font-size: 16px;
+}
+
+.item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.item-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.item-path {
+  font-size: 9px;
+  color: #94a3b8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dropdown-empty {
+  padding: 20px;
+  text-align: center;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.dropdown-footer {
+  margin-top: 4px;
+  padding: 10px;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 800;
+  color: #a855f7;
+  cursor: pointer;
+  background: rgba(168, 85, 247, 0.05);
+  transition: background 0.2s;
+}
+
+.dropdown-footer:hover {
+  background: rgba(168, 85, 247, 0.15);
+}
+
+/* Animação Slide Up */
+.slide-up-enter-active, .slide-up-leave-active {
+  transition: all 0.3s ease;
+}
+.slide-up-enter-from, .slide-up-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(10px);
+}
 </style>

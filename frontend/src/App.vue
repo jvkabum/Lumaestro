@@ -96,22 +96,32 @@ onMounted(async () => {
     currentView.value = view
   })
 
-  // Escuta os logs em tempo real
+  // ── Throttling de Logs para Performance ──
+  let logBuffer = []
+  const flushLogs = () => {
+    if (logBuffer.length === 0) return
+    state.logs.push(...logBuffer)
+    logBuffer = []
+    if (state.logs.length > 500) state.logs = state.logs.slice(-500)
+  }
+  setInterval(flushLogs, 200)
+
+  // Escuta os logs em tempo real com proteção de estouro
   EventsOn('agent:log', (log) => {
-    const lastLog = state.logs[state.logs.length - 1]
+    if (!log || !log.content) return
     
-    // Se for o Maestro e o último também for Maestro, anexa o texto (Streaming)
+    const lastLog = state.logs[state.logs.length - 1]
     if (log.source === 'MAESTRO' && lastLog && lastLog.source === 'MAESTRO') {
       lastLog.content += log.content
     } else {
-      state.logs.push(log)
+      logBuffer.push(log)
     }
   })
 
-  // Escuta os dados do Grafo (Nodes e Edges) em lote (Batch Sync)
+  // Escuta os dados do Grafo (Nodes e Edges) com verificação de nulidade
   EventsOn('graph:nodes:batch', (batchNodes) => {
-    // Proteção contra null para evitar travamento (forEach só roda se existir dado)
-    (batchNodes || []).forEach(node => {
+    if (!batchNodes || currentView.value !== 'orchestrator') return
+    batchNodes.forEach(node => {
       if (!state.nodes.find(n => n.id === node.id)) {
         state.nodes.push(node)
       }
@@ -119,20 +129,22 @@ onMounted(async () => {
   })
 
   EventsOn('graph:node', (node) => {
-    if (!node) return
+    if (!node || currentView.value !== 'orchestrator') return
     if (!state.nodes.find(n => n.id === node.id)) {
       state.nodes.push(node)
     }
   })
 
   EventsOn('graph:edge', (edge) => {
-    if (!edge) return
-    const s = edge.source.id || edge.source
-    const t = edge.target.id || edge.target
+    if (!edge || currentView.value !== 'orchestrator') return
+    const s = edge.source?.id || edge.source
+    const t = edge.target?.id || edge.target
+    if (!s || !t) return
+
     if (!state.edges.find(e => {
-      const es = e.source.id || e.source
-      const et = e.target.id || e.target
-      return (es === s && et === t) || (es === t && et === s) // Evita duplicatas bidirecionais se redundante
+      const es = e.source?.id || e.source
+      const et = e.target?.id || e.target
+      return (es === s && et === t) || (es === t && et === s)
     })) {
       state.edges.push(edge)
     }
