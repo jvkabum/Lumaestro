@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 )
 
 // JSONRPCHandler define como uma mensagem recebida deve ser tratada.
@@ -17,20 +18,24 @@ type JSONRPCHandler interface {
 // StartJSONRPCListener lê mensagens no formato ACP oficial (ndJSON).
 // Cada mensagem JSON-RPC é uma única linha terminada com '\n'.
 func StartJSONRPCListener(r io.Reader, handler JSONRPCHandler) {
-	scanner := bufio.NewScanner(r)
+	reader := bufio.NewReaderSize(r, 1024*1024) // Buffer inicial de 1MB
 	
-	// Buffer de 1MB para lidar com respostas RAG/Código muito longas (Original DNA)
-	buf := make([]byte, 1024*1024)
-	scanner.Buffer(buf, 1024*1024)
+	for {
+		line, err := reader.ReadBytes('\n')
+		if err != nil {
+			if err != io.EOF {
+				fmt.Printf("!! Erro no Reader do Listener ACP: %v\n", err)
+			}
+			break
+		}
 
-	for scanner.Scan() {
-		line := scanner.Bytes()
+		line = []byte(strings.TrimSpace(string(line)))
 		if len(line) == 0 {
 			continue
 		}
 
 		// Log bruto para diagnóstico (Original DNA)
-		fmt.Printf("<< [STDOUT RAW] %s\n", string(line))
+		// fmt.Printf("<< [STDOUT RAW] %s\n", string(line))
 
 		var msg JSONRPCMessage
 		if err := json.Unmarshal(line, &msg); err != nil {
@@ -48,9 +53,5 @@ func StartJSONRPCListener(r io.Reader, handler JSONRPCHandler) {
 		} else if msg.ID != nil {
 			handler.HandleResponse(msg.ID, msg.Result, msg.Error)
 		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		fmt.Printf("!! Erro no Scanner do Listener ACP: %v\n", err)
 	}
 }

@@ -21,303 +21,343 @@ import (
 // StartSession inicia o Gemini CLI com a flag --acp. Se loadSessionID for fornecido, tenta restaurar essa sessão em vez de criar uma nova.
 func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID string, loadSessionID string, agentID uuid.UUID, issueID *uuid.UUID, planMode bool, parent *ACPSession) error {
 	e.Mu.Lock()
-	defer e.Mu.Unlock()
 	e.Ctx = ctx
 	e.Tools.Ctx = ctx
 
+	var session *ACPSession
+	var isHotSwap bool
+
 	if s, ok := e.ActiveSessions[sessionID]; ok {
-		if s.Cancel != nil {
-			s.Cancel()
-		}
-		delete(e.ActiveSessions, sessionID)
-	}
-
-	cmdCtx, cancel := context.WithCancel(ctx)
-	cfgLoaded, _ := config.Load()
-
-	// Resolver binário de forma robusta
-	binaryPath := agent
-	approvalMode := "yolo"
-	if planMode {
-		approvalMode = "plan"
-	}
-	args := []string{"--acp", "--approval-mode=" + approvalMode}
-
-	// 💎 Injeção Dinâmica de Modelo (Gemini)
-	if agent == "gemini" && cfgLoaded != nil && cfgLoaded.GeminiModel != "" {
-		if !strings.HasPrefix(cfgLoaded.GeminiModel, "auto-") {
-			args = append(args, "--model="+cfgLoaded.GeminiModel)
-			fmt.Printf("[ACP] 🎯 Forçando modelo Gemini: %s\n", cfgLoaded.GeminiModel)
+		if s.Cmd != nil && s.Cmd.ProcessState == nil {
+			isHotSwap = true
+			session = s
+			fmt.Printf("[ACP] ♻️ Hot Swap: Reutilizando processo CLI nativo para o agente: %s\n", sessionID)
+		} else {
+			if s.Cancel != nil {
+				s.Cancel()
+			}
+			delete(e.ActiveSessions, sessionID)
 		}
 	}
-
-	if agent == "lmstudio" {
-		binaryPath = "go"
-		args = []string{"run", "./cmd/lmstudio-acp"}
-	}
-
-	if agent == "native" {
-		binaryPath = "go"
-		args = []string{"run", "./cmd/lmstudio-acp"}
-	}
-
-	// 1. Tenta binário global (LookPath)
-	if globalPath, errGL := exec.LookPath(binaryPath); errGL == nil {
-		binaryPath = globalPath
-	} else {
-		// 2. Fallback para node_modules local (estilo dev)
-		cwd, _ := os.Getwd()
-		binaryPath = filepath.Join(cwd, "node_modules", ".bin", binaryPath+".cmd")
-	}
-
-	// [TRUQUE DE SINFONIA] Se estivermos no Windows e for o Gemini, o .cmd (tanto local quanto global)
-	// costuma engolir o Stdin em Pipes IPC, quebrando o JSON-RPC. Precisamos bypassar rodando via 'node'.
-	if agent == "gemini" && strings.HasSuffix(binaryPath, ".cmd") {
-		baseDir := filepath.Dir(binaryPath)
-		jsPathGlobalDist := filepath.Join(baseDir, "node_modules", "@google", "gemini-cli", "dist", "index.js")
-		jsPathLocalDist := filepath.Join(baseDir, "..", "@google", "gemini-cli", "dist", "index.js")
-		jsPathGlobalBundle := filepath.Join(baseDir, "node_modules", "@google", "gemini-cli", "bundle", "gemini.js")
-		jsPathLocalBundle := filepath.Join(baseDir, "..", "@google", "gemini-cli", "bundle", "gemini.js")
-
-		jsTarget := ""
-		if _, err := os.Stat(jsPathLocalBundle); err == nil {
-			jsTarget = jsPathLocalBundle
-		} else if _, err := os.Stat(jsPathGlobalBundle); err == nil {
-			jsTarget = jsPathGlobalBundle
-		} else if _, err := os.Stat(jsPathLocalDist); err == nil {
-			jsTarget = jsPathLocalDist
-		} else if _, err := os.Stat(jsPathGlobalDist); err == nil {
-			jsTarget = jsPathGlobalDist
-		}
-
-		if jsTarget != "" {
-			binaryPath = "node"
-			args = []string{"--no-warnings=DEP0040", jsTarget, "--acp", "--approval-mode=" + approvalMode}
-			fmt.Printf("[ACP] Bypass CMD ativado: Rodando diretamente Node em %s (Modo: %s)\n", jsTarget, approvalMode)
-		}
-	}
-
-	if absPath, errAbs := filepath.Abs(binaryPath); errAbs == nil && binaryPath != "node" && binaryPath != "go" {
-		binaryPath = absPath
-	}
-
-	fmt.Printf("[ACP] Executando: %s %v\n", binaryPath, args)
-
-	cmd := exec.CommandContext(cmdCtx, binaryPath, args...)
-	cmd.Dir, _ = os.Getwd()
-	cmd.Env = os.Environ()
+	e.Mu.Unlock()
 
 	cwd, _ := os.Getwd()
 	sessionHome := cwd
-	isUsingOAuth := true
-	if cfgLoaded != nil && cfgLoaded.UseGeminiAPIKey {
-		isUsingOAuth = false
-	}
+	cfgLoaded, _ := config.Load()
 
-	// 🌐 Lógica de Autenticação Híbrida (Lumaestro 2.0)
-	userHome, _ := os.UserHomeDir()
-	globalGeminiHome := filepath.Join(userHome, ".gemini")
+	if !isHotSwap {
+		cmdCtx, cancel := context.WithCancel(ctx)
 
-	if isUsingOAuth {
-		if agent == "gemini" {
-			// Motores principais: Usar o Home do usuário onde reside a pasta .gemini
-			sessionHome = userHome
-			fmt.Printf("[ACP] 🌐 Motor Central: Usando Perfil em %s (Base .gemini)\n", sessionHome)
-		} else {
-			// Contas Gemini do Projeto/Sub-agentes: Tentar local primeiro
-			if _, err := os.Stat(filepath.Join(cwd, ".gemini")); err == nil {
-				sessionHome = cwd
-				fmt.Printf("[ACP] 📂 Conta de Projeto: Usando Login Local em %s\n", sessionHome)
-			} else {
-				sessionHome = globalGeminiHome // Fallback se não houver isolamento local
+		// Resolver binário de forma robusta
+		binaryPath := agent
+		approvalMode := "yolo"
+		if planMode {
+			approvalMode = "plan"
+		}
+		args := []string{"--acp", "--approval-mode=" + approvalMode}
+
+		// 💎 Injeção Dinâmica de Modelo (Gemini)
+		if agent == "gemini" && cfgLoaded != nil && cfgLoaded.GeminiModel != "" {
+			if !strings.HasPrefix(cfgLoaded.GeminiModel, "auto-") {
+				args = append(args, "--model="+cfgLoaded.GeminiModel)
+				fmt.Printf("[ACP] 🎯 Forçando modelo Gemini: %s\n", cfgLoaded.GeminiModel)
 			}
 		}
 
-		// Se houver uma conta específica ATIVA no pool (Identidades), ela tem prioridade total
-		if cfgLoaded != nil {
-			for _, id := range cfgLoaded.Identities {
-				if id.Provider == "google" && id.Active && id.HomeDir != "" {
-					sessionHome = id.HomeDir
-					fmt.Printf("[ACP] 👤 Identidade Google Ativa: Direcionando para %s\n", sessionHome)
-					break
+		if agent == "lmstudio" {
+			binaryPath = "go"
+			args = []string{"run", "./cmd/lmstudio-acp"}
+		}
+
+		if agent == "native" {
+			binaryPath = "go"
+			args = []string{"run", "./cmd/lmstudio-acp"}
+		}
+
+		// 1. Tenta binário global (LookPath)
+		if globalPath, errGL := exec.LookPath(binaryPath); errGL == nil {
+			binaryPath = globalPath
+		} else {
+			// 2. Fallback para node_modules local (estilo dev)
+			binaryPath = filepath.Join(cwd, "node_modules", ".bin", binaryPath+".cmd")
+		}
+
+		// [TRUQUE DE SINFONIA] Se estivermos no Windows e for o Gemini, o .cmd (tanto local quanto global)
+		// costuma engolir o Stdin em Pipes IPC, quebrando o JSON-RPC. Precisamos bypassar rodando via 'node'.
+		if agent == "gemini" && strings.HasSuffix(binaryPath, ".cmd") {
+			baseDir := filepath.Dir(binaryPath)
+			jsPathGlobalDist := filepath.Join(baseDir, "node_modules", "@google", "gemini-cli", "dist", "index.js")
+			jsPathLocalDist := filepath.Join(baseDir, "..", "@google", "gemini-cli", "dist", "index.js")
+			jsPathGlobalBundle := filepath.Join(baseDir, "node_modules", "@google", "gemini-cli", "bundle", "gemini.js")
+			jsPathLocalBundle := filepath.Join(baseDir, "..", "@google", "gemini-cli", "bundle", "gemini.js")
+
+			jsTarget := ""
+			if _, err := os.Stat(jsPathLocalBundle); err == nil {
+				jsTarget = jsPathLocalBundle
+			} else if _, err := os.Stat(jsPathGlobalBundle); err == nil {
+				jsTarget = jsPathGlobalBundle
+			} else if _, err := os.Stat(jsPathLocalDist); err == nil {
+				jsTarget = jsPathLocalDist
+			} else if _, err := os.Stat(jsPathGlobalDist); err == nil {
+				jsTarget = jsPathGlobalDist
+			}
+
+			if jsTarget != "" {
+				binaryPath = "node"
+				args = []string{"--no-warnings=DEP0040", jsTarget, "--acp", "--approval-mode=" + approvalMode}
+				fmt.Printf("[ACP] Bypass CMD ativado: Rodando diretamente Node em %s (Modo: %s)\n", jsTarget, approvalMode)
+			}
+		}
+
+		if absPath, errAbs := filepath.Abs(binaryPath); errAbs == nil && binaryPath != "node" && binaryPath != "go" {
+			binaryPath = absPath
+		}
+
+		fmt.Printf("[ACP] Executando: %s %v\n", binaryPath, args)
+
+		cmd := exec.CommandContext(cmdCtx, binaryPath, args...)
+		cmd.Dir, _ = os.Getwd()
+		cmd.Env = os.Environ()
+
+		isUsingOAuth := true
+		if cfgLoaded != nil && cfgLoaded.UseGeminiAPIKey {
+			isUsingOAuth = false
+		}
+
+		// 🌐 Lógica de Autenticação Híbrida (Lumaestro 2.0)
+		userHome, _ := os.UserHomeDir()
+		globalGeminiHome := filepath.Join(userHome, ".gemini")
+
+		if isUsingOAuth {
+			if agent == "gemini" {
+				// Motores principais: Usar o Home do usuário onde reside a pasta .gemini
+				sessionHome = userHome
+				fmt.Printf("[ACP] 🌐 Motor Central: Usando Perfil em %s (Base .gemini)\n", sessionHome)
+			} else {
+				// Contas Gemini do Projeto/Sub-agentes: Tentar local primeiro
+				if _, err := os.Stat(filepath.Join(cwd, ".gemini")); err == nil {
+					sessionHome = cwd
+					fmt.Printf("[ACP] 📂 Conta de Projeto: Usando Login Local em %s\n", sessionHome)
+				} else {
+					sessionHome = globalGeminiHome // Fallback se não houver isolamento local
+				}
+			}
+
+			// Se houver uma conta específica ATIVA no pool (Identidades), ela tem prioridade total
+			if cfgLoaded != nil {
+				for _, id := range cfgLoaded.Identities {
+					if id.Provider == "google" && id.Active && id.HomeDir != "" {
+						sessionHome = id.HomeDir
+						fmt.Printf("[ACP] 👤 Identidade Google Ativa: Direcionando para %s\n", sessionHome)
+						break
+					}
 				}
 			}
 		}
-	}
 
-	cmd.Env = append(cmd.Env, "GEMINI_CLI_HOME="+sessionHome)
-	if agent == "lmstudio" && cfgLoaded != nil {
-		cmd.Env = append(cmd.Env, "LUMAESTRO_LMSTUDIO_URL="+cfgLoaded.LMStudioURL)
-		cmd.Env = append(cmd.Env, "LUMAESTRO_LMSTUDIO_MODEL="+cfgLoaded.LMStudioModel)
-	}
-
-	if agent == "native" {
-		// No modo Cloud-Local, o agente 'native' (chat) é desativado para economizar VRAM.
-		// O usuário deve usar Gemini ou Claude para o chat/ACP.
-		return fmt.Errorf("o motor de chat nativo (8087) foi desativado em favor do modo Híbrido Cloud-Local. Use Gemini ou Claude")
-	}
-
-	cmd.Env = append(cmd.Env, "GEMINI_TELEMETRY_ENABLED=true")
-	cmd.Env = append(cmd.Env, "GEMINI_TELEMETRY_TARGET=local")
-	diagLog := filepath.Join(sessionHome, "gemini-telemetry.json")
-	cmd.Env = append(cmd.Env, "GEMINI_TELEMETRY_OUTFILE="+diagLog)
-
-	if cfgLoaded != nil {
-		// 🔑 Injeção de Chave de API apenas se o usuário explicitamente optou por este modo
-		if agent == "gemini" && cfgLoaded.UseGeminiAPIKey && cfgLoaded.GeminiAPIKey != "" {
-			apiKey := cfgLoaded.GetActiveGeminiKey()
-			cmd.Env = append(cmd.Env, "GOOGLE_API_KEY="+apiKey)
-			cmd.Env = append(cmd.Env, "GEMINI_API_KEY="+apiKey)
-			fmt.Printf("[ACP] 🔑 Chave de API ativada via Env (Pool Index: %d)\n", cfgLoaded.GeminiKeyIndex)
+		cmd.Env = append(cmd.Env, "GEMINI_CLI_HOME="+sessionHome)
+		if agent == "lmstudio" && cfgLoaded != nil {
+			cmd.Env = append(cmd.Env, "LUMAESTRO_LMSTUDIO_URL="+cfgLoaded.LMStudioURL)
+			cmd.Env = append(cmd.Env, "LUMAESTRO_LMSTUDIO_MODEL="+cfgLoaded.LMStudioModel)
 		}
-		if agent == "claude" && cfgLoaded.ClaudeAPIKey != "" {
-			cmd.Env = append(cmd.Env, "ANTHROPIC_API_KEY="+cfgLoaded.ClaudeAPIKey)
-		}
-	}
 
-	if agentID != uuid.Nil {
-		var secrets []db.AgentSecret
-		if err := db.InstanceDB.Where("agent_id = ?", agentID).Find(&secrets).Error; err == nil {
-			for _, s := range secrets {
-				cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", s.Key, s.Value))
+		if agent == "native" {
+			// No modo Cloud-Local, o agente 'native' (chat) é desativado para economizar VRAM.
+			// O usuário deve usar Gemini ou Claude para o chat/ACP.
+			return fmt.Errorf("o motor de chat nativo (8087) foi desativado em favor do modo Híbrido Cloud-Local. Use Gemini ou Claude")
+		}
+
+		cmd.Env = append(cmd.Env, "GEMINI_TELEMETRY_ENABLED=true")
+		cmd.Env = append(cmd.Env, "GEMINI_TELEMETRY_TARGET=local")
+		diagLog := filepath.Join(sessionHome, "gemini-telemetry.json")
+		cmd.Env = append(cmd.Env, "GEMINI_TELEMETRY_OUTFILE="+diagLog)
+
+		if cfgLoaded != nil {
+			// 🔑 Injeção de Chave de API apenas se o usuário explicitamente optou por este modo
+			if agent == "gemini" && cfgLoaded.UseGeminiAPIKey && cfgLoaded.GeminiAPIKey != "" {
+				apiKey := cfgLoaded.GetActiveGeminiKey()
+				cmd.Env = append(cmd.Env, "GOOGLE_API_KEY="+apiKey)
+				cmd.Env = append(cmd.Env, "GEMINI_API_KEY="+apiKey)
+				fmt.Printf("[ACP] 🔑 Chave de API ativada via Env (Pool Index: %d)\n", cfgLoaded.GeminiKeyIndex)
+			}
+			if agent == "claude" && cfgLoaded.ClaudeAPIKey != "" {
+				cmd.Env = append(cmd.Env, "ANTHROPIC_API_KEY="+cfgLoaded.ClaudeAPIKey)
 			}
 		}
-	}
 
-	rolloutID := "roll-" + uuid.NewString()
-	attemptID := "att-1"
-	cmd.Env = append(cmd.Env, "LIGHTNING_ROLLOUT_ID="+rolloutID)
-	cmd.Env = append(cmd.Env, "LIGHTNING_ATTEMPT_ID="+attemptID)
+		if agentID != uuid.Nil {
+			var secrets []db.AgentSecret
+			if err := db.InstanceDB.Where("agent_id = ?", agentID).Find(&secrets).Error; err == nil {
+				for _, s := range secrets {
+					cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", s.Key, s.Value))
+				}
+			}
+		}
 
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		cancel()
-		return err
-	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		cancel()
-		return err
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		cancel()
-		return err
-	}
+		rolloutID := "roll-" + uuid.NewString()
+		attemptID := "att-1"
+		cmd.Env = append(cmd.Env, "LIGHTNING_ROLLOUT_ID="+rolloutID)
+		cmd.Env = append(cmd.Env, "LIGHTNING_ATTEMPT_ID="+attemptID)
 
-	if err := cmd.Start(); err != nil {
-		cancel()
-		return fmt.Errorf("falha ao iniciar %s no modo ACP: %v", agent, err)
-	}
+		stdin, err := cmd.StdinPipe()
+		if err != nil {
+			cancel()
+			return err
+		}
+		stdout, err := cmd.StdoutPipe()
+		if err != nil {
+			cancel()
+			return err
+		}
+		stderr, err := cmd.StderrPipe()
+		if err != nil {
+			cancel()
+			return err
+		}
 
-	session := &ACPSession{
-		ID:             sessionID,
-		ACPSessID:      uuid.NewString(), // Geração de ID interno para o protocolo
-		AgentName:      agent,
-		Cmd:            cmd,
-		Stdin:          stdin,
-		Cancel:         cancel,
-		Ctx:            cmdCtx,
-		initDone:       make(chan struct{}, 1),
-		SteeringChan:   make(chan string, 5),
-		AgentID:        agentID,
-		CurrentIssueID: issueID,
-		RolloutID:      rolloutID,
-		AttemptID:      attemptID,
-		PlanMode:       planMode,
-		Subagents:      make(map[string]*ACPSession),
-	}
+		if err := cmd.Start(); err != nil {
+			cancel()
+			return fmt.Errorf("falha ao iniciar %s no modo ACP: %v", agent, err)
+		}
 
-	if parent != nil {
-		session.ParentSessionID = parent.ID
-		parent.SubagentMu.Lock()
-		parent.Subagents[sessionID] = session
-		parent.SubagentMu.Unlock()
-		fmt.Printf("[Subagent] 🌳 Sessão %s vinculada ao pai: %s\n", sessionID, parent.ID)
-	}
+		session = &ACPSession{
+			ID:             sessionID,
+			ACPSessID:      "",               // Aguarda o ID real retornado pelo comando 'newSession'
+			AgentName:      agent,
+			Cmd:            cmd,
+			Stdin:          stdin,
+			Cancel:         cancel,
+			Ctx:            cmdCtx,
+			initDone:       make(chan struct{}, 1),
+			SteeringChan:   make(chan string, 5),
+			AgentID:        agentID,
+			CurrentIssueID: issueID,
+			RolloutID:      rolloutID,
+			AttemptID:      attemptID,
+			PlanMode:       planMode,
+			Subagents:      make(map[string]*ACPSession),
+		}
 
-	e.ActiveSessions[sessionID] = session
+		if parent != nil {
+			session.ParentSessionID = parent.ID
+			parent.SubagentMu.Lock()
+			parent.Subagents[sessionID] = session
+			parent.SubagentMu.Unlock()
+			fmt.Printf("[Subagent] 🌳 Sessão %s vinculada ao pai: %s\n", sessionID, parent.ID)
+		}
 
-	// 📡 Monitor de Steering: Escuta dicas de direcionamento enquanto a sessão está ativa
-	go func(s *ACPSession) {
-		for {
-			select {
-			case hint, ok := <-s.SteeringChan:
-				if !ok { return }
-				fmt.Printf("[Steering] ⚡ Recebido hint para %s: %s\n", s.ID, hint)
-				
-				// Emite log para a UI para feedback visual imediato
+		e.Mu.Lock()
+		e.ActiveSessions[sessionID] = session
+		e.Mu.Unlock()
+
+		// 📡 Monitor de Steering: Escuta dicas de direcionamento enquanto a sessão está ativa
+		go func(s *ACPSession) {
+			for {
+				select {
+				case hint, ok := <-s.SteeringChan:
+					if !ok { return }
+					fmt.Printf("[Steering] ⚡ Recebido hint para %s: %s\n", s.ID, hint)
+					
+					// Emite log para a UI para feedback visual imediato
+					e.LogChan <- ExecutionLog{
+						Source:  "SYSTEM",
+						Content: fmt.Sprintf("⚡ Direcionamento: %s", hint),
+						Type:    "system",
+					}
+					
+					// TODO: Se o binário suportar sinal de steering (v0.37+), enviar aqui.
+					// Por enquanto, o log sistêmico e o re-prompting manual no próximo turno 
+					// servem como fallback estável.
+					
+				case <-s.Ctx.Done():
+					return // Encerra monitor quando o processo morre
+				}
+			}
+		}(session)
+
+		utils.SafeEmit(e.Ctx, "agent:starting", agent)
+
+		go e.runRPCListener(session, stdout)
+		go e.runStderrMonitor(session, stderr)
+
+		go func() {
+			errWait := cmd.Wait()
+
+			e.Mu.Lock()
+			currentSession, isCurrentlyActive := e.ActiveSessions[sessionID]
+			stillActive := isCurrentlyActive && currentSession.Cmd == cmd
+			if stillActive {
+				delete(e.ActiveSessions, sessionID)
+			}
+			e.Mu.Unlock()
+
+			if errWait != nil && stillActive {
+				if cmdCtx.Err() == nil {
+					e.LogChan <- ExecutionLog{
+						Source:  "ERROR",
+						Content: fmt.Sprintf("⚠️ Sinfonia interrompida abruptamente: %v", errWait),
+					}
+				}
+			}
+
+			if stillActive {
+				fmt.Printf("[ACP] Sessão processo OS %s encerrada.\n", agent)
+				utils.SafeEmit(e.Ctx, "terminal:closed", agent)
 				e.LogChan <- ExecutionLog{
 					Source:  "SYSTEM",
-					Content: fmt.Sprintf("⚡ Direcionamento: %s", hint),
-					Type:    "system",
+					Content: "Sessão ACP " + agent + " encerrada do sistema.",
 				}
-				
-				// TODO: Se o binário suportar sinal de steering (v0.37+), enviar aqui.
-				// Por enquanto, o log sistêmico e o re-prompting manual no próximo turno 
-				// servem como fallback estável.
-				
-			case <-s.Ctx.Done():
-				return // Encerra monitor quando o processo morre
 			}
-		}
-	}(session)
+		}()
 
-	utils.SafeEmit(e.Ctx, "agent:starting", agent)
-
-	go e.runRPCListener(session, stdout)
-	go e.runStderrMonitor(session, stderr)
-
-	time.Sleep(3500 * time.Millisecond)
-
-	e.SendRPC(session, JSONRPCMessage{
-		JSONRPC: JSONRPCVersion,
-		ID:      e.getNextID(),
-		Method:  "initialize",
-		Params:  json.RawMessage(`{"protocolVersion":1,"clientInfo":{"name":"Lumaestro","version":"2.0.0"},"clientCapabilities":{"fs":{"readTextFile":true,"writeTextFile":true}}}`),
-	})
-
-	select {
-	case <-session.initDone:
-		fmt.Println("[ACP] Estágio 1 (initialize) concluído.")
-	case <-time.After(60 * time.Second):
-		return fmt.Errorf("timeout no 'initialize' do Gemini (API instável)")
-	}
-
-	methodId := "oauth-personal"
-	shouldAuthenticate := true
-
-	if agent == "lmstudio" || agent == "native" {
-		methodId = "lmstudio-local"
-	} else if cfgLoaded != nil && cfgLoaded.UseGeminiAPIKey {
-		methodId = "gemini-api-key"
-	} else {
-		// 🌐 Lógica de Silêncio: Se já houver credenciais OAuth, não pede login de novo
-		methodId = "oauth-personal" // Força o ID correto para modo login
-		userHome, _ := os.UserHomeDir()
-		credsPath := filepath.Join(userHome, ".gemini", "oauth_creds.json")
-		if _, err := os.Stat(credsPath); err == nil {
-			fmt.Printf("[ACP] 🛡️ Credenciais OAuth detectadas em %s. Pulando login redundante.\n", credsPath)
-			shouldAuthenticate = false
-		}
-	}
-
-	if shouldAuthenticate {
+		initID := e.getNextID()
 		e.SendRPC(session, JSONRPCMessage{
 			JSONRPC: JSONRPCVersion,
-			ID:      e.getNextID(),
-			Method:  "authenticate",
-			Params:  json.RawMessage(`{"methodId":"` + methodId + `"}`),
+			ID:      initID,
+			Method:  "initialize",
+			Params:  json.RawMessage(`{"protocolVersion":1,"clientInfo":{"name":"Lumaestro","version":"2.0.0"},"clientCapabilities":{"fs":{"readTextFile":true,"writeTextFile":true}}}`),
 		})
 
-		select {
-		case <-session.initDone:
+		if _, err := e.waitForResponse(initID, 60*time.Second); err != nil {
+			return fmt.Errorf("timeout/erro no 'initialize' do Gemini: %v", err)
+		}
+		fmt.Println("[ACP] Estágio 1 (initialize) concluído.")
+
+		methodId := ""
+		shouldAuthenticate := true
+		if agent == "claude" {
+			methodId = "claude-api-key"
+		} else if agent == "lmstudio" || agent == "native" {
+			methodId = "lmstudio-local"
+		} else if cfgLoaded != nil && cfgLoaded.UseGeminiAPIKey {
+			methodId = "gemini-api-key"
+		} else {
+			// 🌐 Lógica de Silêncio: Se já houver credenciais OAuth, não pede login de novo
+			methodId = "oauth-personal" // Força o ID correto para modo login
+			userHome, _ := os.UserHomeDir()
+			credsPath := filepath.Join(userHome, ".gemini", "oauth_creds.json")
+			if _, err := os.Stat(credsPath); err == nil {
+				fmt.Printf("[ACP] 🛡️ Credenciais OAuth detectadas em %s. Pulando login redundante.\n", credsPath)
+				shouldAuthenticate = false
+			}
+		}
+
+		if shouldAuthenticate {
+			authID := e.getNextID()
+			e.SendRPC(session, JSONRPCMessage{
+				JSONRPC: JSONRPCVersion,
+				ID:      authID,
+				Method:  "authenticate",
+				Params:  json.RawMessage(`{"methodId":"` + methodId + `"}`),
+			})
+			if _, err := e.waitForResponse(authID, 60*time.Second); err != nil {
+				return fmt.Errorf("timeout/erro no 'authenticate': %v", err)
+			}
 			fmt.Println("[ACP] Estágio 2 (authenticate) concluído.")
-		case <-time.After(60 * time.Second):
-			return fmt.Errorf("timeout no 'authenticate' do Gemini (Autenticação lenta)")
 		}
 	}
 
+	var sessionCreationID int
 	if loadSessionID != "" {
 		targetID := loadSessionID
 		if loadSessionID == "LATEST" {
@@ -333,90 +373,69 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		if targetID != "" {
 			errLoad := e.LoadSession(session, targetID)
 			if errLoad == nil {
-				select {
-				case session.initDone <- struct{}{}:
-				default:
-				}
 				fmt.Printf("[ACP] Sessão anterior (%s) restaurada com sucesso!\n", targetID)
 			} else {
 				fmt.Printf("[ACP] Erro ao carregar sessão anterior (tentando nova): %v\n", errLoad)
 				targetID = ""
+				session.ACPSessID = "" // Limpa o ID inválido
 			}
 		}
 
 		if targetID == "" {
+			sessionCreationID = e.getNextID()
 			e.SendRPC(session, JSONRPCMessage{
 				JSONRPC: JSONRPCVersion,
-				ID:      e.getNextID(),
+				ID:      sessionCreationID,
 				Method:  "session/new",
 				Params:  json.RawMessage(`{"cwd":"` + strings.ReplaceAll(cwd, "\\", "\\\\") + `","mcpServers":[]}`),
 			})
 		}
 	} else {
 		// Modo padrão: Criar nova se não houver flag de restauração
+		sessionCreationID = e.getNextID()
 		e.SendRPC(session, JSONRPCMessage{
 			JSONRPC: JSONRPCVersion,
-			ID:      e.getNextID(),
+			ID:      sessionCreationID,
 			Method:  "session/new",
 			Params:  json.RawMessage(`{"cwd":"` + strings.ReplaceAll(cwd, "\\", "\\\\") + `","mcpServers":[]}`),
 		})
 	}
 
-	select {
-	case <-session.initDone:
+	if sessionCreationID != 0 {
+		if msg, err := e.waitForResponse(sessionCreationID, 60*time.Second); err != nil {
+			return fmt.Errorf("timeout/erro no estágio 3 do Gemini (Criação de sessão lenta): %v", err)
+		} else {
+			var response map[string]interface{}
+			if json.Unmarshal(msg.Result, &response) == nil && response != nil {
+				if sessID, ok := response["sessionId"].(string); ok {
+					session.ACPSessID = sessID
+				}
+			}
+		}
 		fmt.Println("[ACP] Estágio 3 concluído. Sessão pronta!")
-	case <-time.After(60 * time.Second):
-		return fmt.Errorf("timeout no estágio 3 do Gemini (Criação de sessão lenta)")
 	}
 
 	fmt.Println("[ACP] Enviando setSessionMode (auto-approve)...")
 	modeParams, _ := json.Marshal(map[string]interface{}{
 		"sessionId": session.ACPSessID,
-		"modeId":    "yolo",
+		"modeId":    "auto-approve", // Nome real que o motor processa internamente
 	})
+	
+	setModeID := e.getNextID()
 	e.SendRPC(session, JSONRPCMessage{
 		JSONRPC: JSONRPCVersion,
-		ID:      e.getNextID(),
+		ID:      setModeID,
 		Method:  "session/set_mode",
 		Params:  modeParams,
 	})
+	// Espera e engole silenciosamente se a CLI der Internal Error para newly created sessions.
+	_, _ = e.waitForResponse(setModeID, 5*time.Second)
 
 	utils.SafeEmit(e.Ctx, "terminal:started", map[string]interface{}{
 		"agent":     agent,
 		"mode":      "ACP (JSON-RPC)",
 		"isRealPTY": false,
 	})
-
-	go func() {
-		err := cmd.Wait()
-
-		e.Mu.Lock()
-		currentSession, isCurrentlyActive := e.ActiveSessions[sessionID]
-		stillActive := isCurrentlyActive && currentSession.Cmd == cmd
-		if stillActive {
-			delete(e.ActiveSessions, sessionID)
-		}
-		e.Mu.Unlock()
-
-		if err != nil && stillActive {
-			if cmdCtx.Err() == nil {
-				e.LogChan <- ExecutionLog{
-					Source:  "ERROR",
-					Content: fmt.Sprintf("⚠️ Sinfonia interrompida abruptamente: %v", err),
-				}
-			}
-		}
-
-		if stillActive {
-			fmt.Printf("[ACP] Sessão %s encerrada do mapa.\n", agent)
-			utils.SafeEmit(e.Ctx, "terminal:closed", agent)
-
-			e.LogChan <- ExecutionLog{
-				Source:  "SYSTEM",
-				Content: "Sessão ACP " + agent + " encerrada.",
-			}
-		}
-	}()
 
 	return nil
 }
@@ -574,8 +593,15 @@ func (e *ACPExecutor) DeleteSession(filePath string) error {
 
 	cwd, _ := os.Getwd()
 	geminiPath := filepath.Join(cwd, ".gemini")
-	if !strings.HasPrefix(filepath.Clean(filePath), filepath.Clean(geminiPath)) {
-		return fmt.Errorf("🛡️ BLOQUEIO DE SEGURANÇA: Não é permitido deletar arquivos fora da pasta .gemini do projeto")
+	userHome, _ := os.UserHomeDir()
+	globalGeminiPath := filepath.Join(userHome, ".gemini")
+
+	cleanPath := filepath.Clean(filePath)
+	allowedLocal := strings.HasPrefix(cleanPath, filepath.Clean(geminiPath))
+	allowedGlobal := strings.HasPrefix(cleanPath, filepath.Clean(globalGeminiPath))
+
+	if !allowedLocal && !allowedGlobal {
+		return fmt.Errorf("🛡️ BLOQUEIO DE SEGURANÇA: Não é permitido deletar arquivos fora das pastas .gemini autorizadas")
 	}
 
 	fmt.Printf("[ACP] Deletando Sinfonia: %s\n", filePath)

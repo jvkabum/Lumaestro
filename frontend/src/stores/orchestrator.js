@@ -323,10 +323,16 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
          }
          messages.value = [...messages.value];
       }
-      fetchSessions(agent);
+      
+      // Auto-seleciona a nova sessão criada se viemos de um 'Novo Chat'
+      fetchSessions(agent).then(() => {
+        if (!currentACPID.value && sessions.value.length > 0) {
+           currentACPID.value = sessions.value[0].sessionId;
+        }
+      });
 
       // Consolidação de Conhecimento RAG (Memória) - Roda em background sem AWAIT
-      const sessionID = currentACPID.value || 'default';
+      const sessionID = currentACPID.value || (sessions.value.length > 0 ? sessions.value[0].sessionId : 'default');
       const lastMessages = messages.value.slice(-2).map(m => `${m.role}: ${m.text}`).join("\n");
       
       if (lastMessages) {

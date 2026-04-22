@@ -11,9 +11,11 @@ import SwarmDashboard from './components/SwarmDashboard.vue'
 import AgentTerminal from './components/AgentTerminal.vue'
 import ReposManager from './components/ReposManager.vue'
 import { useOrchestratorStore } from './stores/orchestrator'
-import { GetProjectDoc } from '../wailsjs/go/core/App'
+import { GetProjectDoc, GetToolsStatus } from '../wailsjs/go/core/App'
+import { useSettingsStore } from './stores/settings'
 
 const orchestrator = useOrchestratorStore()
+const settingsStore = useSettingsStore()
 const currentView = ref('orchestrator') // views: orchestrator, settings, swarm
 const isOnline = ref(false)
 const connectionError = ref('Aguardando sincronização com o Maestro (Frontend Booting)...')
@@ -187,6 +189,11 @@ onMounted(async () => {
       if (isOnline.value) {
         connectionError.value = "Maestro Online (Backend e Motor Vetorial Ativos)"
         isBooting.value = false
+        // Update tool status badges globally upon successful connection!
+        const toolsStatus = await GetToolsStatus()
+        if (toolsStatus) {
+            settingsStore.status.tools = toolsStatus
+        }
       } else {
         connectionError.value = "Backend respondeu, mas Qdrant ou Configuração falharam. Verifique as configurações."
       }

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, watch } from 'vue';
+import { computed, onMounted, watch, ref } from 'vue';
 import { useOrchestratorStore } from '../stores/orchestrator';
 
 const store = useOrchestratorStore();
@@ -30,15 +30,38 @@ const handleLoadSession = async (sessionId) => {
   }
 };
 
-const handleDelete = async (session) => {
-  if (window.confirm(`Deseja apagar permanentemente a Sinfonia "${session.title || 'sem título'}"?`)) {
-    try {
-      // 🚀 Chama o backend via Wails bridge
-      await window.go.core.App.DeleteSession(session.file);
-      // O backend já emite o evento de turn_complete que recarrega a lista
-    } catch (err) {
-      console.error("Erro ao apagar sessão:", err);
-      alert("⚠️ Erro ao apagar: " + err);
+const sessionToDelete = ref(null);
+
+const handleDelete = (session) => {
+  sessionToDelete.value = session;
+};
+
+const confirmDelete = async () => {
+  const session = sessionToDelete.value;
+  if (!session) return;
+  
+  sessionToDelete.value = null; // Fecha o modal imediatamente
+  
+  try {
+    // 🚀 Chama o backend via Wails bridge
+    await window.go.core.App.DeleteSession(session.file);
+  } catch (err) {
+    console.error("Erro ao apagar sessão:", err);
+    // Se o erro for que o arquivo não existe, ignora graciosamente (já foi apagado)
+    if (!String(err).includes("não pode encontrar") && !String(err).includes("no such file")) {
+       // Poderíamos ter um toast aqui, por hora vamos apenas registrar
+       console.warn("⚠️ Não foi possível apagar: " + err);
+    }
+  } finally {
+    // Força a recarga visual garantindo que a lixeira limpe a visualização
+    await store.fetchSessions(store.activeAgent);
+    
+    // Se a conversa apagada for a que estava aberta, inicia uma nova tela limpa
+    if (session.sessionId === store.currentACPID) {
+       store.currentACPID = null;
+       store.messages = [];
+       // Opcionalmente podemos disparar a criação no backend também
+       await store.newSession(store.activeAgent);
     }
   }
 };
@@ -113,6 +136,29 @@ watch(() => store.activeAgent, async (newAgent) => {
         {{ store.activeAgent.toUpperCase() }} ON
       </div>
     </div>
+
+    <!-- Modal Customizado -->
+    <Teleport to="body">
+      <Transition name="modal-fade">
+        <div v-if="sessionToDelete" class="custom-modal-overlay" @click.self="sessionToDelete = null">
+          <div class="custom-modal">
+            <div class="modal-icon">⚠️</div>
+            <h3 class="modal-title">Apagar Sinfonia</h3>
+            <p class="modal-text">
+              Deseja apagar permanentemente a conversa 
+              <strong class="highlight-id">"{{ sessionToDelete?.title || 'sem título' }}"</strong>?
+            </p>
+            <p class="modal-subtext">Esta ação apagará todo o histórico e não pode ser desfeita.</p>
+            
+            <div class="modal-actions">
+              <button class="btn-cancel" @click="sessionToDelete = null">Cancelar</button>
+              <button class="btn-confirm" @click="confirmDelete">Sim, apagar</button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
   </aside>
 </template>
 
@@ -367,5 +413,136 @@ watch(() => store.activeAgent, async (newAgent) => {
 .skeleton-line.meta {
   width: 40%;
   height: 6px;
+}
+
+/* --- Modal Premium Customizado --- */
+.custom-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.custom-modal {
+  background: rgba(22, 27, 34, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  width: 400px;
+  max-width: 90vw;
+  padding: 30px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.modal-icon {
+  font-size: 32px;
+  margin-bottom: 20px;
+  background: rgba(244, 63, 94, 0.1);
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid rgba(244, 63, 94, 0.2);
+  color: #f43f5e;
+  box-shadow: 0 0 20px rgba(244, 63, 94, 0.15);
+}
+
+.modal-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #f0f6fc;
+  margin: 0 0 12px 0;
+  letter-spacing: -0.5px;
+}
+
+.modal-text {
+  font-size: 14px;
+  color: rgba(139, 148, 158, 0.9);
+  line-height: 1.5;
+  margin: 0 0 8px 0;
+}
+
+.modal-subtext {
+  font-size: 12px;
+  color: rgba(244, 63, 94, 0.7);
+  margin: 0 0 24px 0;
+  font-style: italic;
+}
+
+.highlight-id {
+  color: #38bdf8;
+  font-weight: 500;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+}
+
+.btn-cancel,
+.btn-confirm {
+  flex: 1;
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-cancel {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(240, 246, 252, 0.8);
+}
+
+.btn-cancel:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.btn-confirm {
+  background: linear-gradient(180deg, #f43f5e 0%, #e11d48 100%);
+  border: 1px solid #be123c;
+  color: white;
+  box-shadow: 0 2px 10px rgba(225, 29, 72, 0.3);
+}
+
+.btn-confirm:hover {
+  background: linear-gradient(180deg, #fb7185 0%, #f43f5e 100%);
+  box-shadow: 0 4px 15px rgba(225, 29, 72, 0.5);
+  transform: translateY(-1px);
+}
+
+/* Transição do Modal */
+.modal-fade-enter-active,
+.modal-fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.modal-fade-enter-from,
+.modal-fade-leave-to {
+  opacity: 0;
+}
+
+.modal-fade-enter-active .custom-modal {
+  transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.modal-fade-enter-from .custom-modal {
+  transform: scale(0.9);
 }
 </style>

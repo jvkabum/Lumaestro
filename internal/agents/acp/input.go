@@ -55,18 +55,19 @@ func (e *ACPExecutor) SendInput(sessionID string, input string, images []map[str
 		})
 	}
 
-	params, _ := json.Marshal(map[string]interface{}{
+	promptID := e.getNextID()
+
+	params := map[string]interface{}{
 		"sessionId": session.ACPSessID,
 		"prompt":    promptData,
-	})
-
-	promptID := e.getNextID()
+	}
+	paramsJSON, _ := json.Marshal(params)
 
 	err := e.SendRPC(session, JSONRPCMessage{
 		JSONRPC: JSONRPCVersion,
 		ID:      promptID,
 		Method:  "session/prompt",
-		Params:  params,
+		Params:  paramsJSON,
 	})
 	
 	if err != nil {

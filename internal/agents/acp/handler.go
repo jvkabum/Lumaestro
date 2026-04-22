@@ -546,18 +546,6 @@ func (h *ACPRpcHandler) HandleResponse(id interface{}, result json.RawMessage, r
 		}
 	}
 
-	if idInt <= 3 {
-		select {
-		case h.Session.initDone <- struct{}{}:
-		default:
-		}
-		return
-	}
-
-	select {
-	case h.Session.initDone <- struct{}{}:
-	default:
-	}
 	if !strings.Contains(h.Session.ID, "-background-") {
 		utils.SafeEmit(h.Executor.Ctx, "agent:turn_complete", h.Session.AgentName)
 	}

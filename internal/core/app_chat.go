@@ -121,10 +121,15 @@ func (a *App) SendAgentInput(agent string, input string, images []map[string]str
 				// 2. Navegação de Sinapses: Expandir o contexto seguindo os links neurais
 				fullContext := a.navigator.ExpandContext(a.ctx, nodes)
 				contextInfo = "\n\n[CONHECIMENTO ORQUESTRADO (OBSIDIAN + SINAPSES)]\n"
+				maxContextChars := 3000000 // Limite seguro para ~800k tokens do Gemini
 				for _, ctxPart := range fullContext {
+					if len(contextInfo)+len(ctxPart) > maxContextChars {
+						contextInfo += "\n\n[⚠️ CONTEÚDO ADICIONAL TRUNCADO POR LIMITE DE MEMÓRIA SEMÂNTICA]"
+						break
+					}
 					contextInfo += ctxPart + "\n\n"
 				}
-				fmt.Printf("[RAG] Contexto expandido via Grafo com %d fontes.\n", len(fullContext))
+				fmt.Printf("[RAG] Contexto expandido via Grafo com %d fontes (Tamanho: %d chars).\n", len(fullContext), len(contextInfo))
 			}
 		} else {
 			// 🚀 Se falhou por cota (429) ou hibernação, não bloqueamos o chat.

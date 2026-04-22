@@ -26,19 +26,29 @@ func NewInstaller() *Installer {
 
 // CheckStatus verifica se um comando está disponível no PATH do sistema.
 func (i *Installer) CheckStatus(name string) bool {
-	// No Windows, tenta com .exe se não houver extensão
-	searchName := name
-	if runtime.GOOS == "windows" && !strings.HasSuffix(strings.ToLower(name), ".exe") {
-		searchName = name + ".exe"
-	}
-
-	// Prioridade total para o PATH do sistema
-	_, err := exec.LookPath(searchName)
+	// 1. Verificação padrão via PATH
+	_, err := exec.LookPath(name)
 	if err == nil {
 		return true
 	}
 
-	// Fallback apenas para manter retrocompatibilidade com instalações locais antigas
+	// 2. ⚡ WIN-FIX: Verificação em diretórios globais do NPM (Roaming)
+	if runtime.GOOS == "windows" {
+		home, _ := os.UserHomeDir()
+		// Caminho padrão do bundle NPM
+		npmPath := filepath.Join(home, "AppData", "Roaming", "npm", "node_modules", "@google", "gemini-cli", "bundle", "gemini.js")
+		if _, err := os.Stat(npmPath); err == nil {
+			return true
+		}
+		
+		// Verificação de .cmd no roaming
+		npmCmd := filepath.Join(home, "AppData", "Roaming", "npm", name+".cmd")
+		if _, err := os.Stat(npmCmd); err == nil {
+			return true
+		}
+	}
+
+	// 3. Fallback para node_modules locais do projeto
 	cwd, _ := os.Getwd()
 	localBin := filepath.Join(cwd, "node_modules", ".bin", name+".cmd")
 	if _, err := os.Stat(localBin); err == nil {
@@ -330,23 +340,25 @@ func (i *Installer) KillOrphans() {
 		// Script PowerShell robusto que ignora o processo atual
 		script := fmt.Sprintf(`
 			$currentPid = %d;
-			$ports = @(8001, 8085, 8086, 8087);
+			$ports = @(8001, 8085, 8086, 8087, 8080);
 			foreach ($p in $ports) {
 				$conns = Get-NetTCPConnection -LocalPort $p -ErrorAction SilentlyContinue | Where-Object { $_.OwningProcess -ne $currentPid };
 				if ($conns) {
 					$conns | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue };
 				}
 			}
-			@("llama-server", "lumaestro-embedder", "lumaestro-specialist") | ForEach-Object {
+			# Caça instâncias órfãs por nome (incluindo o binário do Wails)
+			@("llama-server", "lumaestro-embedder", "lumaestro-specialist", "Lumaestro-dev", "Lumaestro") | ForEach-Object {
 				Get-Process -Name $_ -ErrorAction SilentlyContinue | Where-Object { $_.Id -ne $currentPid } | Stop-Process -Force -ErrorAction SilentlyContinue;
 			}
 		`, currentPid)
 		exec.Command("powershell", "-Command", script).Run()
 	} else {
 		exec.Command("pkill", "-9", "llama-server").Run()
+		exec.Command("pkill", "-9", "Lumaestro-dev").Run()
 	}
-	// Pausa tática para o SO liberar os sockets e arquivos
-	time.Sleep(2 * time.Second)
+	// Pausa tática aumentada para liberar arquivos e sockets
+	time.Sleep(3 * time.Second)
 }
 
 // InstallObsidian via Powershell.
