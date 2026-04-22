@@ -46,8 +46,23 @@ export function useDeckRender() {
     const { createDeck } = useDeckFactory();
     
     const { setupReceiver } = usePhysicsReceiver({ 
-        nodeMap, currentLinksRef: currentLinks, syncPositions, onUpdate: () => updateLayers() 
+        nodeMap, currentLinksRef: currentLinks, syncPositions, 
+        onUpdate: () => updateLayers(),
+        onStabilized: (positions) => savePositions(positions)
     });
+
+    /**
+     * 💾 Persistência de Layout (Ponte Wails)
+     */
+    const savePositions = async (positions) => {
+        if (!positions || positions.length === 0) return;
+        try {
+            const res = await window.go.core.App.UpdateNodePositions(positions);
+            console.log(`[Maestro] 🪐 Layout persistido: ${res}`);
+        } catch (err) {
+            console.warn('[Maestro] ❌ Falha ao persistir layout:', err);
+        }
+    };
 
     const eventHandlers = useEventBridge({ 
         store, pilotFocus, updateLayers: () => updateLayers(),
@@ -128,5 +143,8 @@ export function useDeckRender() {
         document.body.style.cursor = 'default';
     };
 
-    return { initGraph, updateGraph, destroyGraph, updateForce, currentViewState };
+    return { 
+        initGraph, updateGraph, destroyGraph, updateForce, 
+        currentViewState, savePositions, currentNodes 
+    };
 }

@@ -362,6 +362,10 @@ export function UpdateAgentSecret(arg1, arg2, arg3) {
   return window['go']['core']['App']['UpdateAgentSecret'](arg1, arg2, arg3);
 }
 
+export function UpdateNodePositions(arg1) {
+  return window['go']['core']['App']['UpdateNodePositions'](arg1);
+}
+
 export function UpsertDocument(arg1, arg2, arg3, arg4) {
   return window['go']['core']['App']['UpsertDocument'](arg1, arg2, arg3, arg4);
 }

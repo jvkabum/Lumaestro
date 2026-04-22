@@ -186,6 +186,8 @@ export function TriggerReflection(arg1:string):Promise<string>;
 
 export function UpdateAgentSecret(arg1:string,arg2:string,arg3:string):Promise<string>;
 
+export function UpdateNodePositions(arg1:Array<Record<string, any>>):Promise<string>;
+
 export function UpsertDocument(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
 
 export function WeaveNeuralLinks(arg1:number):Promise<void>;

@@ -273,6 +273,48 @@ func (a *App) loadTopologyCache() *TopologyCache {
 	return &cache
 }
 
+// UpdateNodePositions recebe as coordenadas atuais do Frontend e persiste no DuckDB e Cache.
+func (a *App) UpdateNodePositions(nodes []map[string]interface{}) string {
+	fmt.Printf("[Sync] 💾 Recebendo atualização de layout para %d nós...\n", len(nodes))
+
+	// 1. Persistência Analítica (DuckDB)
+	if a.LStore != nil {
+		err := a.LStore.UpdateNodePositions(nodes)
+		if err != nil {
+			fmt.Printf("[Sync] ❌ Erro ao salvar posições no DuckDB: %v\n", err)
+		}
+	}
+
+	// 2. Persistência de Carregamento Rápido (Topology Cache)
+	// Carregamos o cache atual para preservar as arestas, mudando apenas as coordenadas.
+	cache := a.loadTopologyCache()
+	if cache != nil {
+		nodeMap := make(map[string]int)
+		for i, n := range cache.Nodes {
+			if id, ok := n["id"].(string); ok {
+				nodeMap[id] = i
+			}
+		}
+
+		updatedCount := 0
+		for _, n := range nodes {
+			id, _ := n["id"].(string)
+			if idx, exists := nodeMap[id]; exists {
+				cache.Nodes[idx]["x"] = n["x"]
+				cache.Nodes[idx]["y"] = n["y"]
+				cache.Nodes[idx]["z"] = n["z"]
+				updatedCount++
+			}
+		}
+
+		if updatedCount > 0 {
+			a.saveTopologyCache(cache.Nodes, cache.Edges)
+		}
+	}
+
+	return fmt.Sprintf("Layout sincronizado com sucesso (%d nós atualizados).", len(nodes))
+}
+
 // SyncAllNodes percorre o banco de dados e emite cada nota para o visualizador 3D.
 func (a *App) SyncAllNodes() {
 	if a.qdrant == nil || a.ctx == nil || a.GEngine == nil {
@@ -280,9 +322,22 @@ func (a *App) SyncAllNodes() {
 		return
 	}
 
-	// 1. FORÇA ATUALIZAÇÃO (Ignora Cache para garantir cores novas)
-	os.Remove(".lumaestro_topology.json") 
+	// 1. FORÇA ATUALIZAÇÃO (Comentado para preservar layout salvo em cache/db)
+	// os.Remove(".lumaestro_topology.json") 
 	
+	// ⚡ Carrega posições salvas do DuckDB para merge
+	savedPositions := make(map[string][]float64)
+	if a.LStore != nil {
+		// Mock de workspace path (precisa ser dinâmico no futuro se houver múltiplos)
+		nodes, _, _ := a.LStore.GetFullGraph("") 
+		for _, n := range nodes {
+			id, _ := n["id"].(string)
+			x, _ := n["x"].(float64)
+			y, _ := n["y"].(float64)
+			z, _ := n["z"].(float64)
+			savedPositions[id] = []float64{x, y, z}
+		}
+	}
 	fmt.Println("[Sync] Sincronizando todos os nós do Qdrant com o Frontend (BATCH)...")
 	// Busca um lote grande o suficiente para cobrir o vault do usuário (1500+)
 	points, err := a.qdrant.Search("obsidian_knowledge", nil, 1500)
@@ -386,6 +441,13 @@ func (a *App) SyncAllNodes() {
 			"what-it-does":  whatItDoes,
 		}
 
+		// 📍 Injeta coordenadas salvas (se existirem)
+		if pos, exists := savedPositions[nodeID]; exists {
+			nodeData["x"] = pos[0]
+			nodeData["y"] = pos[1]
+			nodeData["z"] = pos[2]
+		}
+
 		if docType, ok := p["document-type"].(string); ok && strings.TrimSpace(docType) != "" {
 			nodeData["document-type"] = docType
 		}
@@ -434,24 +496,32 @@ func (a *App) SyncAllNodes() {
 		predicate, _ := p["predicate"].(string)
 
 		if subject != "" {
-			addNode(map[string]interface{}{
+			nodeData := map[string]interface{}{
 				"id":            subject,
 				"name":          subject,
 				"document-type": "memory",
 				"session-id":    sessionID,
 				"summary":       fmt.Sprintf("Fato semântico em memória: %s %s %s", subject, predicate, object),
 				"what-it-does":  "Conecta fatos aprendidos no chat para dar contexto em respostas futuras.",
-			})
+			}
+			if pos, exists := savedPositions[subject]; exists {
+				nodeData["x"] = pos[0]; nodeData["y"] = pos[1]; nodeData["z"] = pos[2]
+			}
+			addNode(nodeData)
 		}
 		if object != "" {
-			addNode(map[string]interface{}{
+			nodeData := map[string]interface{}{
 				"id":            object,
 				"name":          object,
 				"document-type": "memory",
 				"session-id":    sessionID,
 				"summary":       fmt.Sprintf("Entidade relacionada ao fato: %s %s %s", subject, predicate, object),
 				"what-it-does":  "Serve como nó de ligação da memória semântica no grafo.",
-			})
+			}
+			if pos, exists := savedPositions[object]; exists {
+				nodeData["x"] = pos[0]; nodeData["y"] = pos[1]; nodeData["z"] = pos[2]
+			}
+			addNode(nodeData)
 		}
 		if subject != "" && object != "" {
 			addEdge(subject, object, 1)

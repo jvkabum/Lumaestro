@@ -4,7 +4,7 @@
  * Responsável por processar as mensagens vindas do WebWorker de Física.
  * Sincroniza posições e realiza a "auto-cura" de links (referências perdidas).
  */
-export function usePhysicsReceiver({ nodeMap, currentLinksRef, syncPositions, onUpdate }) {
+export function usePhysicsReceiver({ nodeMap, currentLinksRef, syncPositions, onUpdate, onStabilized }) {
     
     const setupReceiver = (worker) => {
         if (!worker) return;
@@ -35,6 +35,10 @@ export function usePhysicsReceiver({ nodeMap, currentLinksRef, syncPositions, on
                 currentLinksRef.value = payload.links;
                 console.log(`[PhysicsReceiver] Visão Limpa! Desenhando ${payload.links.length} arestas isoladas.`);
                 if (onUpdate) onUpdate();
+            }
+            else if (type === 'STABILIZED') {
+                console.log(`[PhysicsReceiver] ✨ Física Estabilizada! Preparando para persistir ${payload.positions.length} nós.`);
+                if (onStabilized) onStabilized(payload.positions);
             }
         };
     };

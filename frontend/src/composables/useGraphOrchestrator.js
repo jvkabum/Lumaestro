@@ -22,7 +22,10 @@ export function useGraphOrchestrator(props) {
   const isUiMinimized = ref(false)
 
   // ── Importações de Sub-Lógicas (Domínio Deck) ──
-  const { initGraph, updateGraph, destroyGraph, updateForce, currentViewState } = useDeckRender()
+  const { 
+    initGraph, updateGraph, destroyGraph, updateForce, 
+    currentViewState, savePositions, currentNodes 
+  } = useDeckRender()
   const { transform } = useDataTransformer()
   const { registerKeyboardControls } = useInputDriver()
   const { registerGraphEvents } = useBridgeDriver()
@@ -56,8 +59,27 @@ export function useGraphOrchestrator(props) {
   onUnmounted(() => {
     if (cleanupKeyboard) cleanupKeyboard()
     if (cleanupEvents) cleanupEvents()
+    
+    // 💾 Última chamada de salvamento antes de desmontar (v20)
+    if (currentNodes.value && currentNodes.value.length > 0) {
+        const finalPositions = currentNodes.value.map(n => ({ id: n.id, x: n.x, y: n.y, z: n.z }));
+        savePositions(finalPositions);
+    }
+
     destroyGraph()
+    window.removeEventListener('beforeunload', handleBeforeUnload)
   })
+
+  // 🏁 Salvamento de Emergência (v20.2)
+  const handleBeforeUnload = () => {
+    if (currentNodes.value && currentNodes.value.length > 0) {
+        const finalPositions = currentNodes.value.map(n => ({ id: n.id, x: n.x, y: n.y, z: n.z }));
+        // Como o app está fechando, usamos uma chamada síncrona ou fire-and-forget
+        window.go.core.App.UpdateNodePositions(finalPositions);
+    }
+  }
+
+  window.addEventListener('beforeunload', handleBeforeUnload)
 
   // ── Watchers Críticos ──
 

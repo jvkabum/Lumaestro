@@ -46,6 +46,10 @@ self.onmessage = function (event) {
             onTick: (nodes) => {
                 const positions = nodes.map(n => ({ id: n.id, x: n.x, y: n.y, z: n.z || 0 }));
                 self.postMessage({ type: 'TICK', payload: { positions } });
+            },
+            onEnd: (nodes) => {
+                const positions = nodes.map(n => ({ id: n.id, x: n.x, y: n.y, z: n.z || 0 }));
+                self.postMessage({ type: 'STABILIZED', payload: { positions } });
             }
         });
 

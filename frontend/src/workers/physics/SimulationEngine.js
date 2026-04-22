@@ -12,7 +12,8 @@ export function createSimulation({
     nodesData,
     linksData,
     nodeDegrees,
-    onTick
+    onTick,
+    onEnd
 }) {
     const manualVelDecay = 0.3;
 
@@ -78,6 +79,10 @@ export function createSimulation({
         if (tickCount % 2 === 0 && onTick) {
             onTick(nodesData);
         }
+    });
+    
+    simulation.on('end', () => {
+        if (onEnd) onEnd(nodesData);
     });
 
     // 4. Retorna a interface de controle (API do Registry)

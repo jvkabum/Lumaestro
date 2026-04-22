@@ -106,6 +106,9 @@ func (s *DuckDBStore) InitSchema() error {
 			name VARCHAR,
 			type VARCHAR,
 			metadata JSON,
+			pos_x DOUBLE DEFAULT 0.0,
+			pos_y DOUBLE DEFAULT 0.0,
+			pos_z DOUBLE DEFAULT 0.0,
 			created_at DOUBLE
 		)`,
 		`CREATE TABLE IF NOT EXISTS graph_edges (
@@ -275,19 +278,54 @@ func (s *DuckDBStore) Close() error {
 
 // --- Métodos do Cérebro Relacional (Grafo) ---
 
+// UpdateNodePositions atualiza as coordenadas de uma lista de nós em massa.
+func (s *DuckDBStore) UpdateNodePositions(nodes []map[string]interface{}) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+
+	stmt, err := tx.Prepare(`UPDATE graph_nodes SET pos_x = ?, pos_y = ?, pos_z = ? WHERE id = ?`)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	defer stmt.Close()
+
+	for _, n := range nodes {
+		id, _ := n["id"].(string)
+		x, _ := n["x"].(float64)
+		y, _ := n["y"].(float64)
+		z, _ := n["z"].(float64)
+		if id != "" {
+			_, _ = stmt.Exec(x, y, z, id)
+		}
+	}
+
+	return tx.Commit()
+}
+
 // UpsertGraphNode insere ou atualiza um nó no grafo analítico vinculado a um workspace.
 func (s *DuckDBStore) UpsertGraphNode(workspacePath, id, name, nodeType string, metadata map[string]interface{}) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	metaJSON, _ := json.Marshal(metadata)
-	query := `INSERT INTO graph_nodes (id, workspace_path, name, type, metadata, created_at)
-			  VALUES (?, ?, ?, ?, ?, ?)
+	query := `INSERT INTO graph_nodes (id, workspace_path, name, type, metadata, pos_x, pos_y, pos_z, created_at)
+			  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 			  ON CONFLICT (id) DO UPDATE SET 
 			  workspace_path = excluded.workspace_path, name = excluded.name, 
-			  type = excluded.type, metadata = excluded.metadata`
+			  type = excluded.type, metadata = excluded.metadata,
+			  pos_x = excluded.pos_x, pos_y = excluded.pos_y, pos_z = excluded.pos_z`
 	
-	_, err := s.db.Exec(query, id, workspacePath, name, nodeType, string(metaJSON), time.Now().UnixNano())
+	x, _ := metadata["x"].(float64)
+	y, _ := metadata["y"].(float64)
+	z, _ := metadata["z"].(float64)
+
+	_, err := s.db.Exec(query, id, workspacePath, name, nodeType, string(metaJSON), x, y, z, time.Now().UnixNano())
 	return err
 }
 
@@ -319,7 +357,7 @@ func (s *DuckDBStore) GetFullGraph(workspacePath string) ([]map[string]interface
 	defer s.mu.Unlock()
 
 	// 1. Recuperar Nós do Workspace
-	rowsN, err := s.db.Query(`SELECT id, name, type FROM graph_nodes WHERE workspace_path = ?`, workspacePath)
+	rowsN, err := s.db.Query(`SELECT id, name, type, pos_x, pos_y, pos_z FROM graph_nodes WHERE workspace_path = ?`, workspacePath)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -328,8 +366,12 @@ func (s *DuckDBStore) GetFullGraph(workspacePath string) ([]map[string]interface
 	var nodes []map[string]interface{}
 	for rowsN.Next() {
 		var id, name, t string
-		if err := rowsN.Scan(&id, &name, &t); err == nil {
-			nodes = append(nodes, map[string]interface{}{"id": id, "name": name, "type": t})
+		var x, y, z float64
+		if err := rowsN.Scan(&id, &name, &t, &x, &y, &z); err == nil {
+			nodes = append(nodes, map[string]interface{}{
+				"id": id, "name": name, "type": t,
+				"x": x, "y": y, "z": z,
+			})
 		}
 	}
 
