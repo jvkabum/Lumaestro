@@ -30,8 +30,8 @@ export function useInteractionPilot() {
         const targetViewState = {
             ...currentViewState.value,
             target: [node.x, node.y, node.z],
-            distance: 600, // Aumentado de 300 para 600 para evitar "colisão" visual
-            transitionDuration: 3500, // Efeito "nave viajando" (antes era 1500)
+            zoom: 0.5, // Reduzido de 3.5 para 1.5 para a câmera parar mais longe do nó
+            transitionDuration: 3500, // Efeito "nave viajando"
             transitionInterpolator: NAV_CONFIG.transitionInterpolator
         };
         deckInstance.setProps({ initialViewState: targetViewState });
