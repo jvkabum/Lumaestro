@@ -110,13 +110,52 @@ func (a *App) SendAgentInput(agent string, input string, images []map[string]str
 		// 🏁 FAST-TRACK: Se o pool estiver em hibernação forçada, pulamos o RAG imediatamente
 		// para não travar o envio da mensagem por 30s.
 		fmt.Println("[RAG] Explorando ligações nervosas no Grafo de Conhecimento...")
+		
+		// 🏁 FAST-PATH: DuckDB (Busca Léxica Instantânea por Nome)
+		if a.LStore != nil {
+			cleanInput := strings.ToLower(input)
+			// Remove caracteres que podem sujar a busca (ex: barras, pontos, interrogações)
+			cleanInput = strings.NewReplacer("/", " ", "?", " ", ".", " ", ",", " ", "!", " ").Replace(cleanInput)
+			words := strings.Fields(cleanInput)
+			
+			for _, word := range words {
+				if len(word) < 3 { continue }
+				fastNodeId, err := a.LStore.FindNodeByName(a.executor.Workspace, word)
+				if err == nil && fastNodeId != "" {
+					fmt.Printf("[RAG] ⚡ Fast-Path DuckDB: Match em '%s' -> Focando %s\n", word, fastNodeId)
+					a.emitEvent("node:active", fastNodeId)
+					break 
+				}
+			}
+		}
 
 		vector, err := a.embedder.GenerateEmbedding(a.ctx, input, true)
 		if err == nil {
 			a.emitAgentStatus(agent, "Buscando referências semânticas relevantes", "memory")
-			// 1. Busca as notas âncoras (Top 3)
 			nodes, err := a.qdrant.Search("obsidian_knowledge", vector, 3)
 			if err == nil && len(nodes) > 0 {
+				var finalNodeId string
+				
+				// Tenta ID primeiro, depois Nome (como fallback seguro)
+				rawId := nodes[0]["id"]
+				if rawId == nil {
+					rawId = nodes[0]["name"] // Se o ID não está no payload, o Nome geralmente serve como ID no Grafo
+				}
+
+				switch v := rawId.(type) {
+				case string:
+					finalNodeId = v
+				case float64:
+					finalNodeId = fmt.Sprintf("%.0f", v)
+				case int, int64:
+					finalNodeId = fmt.Sprintf("%v", v)
+				}
+
+				if finalNodeId != "" {
+					fmt.Printf("[RAG] 🎯 Focando no nó semântico: %s\n", finalNodeId)
+					a.emitEvent("node:active", finalNodeId)
+				}
+
 				a.emitAgentStatus(agent, "Expandindo contexto com memória conectada", "memory")
 				// 2. Navegação de Sinapses: Expandir o contexto seguindo os links neurais
 				fullContext := a.navigator.ExpandContext(a.ctx, nodes)

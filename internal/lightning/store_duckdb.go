@@ -247,6 +247,20 @@ func (s *DuckDBStore) ApproveCandidate(candidateID string) error {
 	return err
 }
 
+// FindNodeByName busca um nó no grafo pelo nome exato ou similar (Busca Rápida/Léxica).
+func (s *DuckDBStore) FindNodeByName(workspacePath, name string) (string, error) {
+	var id string
+	// Tenta busca exata primeiro
+	err := s.db.QueryRow(`SELECT id FROM graph_nodes WHERE workspace_path = ? AND name = ? LIMIT 1`, workspacePath, name).Scan(&id)
+	if err == nil {
+		return id, nil
+	}
+
+	// Tenta busca por similaridade (ILIKE) se a exata falhar
+	err = s.db.QueryRow(`SELECT id FROM graph_nodes WHERE workspace_path = ? AND name ILIKE ? LIMIT 1`, workspacePath, "%"+name+"%").Scan(&id)
+	return id, err
+}
+
 // InsertGoldSample registra uma amostra "Gold" no DuckDB.
 func (s *DuckDBStore) InsertGoldSample(agentName, input, output string) error {
 	s.mu.Lock()

@@ -23,8 +23,26 @@ export function useStoreContract({
         const panTarget = (x, y, z) => pilotPan(deckInstanceRef.value, currentViewState, x, y, z);
         
         const focusNode = (id) => {
-            const node = currentNodesRef.value.find(n => String(n.id) === String(id));
-            if (node) pilotFocus(deckInstanceRef.value, currentViewState, node);
+            if (!id) return;
+            const targetId = String(id).toLowerCase();
+            
+            // 1. Tenta match exato primeiro
+            let node = currentNodesRef.value.find(n => String(n.id).toLowerCase() === targetId);
+            
+            // 2. Se não achar, tenta match parcial (útil para "sqlite" vs "sqlite.md")
+            if (!node) {
+                node = currentNodesRef.value.find(n => {
+                    const nid = String(n.id).toLowerCase();
+                    return nid.includes(targetId) || targetId.includes(nid);
+                });
+            }
+
+            if (node) {
+                console.log("[Contract] ✅ Nó encontrado para zoom:", node.id);
+                pilotFocus(deckInstanceRef.value, currentViewState, node);
+            } else {
+                console.warn("[Contract] ❌ Nó não encontrado no grafo para o ID:", id);
+            }
         };
 
         // Registro do contrato do grafo na Store

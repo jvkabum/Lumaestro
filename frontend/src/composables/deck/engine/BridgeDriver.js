@@ -38,8 +38,9 @@ export function useBridgeDriver() {
     
     // 🎯 Foco em Nó (Zoom Ativo)
     window.runtime.EventsOn("node:active", (nodeId) => {
-      if (nodeId) focusNode(nodeId)
-    })
+      console.log("[Bridge] 🔭 Sinal de Zoom recebido para o nó:", nodeId);
+      if (nodeId) focusNode(nodeId);
+    });
 
     // 4. Percurso Cinematográfico (Traverse)
     window.runtime.EventsOn("graph:traverse", (data) => {
