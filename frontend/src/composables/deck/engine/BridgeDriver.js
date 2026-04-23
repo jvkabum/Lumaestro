@@ -36,10 +36,16 @@ export function useBridgeDriver() {
       store.graphHealth = stats
     })
     
-    // 🎯 Foco em Nó (Zoom Ativo)
     window.runtime.EventsOn("node:active", (nodeId) => {
       console.log("[Bridge] 🔭 Sinal de Zoom recebido para o nó:", nodeId);
-      if (nodeId) focusNode(nodeId);
+      focusNode(nodeId);
+    });
+
+    // 🎬 Foco em Nó (Zoom Cinematográfico Guiado pela IA local)
+    window.addEventListener("cinematic:zoom", (e) => {
+      const nodeId = e.detail;
+      console.log("[Bridge] 🎬 Sinal de Zoom Cinematográfico (Vue) recebido para:", nodeId);
+      focusNode(nodeId);
     });
 
     // 4. Percurso Cinematográfico (Traverse)

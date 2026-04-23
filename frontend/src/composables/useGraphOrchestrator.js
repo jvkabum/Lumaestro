@@ -100,9 +100,7 @@ export function useGraphOrchestrator(props) {
 
   // W6: Foco em Nó Ativo (Zoom reativo via Props)
   watch(() => props.activeNode, (newId) => {
-    if (newId) {
-      store.graphInstance?.focusNode(newId)
-    }
+    store.graphInstance?.focusNode(newId)
   })
 
   // W5: Auto-scroll dos logs

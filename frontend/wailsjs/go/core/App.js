@@ -210,6 +210,10 @@ export function LoadFastGraph() {
   return window['go']['core']['App']['LoadFastGraph']();
 }
 
+export function LogNeuralActivity(arg1, arg2, arg3) {
+  return window['go']['core']['App']['LogNeuralActivity'](arg1, arg2, arg3);
+}
+
 export function LoginIdentity(arg1, arg2) {
   return window['go']['core']['App']['LoginIdentity'](arg1, arg2);
 }
@@ -360,6 +364,10 @@ export function ToggleProjectCodeRAG(arg1) {
 
 export function TriggerReflection(arg1) {
   return window['go']['core']['App']['TriggerReflection'](arg1);
+}
+
+export function TriggerZoom(arg1) {
+  return window['go']['core']['App']['TriggerZoom'](arg1);
 }
 
 export function UpdateAgentSecret(arg1, arg2, arg3) {

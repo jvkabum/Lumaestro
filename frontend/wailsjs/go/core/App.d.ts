@@ -110,6 +110,8 @@ export function LoadAgentSession(arg1:string,arg2:string):Promise<void>;
 
 export function LoadFastGraph():Promise<void>;
 
+export function LogNeuralActivity(arg1:string,arg2:string,arg3:boolean):Promise<void>;
+
 export function LoginIdentity(arg1:string,arg2:string):Promise<void>;
 
 export function NewAgentSession(arg1:string):Promise<void>;
@@ -185,6 +187,8 @@ export function TestLMStudioModel(arg1:string,arg2:string):Promise<Record<string
 export function ToggleProjectCodeRAG(arg1:string):Promise<Record<string, any>>;
 
 export function TriggerReflection(arg1:string):Promise<string>;
+
+export function TriggerZoom(arg1:string):Promise<void>;
 
 export function UpdateAgentSecret(arg1:string,arg2:string,arg3:string):Promise<string>;
 

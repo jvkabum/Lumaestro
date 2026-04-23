@@ -116,9 +116,13 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 	var totalCached int32 = 0
 	processedFolders := make(map[string]bool)
 
-	// Nome da Galáxia (Raiz do Vault)
-	galaxyName := filepath.Base(c.VaultPath)
-	galaxyID := "galaxy:" + strings.ToLower(galaxyName)
+	// Nome da Galáxia (Raiz do Vault ou Projeto)
+	folderPath := c.VaultPath
+	galaxyName := filepath.Base(folderPath)
+	h := sha256.New()
+	h.Write([]byte(folderPath))
+	pathHash := hex.EncodeToString(h.Sum(nil))[:6]
+	galaxyID := "galaxy:" + pathHash + ":" + strings.ToLower(galaxyName)
 
 	// Emite o Sol Central (Core da Galáxia)
 	utils.SafeEmit(c.ctx, "graph:node", map[string]interface{}{
@@ -131,7 +135,7 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 		"what-it-does":  "Funciona como raiz estrutural da base de conhecimento no grafo 3D.",
 	})
 	if c.LStore != nil {
-		c.LStore.UpsertGraphNode(c.VaultPath, galaxyID, galaxyName, "galaxy-core", nil)
+		c.LStore.UpsertGraphNode(folderPath, galaxyID, galaxyName, "galaxy-core", nil)
 	}
 
 	err := filepath.Walk(c.VaultPath, func(path string, info os.FileInfo, err error) error {
@@ -142,7 +146,7 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 
 		// 📁 Se for diretório, emite como um Planeta ou Sistema Solar
 		if info.IsDir() {
-			folderID := "planet:" + strings.ToLower(relPath)
+			folderID := "planet:" + pathHash + ":" + strings.ToLower(relPath)
 			folderName := info.Name()
 			
 			// Determina o Pai (Parent) para criar aresta de órbita
@@ -156,7 +160,7 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 				celestialType = "solar-system-core" // Pastas raiz do vault são sistemas solares
 				mass = 50.0
 			} else {
-				parentID = "planet:" + strings.ToLower(parentDir)
+				parentID = "planet:" + pathHash + ":" + strings.ToLower(parentDir)
 			}
 
 			if !processedFolders[folderID] {
@@ -171,7 +175,7 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 					"what-it-does":  "Atua como centro de gravidade local para documentos e subpastas orbitais.",
 				})
 				if c.LStore != nil {
-					c.LStore.UpsertGraphNode(c.VaultPath, folderID, folderName, "folder", nil)
+					c.LStore.UpsertGraphNode(folderPath, folderID, folderName, "folder", nil)
 				}
 				// Aresta de Órbita Física (Parentesco)
 				utils.SafeEmit(c.ctx, "graph:edge", map[string]interface{}{
@@ -181,7 +185,7 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 					"edge-type": "orbital",
 				})
 				if c.LStore != nil {
-					c.LStore.InsertGraphEdge(c.VaultPath, parentID, folderID, 5, "orbital")
+					c.LStore.InsertGraphEdge(folderPath, parentID, folderID, 5, "orbital")
 				}
 				processedFolders[folderID] = true
 			}
@@ -200,7 +204,7 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 		}
 
 		nodeName := strings.TrimSuffix(info.Name(), ext)
-		nodeID := strings.ToLower(nodeName)
+		nodeID := "moon:" + pathHash + ":" + strings.ToLower(nodeName)
 		docType := "chunk"
 		if isImage || isPDF { docType = "source" }
 
@@ -210,7 +214,7 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 		if parentDir == "." {
 			parentID = galaxyID
 		} else {
-			parentID = "planet:" + strings.ToLower(parentDir)
+			parentID = "planet:" + pathHash + ":" + strings.ToLower(parentDir)
 		}
 
 		utils.SafeEmit(c.ctx, "graph:edge", map[string]interface{}{
@@ -220,7 +224,7 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 			"edge-type": "orbital",
 		})
 		if c.LStore != nil {
-			c.LStore.InsertGraphEdge(c.VaultPath, parentID, nodeID, 3, "orbital")
+			c.LStore.InsertGraphEdge(folderPath, parentID, nodeID, 3, "orbital")
 		}
 
 		// Lê conteúdo (md/código) para gerar resumo real e extrair links
@@ -233,11 +237,15 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 
 				links := extractLinks(content)
 				for _, target := range links {
+					targetID := "moon:" + pathHash + ":" + strings.ToLower(target)
 					utils.SafeEmit(c.ctx, "graph:edge", map[string]interface{}{
 						"source": nodeID,
-						"target": strings.ToLower(target),
+						"target": targetID,
 						"weight": 1, // Link semântico
 					})
+					if c.LStore != nil {
+						c.LStore.InsertGraphEdge(folderPath, nodeID, targetID, 1, "mention")
+					}
 				}
 
 				// Cache inteligente — ignora arquivos não modificados
@@ -260,7 +268,7 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 						"what-it-does":   fileWhatItDoes,
 					})
 					if c.LStore != nil {
-						c.LStore.UpsertGraphNode(c.VaultPath, nodeID, nodeName, docType, nil)
+						c.LStore.UpsertGraphNode(folderPath, nodeID, nodeName, docType, nil)
 					}
 					return nil
 				}
@@ -410,7 +418,10 @@ func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.P
 		processedFolders := make(map[string]bool)
 
 		// O CoreNode é o Sol da Galáxia do Projeto
-		galaxyID := "galaxy:" + strings.ToLower(repo.CoreNode)
+		h := sha256.New()
+		h.Write([]byte(repo.Path))
+		pathHash := hex.EncodeToString(h.Sum(nil))[:6]
+		galaxyID := "galaxy:" + pathHash + ":" + strings.ToLower(repo.CoreNode)
 		utils.SafeEmit(c.ctx, "graph:node", map[string]interface{}{
 			"id":            galaxyID,
 			"name":          repo.CoreNode,
@@ -455,7 +466,7 @@ func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.P
 
 			// 📁 Emitir Pasta (Planeta ou Sistema Solar)
 			if info.IsDir() {
-				folderID := "planet:" + strings.ToLower(repo.CoreNode+":"+relPath)
+				folderID := "planet:" + pathHash + ":" + strings.ToLower(relPath)
 				folderName := info.Name()
 
 				parentDir := filepath.Dir(relPath)
@@ -468,7 +479,7 @@ func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.P
 					celestialType = "solar-system-core"
 					mass = 40.0
 				} else {
-					parentID = "planet:" + strings.ToLower(repo.CoreNode+":"+parentDir)
+					parentID = "planet:" + pathHash + ":" + strings.ToLower(parentDir)
 				}
 
 				if !processedFolders[folderID] {
@@ -505,7 +516,7 @@ func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.P
 			if isCode { docType = "code-file" }
 
 			nodeName := strings.TrimSuffix(info.Name(), ext)
-			nodeID := strings.ToLower(nodeName)
+			nodeID := "moon:" + pathHash + ":" + strings.ToLower(nodeName)
 
 			// Gera resumo real a partir do conteúdo do arquivo
 			fileSummary, fileWhatItDoes := func() (string, string) {
@@ -523,7 +534,7 @@ func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.P
 			if parentDir == "." {
 				parentID = galaxyID
 			} else {
-				parentID = "planet:" + strings.ToLower(repo.CoreNode+":"+parentDir)
+				parentID = "planet:" + pathHash + ":" + strings.ToLower(parentDir)
 			}
 
 			// Emite a Lua do Projeto com resumo individual
@@ -581,7 +592,11 @@ func (c *Crawler) processFile(ctx context.Context, path string, workspacePath st
 	}
 
 	nodeName := strings.TrimSuffix(info.Name(), ext)
-	nodeID := strings.ToLower(nodeName)
+	
+	h := sha256.New()
+	h.Write([]byte(workspacePath))
+	pathHash := hex.EncodeToString(h.Sum(nil))[:6]
+	nodeID := "moon:" + pathHash + ":" + strings.ToLower(nodeName)
 
 	rawContent, err := os.ReadFile(path)
 	if err != nil {
@@ -681,11 +696,11 @@ func (c *Crawler) processFile(ctx context.Context, path string, workspacePath st
 		if isPDF { mimeType = "application/pdf" }
 		vector, err = c.Embedder.GenerateMultimodalEmbedding(ctx, rawContent, mimeType, false)
 	} else {
-		// Truncamento de Segurança para Embeddings (Max 2k chars)
+		// Truncamento de Segurança para Embeddings (Max 1.5k chars)
 		// Nota: Idealmente faríamos chunk-averaging, mas truncar previne o Erro 500 no llama-server.
 		safeEmbedText := textContent
-		if len(safeEmbedText) > 2000 {
-			safeEmbedText = safeEmbedText[:2000]
+		if len(safeEmbedText) > 1500 {
+			safeEmbedText = safeEmbedText[:1500]
 		}
 		vector, err = c.Embedder.GenerateEmbedding(ctx, safeEmbedText, false)
 	}

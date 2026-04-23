@@ -3,6 +3,7 @@ package core
 import (
 	"Lumaestro/internal/rag"
 	"fmt"
+	"path/filepath"
 	"strings"
 )
 
@@ -15,8 +16,15 @@ func (a *App) GetNeuralNodeContext(nodeID string) (map[string]interface{}, error
 
 	var result map[string]interface{}
 
+	// 🧼 Normalização: Remove prefixos de Galáxia/Lua e Hashes para busca lexical pura
+	searchName := nodeID
+	if strings.Contains(nodeID, ":") {
+		parts := strings.Split(nodeID, ":")
+		searchName = parts[len(parts)-1]
+	}
+
 	// 1. Tentar buscar em Notas do Obsidian ou Sistema (Chave: name)
-	res, err := a.qdrant.SearchByField("obsidian_knowledge", "name", nodeID)
+	res, err := a.qdrant.SearchByField("obsidian_knowledge", "name", searchName)
 
 	if err == nil && res != nil {
 		result = map[string]interface{}{
@@ -64,26 +72,38 @@ func (a *App) AnalyzeGraphHealth() (map[string]interface{}, error) {
 	if a.qdrant == nil {
 		return nil, fmt.Errorf("banco vetorial offline")
 	}
-	// 📂 Contagem Isolada por Projeto (Órbita Atual)
+
+	// 📂 Agregação de Contagem Multi-Fonte (v20)
 	count := 0
-	if a.LStore != nil && a.executor.Workspace != "" {
-		c, err := a.LStore.GetNodeCount(a.executor.Workspace)
-		if err == nil {
-			count = c
+	if a.LStore != nil {
+		pathsToCount := []string{a.executor.Workspace, a.config.ObsidianVaultPath}
+		if a.executor.Workspace != "" {
+			pathsToCount = append(pathsToCount, filepath.Join(a.executor.Workspace, "docs"))
 		}
-	} else {
-		// Fallback para global se não houver workspace (Obsidian Base)
+
+		uniqueIDs := make(map[string]bool)
+		for _, p := range pathsToCount {
+			if p == "" { continue }
+			nodes, _, _ := a.LStore.GetFullGraph(p)
+			for _, n := range nodes {
+				if id, ok := n["id"].(string); ok {
+					uniqueIDs[id] = true
+				}
+			}
+		}
+		count = len(uniqueIDs)
+	}
+
+	if count == 0 {
+		// Fallback para Qdrant se DuckDB falhar
 		obsidianCount, _ := a.qdrant.CountPoints("obsidian_knowledge")
-		memoryCount, _ := a.qdrant.CountPoints("knowledge_graph")
-		count = obsidianCount + memoryCount
+		count = obsidianCount
 	}
 
 	// Cálculo de Densidade Orgânica (Progressão Logarítmica)
-	// Com 816 notas, queremos um valor que faça sentido visual.
 	densityValue := 0.05 // Base 5%
 	if count > 0 {
-		// Quanto mais notas, mais o cérebro se torna denso (Log10)
-		densityValue += (float64(count) / 1000.0) * 0.2 // Linear suave até 1000 notas
+		densityValue += (float64(count) / 1000.0) * 0.2
 	}
 	if densityValue > 1.0 {
 		densityValue = 1.0

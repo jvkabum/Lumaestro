@@ -81,15 +81,16 @@ func (s *ChatService) Ask(ctx context.Context, agent string, sessionID string, q
 			// 3. Brilhar as notas iniciais encontradas no Grafo e lançar Log
 			for i, note := range notes {
 				if noteName, ok := note["name"].(string); ok {
+					targetID := strings.ToLower(noteName)
 					utils.SafeEmit(s.ctx, "graph:log", fmt.Sprintf("[%s] ✨ lendo notas mestre -> %s", time.Now().Format("15:04"), noteName))
 					
 					// Apenas a nota mais relevante (Top 1) ganha o foco automático da câmera
 					if i == 0 {
-						utils.SafeEmit(s.ctx, "node:active", noteName)
+						utils.SafeEmit(s.ctx, "node:active", targetID)
 					}
 
 					// Envia o próprio nó principal para o painel se ele não foi carregado
-					utils.SafeEmit(s.ctx, "graph:node", map[string]string{"id": noteName, "name": noteName})
+					utils.SafeEmit(s.ctx, "graph:node", map[string]string{"id": targetID, "name": noteName})
 				}
 			}
 		}

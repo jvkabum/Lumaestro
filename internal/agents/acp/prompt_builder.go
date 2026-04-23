@@ -52,6 +52,7 @@ func (b *PromptBuilder) Build(profile AgentProfile, context string, history []st
 	sb.WriteString(fmt.Sprintf("%s\n\n", prompts.GetAutonomyDirective(autonomous)))
 	sb.WriteString(fmt.Sprintf("INSTRUÇÕES DE SISTEMA:\n%s\n\n", profile.SystemPrompt))
 	sb.WriteString(fmt.Sprintf("%s\n\n", prompts.GetLightningDirective()))
+	sb.WriteString(fmt.Sprintf("%s\n\n", prompts.GetNavigationDirective()))
 
 	// 2. Contexto do Obsidian (RAG)
 	if context != "" {

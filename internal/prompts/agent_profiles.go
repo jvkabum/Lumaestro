@@ -39,6 +39,13 @@ func GetLightningDirective() string {
 Se houver lições sobre a tarefa atual, siga as recomendações para evitar falhas passadas do enxame.`
 }
 
+// GetNavigationDirective retorna a diretriz de zoom cinematográfico no grafo.
+func GetNavigationDirective() string {
+	return `[NAVEGAÇÃO 3D]: Você tem controle sobre a câmera do mapa neural. 
+Sempre que mencionar um conceito, tecnologia ou nota importante que exista no grafo, envolva o nome em colchetes duplos (ex: [[Nome da Nota]]). 
+Isso disparará um Zoom Cinematográfico automático para o usuário, melhorando a explicação.`
+}
+
 // === PERFILS DOS AGENTES ACP ===
 
 // GetCoderSystemPrompt retorna o prompt de identidade do Agente Coder.

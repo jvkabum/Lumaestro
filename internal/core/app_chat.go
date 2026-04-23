@@ -114,7 +114,7 @@ func (a *App) SendAgentInput(agent string, input string, images []map[string]str
 		var fastNodeFound bool
 		// 🏁 FAST-PATH: DuckDB (Busca Léxica Instantânea por Nome)
 		if a.LStore != nil && a.config.ObsidianVaultPath != "" {
-			fastNodeId, err := a.LStore.FindNodeInText(a.config.ObsidianVaultPath, input)
+			fastNodeId, err := a.LStore.FindNodeInText(input)
 			if err == nil && fastNodeId != "" {
 				fmt.Printf("[RAG] ⚡ Fast-Path DuckDB: Match PERFEITO -> Focando %s\n", fastNodeId)
 				a.emitEvent("node:active", fastNodeId)
@@ -412,4 +412,26 @@ func (a *App) ReadGeminiConfig() (string, error) {
 // WriteGeminiConfig salva as novas diretrizes no arquivo GEMINI.md.
 func (a *App) WriteGeminiConfig(content string) error {
 	return os.WriteFile("GEMINI.md", []byte(content), 0644)
+}
+
+// LogNeuralActivity permite que o Frontend reporte eventos de navegação para o terminal de processamento.
+func (a *App) LogNeuralActivity(source string, content string, isError bool) {
+	logType := "status"
+	if isError {
+		logType = "error"
+	}
+	a.emitEvent("agent:log", map[string]string{
+		"source":  strings.ToUpper(source),
+		"content": content,
+		"type":    logType,
+	})
+}
+
+// TriggerZoom permite que o Frontend solicite um foco de câmera manualmente (ex: Zoom Cinematográfico via IA)
+func (a *App) TriggerZoom(nodeID string) {
+	cleanID := strings.ToLower(strings.TrimSpace(nodeID))
+	if cleanID != "" {
+		fmt.Printf("[App] 🎬 Zoom Cinematográfico via IA disparado para: %s\n", cleanID)
+		a.emitEvent("node:active", cleanID)
+	}
 }

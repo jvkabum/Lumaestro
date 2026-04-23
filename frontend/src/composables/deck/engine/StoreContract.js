@@ -23,7 +23,10 @@ export function useStoreContract({
         const panTarget = (x, y, z) => pilotPan(deckInstanceRef.value, currentViewState, x, y, z);
         
         const focusNode = (id) => {
-            if (!id) return;
+            if (!id) {
+                zoomToFit();
+                return;
+            }
             const targetId = String(id).toLowerCase();
             
             let node = currentNodesRef.value.find(n => String(n.id).toLowerCase() === targetId);

@@ -249,33 +249,36 @@ func (s *DuckDBStore) ApproveCandidate(candidateID string) error {
 }
 
 // FindNodeInText busca o nó mais relevante cujo nome está contido no texto fornecido.
-func (s *DuckDBStore) FindNodeInText(workspacePath, text string) (string, error) {
+func (s *DuckDBStore) FindNodeInText(text string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	var id string
 	
-	// Busca nós cujo nome (case insensitive) apareça no texto do usuário.
-	// Primeiro tentamos com word boundaries rudimentares (com espaços) para evitar falsos positivos
-	// Ex: "Go" não deve dar match dentro de "algoritmo longo".
+	// Limpeza profunda do texto para evitar que aspas ou pontuação quebrem o match
+	cleaner := strings.NewReplacer("\"", "", "'", "", "(", "", ")", "", "[", "", "]", "", "?", "", "!", "", ".", "", ",", "")
+	cleanText := cleaner.Replace(strings.TrimSpace(text))
+
+	// Busca Strict: Tenta encontrar o nome da nota como uma palavra isolada no texto
 	queryStrict := `
 		SELECT id 
 		FROM graph_nodes 
 		WHERE length(name) > 2 
-		  AND ? ILIKE '% ' || name || ' %'
+		  AND (
+			  ' ' || ? || ' ' ILIKE '% ' || name || ' %' OR 
+			  ? ILIKE name || ' %' OR 
+			  ? ILIKE '% ' || name
+		  )
 		ORDER BY length(name) DESC 
 		LIMIT 1
 	`
 	
-	// Normaliza o texto para que a pontuação não quebre o match com espaços
-	cleanText := " " + text + " "
-	cleanText = strings.NewReplacer("/", " ", "?", " ", ".", " ", ",", " ", "!", " ", ":", " ", ";", " ", "\"", " ", "'", " ").Replace(cleanText)
-	
-	err := s.db.QueryRow(queryStrict, cleanText).Scan(&id)
+	err := s.db.QueryRow(queryStrict, cleanText, cleanText, cleanText).Scan(&id)
 	if err == nil {
 		return id, nil
 	}
 
-	// Fallback loose: ILIKE normal sem espaços.
-	// Útil para nodes que possuem pontuação no nome (ex: Next.js) que foi apagada no cleanText.
-	// Exigimos length > 3 para evitar matches muito curtos ("API", "Go", "Vue" já teriam sido pegos no strict).
+	// Fallback loose: ILIKE normal
 	queryLoose := `
 		SELECT id 
 		FROM graph_nodes 
@@ -284,7 +287,7 @@ func (s *DuckDBStore) FindNodeInText(workspacePath, text string) (string, error)
 		ORDER BY length(name) DESC 
 		LIMIT 1
 	`
-	err = s.db.QueryRow(queryLoose, text).Scan(&id)
+	err = s.db.QueryRow(queryLoose, cleanText).Scan(&id)
 	return id, err
 }
 

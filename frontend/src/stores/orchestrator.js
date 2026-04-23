@@ -214,6 +214,23 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
       } else {
           messages.value[idx].isPlanning = false;
           messages.value[idx].text += content;
+
+          // 🎬 Zoom Cinematográfico: Extração reativa de links
+          const matches = [...messages.value[idx].text.matchAll(/\[\[(.*?)\]\]/g)];
+          for (const match of matches) {
+              const nodeName = match[1].trim();
+              if (nodeName && nodeName !== "") {
+                  if (!messages.value[idx].focusedNodes) {
+                      messages.value[idx].focusedNodes = new Set();
+                  }
+                  if (!messages.value[idx].focusedNodes.has(nodeName)) {
+                      messages.value[idx].focusedNodes.add(nodeName);
+                      console.log(`[Store] 🎬 Zoom Cinematográfico Detectado: ${nodeName}`);
+                      // Dispara evento globalmente no frontend para o BridgeDriver pegar
+                      window.dispatchEvent(new CustomEvent('cinematic:zoom', { detail: nodeName }));
+                  }
+              }
+          }
       }
       
       // Forçar atualização do array (Sincronização definitiva)
@@ -405,6 +422,9 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   };
 
   const ask = async (agent, prompt) => {
+    // 🚀 RESET DE NAVEGAÇÃO: Limpa o foco atual para evitar zooms residuais de pesquisas anteriores
+    window.dispatchEvent(new CustomEvent('cinematic:zoom', { detail: null }));
+
     messages.value.push({ role: 'user', text: prompt });
     isThinking.value = true;
     activeAgent.value = agent;
