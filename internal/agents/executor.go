@@ -350,6 +350,10 @@ func (e *Executor) IsTerminalSession(sessionID string) bool {
 func (e *Executor) monitorSession(s *CLISession, stdout, stderr io.ReadCloser, agent string) {
 	reader := io.MultiReader(stdout, stderr)
 	scanner := bufio.NewScanner(reader)
+	
+	// Buffer de 10MB para prevenir erro 'token too long' em outputs densos
+	buf := make([]byte, 10*1024*1024)
+	scanner.Buffer(buf, 10*1024*1024)
 
 	for scanner.Scan() {
 		line := scanner.Text()

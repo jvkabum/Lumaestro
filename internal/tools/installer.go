@@ -337,7 +337,7 @@ func (i *Installer) KillOrphans() {
 		currentPid := os.Getpid()
 		fmt.Printf("[Installer] 🧹 Limpeza Profunda (PID Local %d): Encerrando instâncias zumbis nas portas 8001, 8085, 8086...\n", currentPid)
 		
-		// Script PowerShell robusto que ignora o processo atual
+		// Script PowerShell robusto que ignora o processo atual e usa wildcards para os nomes
 		script := fmt.Sprintf(`
 			$currentPid = %d;
 			$ports = @(8001, 8085, 8086, 8087, 8080);
@@ -347,12 +347,12 @@ func (i *Installer) KillOrphans() {
 					$conns | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue };
 				}
 			}
-			# Caça instâncias órfãs por nome (incluindo o binário do Wails)
-			@("llama-server", "lumaestro-embedder", "lumaestro-specialist", "Lumaestro-dev", "Lumaestro") | ForEach-Object {
+			# Caça instâncias órfãs por nome (com wildcards para capturar .exe e variações)
+			@("llama-server*", "lumaestro*", "Lumaestro*") | ForEach-Object {
 				Get-Process -Name $_ -ErrorAction SilentlyContinue | Where-Object { $_.Id -ne $currentPid } | Stop-Process -Force -ErrorAction SilentlyContinue;
 			}
 		`, currentPid)
-		exec.Command("powershell", "-Command", script).Run()
+		exec.Command("powershell", "-NoProfile", "-Command", script).Run()
 	} else {
 		exec.Command("pkill", "-9", "llama-server").Run()
 		exec.Command("pkill", "-9", "Lumaestro-dev").Run()

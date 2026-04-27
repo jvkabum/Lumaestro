@@ -10,6 +10,7 @@ import (
 // Protege a aplicação contra crashes causados por contextos inválidos, nulos ou já encerrados.
 func SafeEmit(ctx context.Context, name string, data interface{}) {
 	if ctx == nil {
+		fmt.Printf("❌ [SafeEmit] ERRO CRÍTICO: Tentativa de enviar evento '%s' com CONTEXTO NULO!\n", name)
 		return
 	}
 
@@ -28,6 +29,9 @@ func SafeEmit(ctx context.Context, name string, data interface{}) {
 		return
 	default:
 		// Contexto saudável: delega a emissão para o runtime oficial
+		if name != "agent:log" { // Evita floodar o terminal com logs de agente
+			fmt.Printf("📡 [SafeEmit] Enviando evento '%s' para o Frontend...\n", name)
+		}
 		runtime.EventsEmit(ctx, name, data)
 	}
 }

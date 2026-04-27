@@ -80,7 +80,7 @@ func (n *NativeEmbedder) Start() error {
 	args = append(args,
 		"--embedding",
 		"--pooling", "cls",
-		"--ctx-size", "2048",
+		"--ctx-size", "32768",
 		"--n-gpu-layers", "-1", // -1 delega 100% das camadas que couberem na VRAM para a Placa de Vídeo; o resto fica na CPU.
 	)
 
@@ -126,7 +126,7 @@ func (n *NativeEmbedder) Start() error {
 }
 
 func (n *NativeEmbedder) waitForReady() error {
-	url := fmt.Sprintf("http://localhost:%d/health", n.port)
+	url := fmt.Sprintf("http://127.0.0.1:%d/health", n.port)
 
 	// Timeout maior na primeira vez (download do modelo)
 	for i := 0; i < 120; i++ {
@@ -149,17 +149,9 @@ func (n *NativeEmbedder) GenerateEmbedding(ctx context.Context, text string, fas
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
-	url := fmt.Sprintf("http://localhost:%d/embedding", n.port)
-
-	// Truncamento de segurança: garante que o texto caiba no ctx-size de 2048 tokens
-	// (~4 chars/token, com margem de segurança: max 1500 chars ≈ 375 tokens)
-	safeText := text
-	if len(safeText) > 1500 {
-		safeText = safeText[:1500]
-	}
-
+	url := fmt.Sprintf("http://127.0.0.1:%d/embedding", n.port)
 	payload := map[string]interface{}{
-		"content": safeText,
+		"content": text,
 	}
 
 	body, _ := json.Marshal(payload)

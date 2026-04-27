@@ -126,7 +126,7 @@ func (n *NativeGenerator) Start() error {
 }
 
 func (n *NativeGenerator) waitForReady() error {
-	url := fmt.Sprintf("http://localhost:%d/health", n.port)
+	url := fmt.Sprintf("http://127.0.0.1:%d/health", n.port)
 	for i := 0; i < 300; i++ { // 5 minutos de timeout para download inicial
 		resp, err := n.client.Get(url)
 		if err == nil && resp.StatusCode == http.StatusOK {
@@ -147,7 +147,7 @@ func (n *NativeGenerator) GenerateText(ctx context.Context, prompt string) (stri
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
-	url := fmt.Sprintf("http://localhost:%d/v1/chat/completions", n.port)
+	url := fmt.Sprintf("http://127.0.0.1:%d/v1/chat/completions", n.port)
 
 	payload := map[string]interface{}{
 		"messages": []map[string]string{
@@ -198,9 +198,16 @@ func (n *NativeGenerator) GenerateMultimodalText(ctx context.Context, prompt str
 	return "", fmt.Errorf("gerador nativo suporta apenas Texto/RAG por enquanto")
 }
 
-func (n *NativeGenerator) Stop() {
+func (n *NativeGenerator) Stop() error {
 	if n.cmd != nil && n.cmd.Process != nil {
 		fmt.Printf("[%s] 🛑 Encerrando motor local na porta %d...\n", n.displayName, n.port)
-		n.cmd.Process.Kill()
+		err := n.cmd.Process.Kill()
+		if err != nil {
+			return fmt.Errorf("falha ao encerrar processo: %w", err)
+		}
+		// Aguarda o processo morrer (recolhe o zumbi e garante liberação de VRAM)
+		_ = n.cmd.Wait()
+		return nil
 	}
+	return nil
 }

@@ -240,3 +240,16 @@ func FormatGenAIError(err error) string {
 func EncodeBase64(data []byte) string {
 	return base64.StdEncoding.EncodeToString(data)
 }
+
+// CleanNodeID remove caracteres especiais e espaços de uma string para torná-la um ID seguro.
+func CleanNodeID(name string) string {
+	s := strings.ToLower(name)
+	s = strings.ReplaceAll(s, " ", "_")
+	s = strings.ReplaceAll(s, "[", "")
+	s = strings.ReplaceAll(s, "]", "")
+	s = strings.ReplaceAll(s, "(", "")
+	s = strings.ReplaceAll(s, ")", "")
+	s = strings.ReplaceAll(s, ":", "")
+	s = strings.ReplaceAll(s, "/", "_")
+	return s
+}
