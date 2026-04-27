@@ -18,6 +18,13 @@ O sistema opera em três camadas de consciência digital integradas:
 2.  **Lightning Engine (Powered by DuckDB)**: Análise reflexiva e analítica de alto desempenho. O uso do **DuckDB v1.1.3** permite que o enxame processe trilhas de pensamento e métricas de grafo em milissegundos, agindo como a memória de curto prazo ultrarrápida da IA.
 3.  **Córtex Autônomo ACP**: Orquestração via protocolo **JSON-RPC 2.0**. Os agentes operam em um ambiente seguro (Subagents), podendo executar ferramentas, ler arquivos e evoluir prompts através de **Beam Search** metacognitivo.
 
+- `docs/` — Documentação técnica, guias de sistema e o índice global.
+- `scripts/` — Automação de desenvolvimento (`dev.ps1`) e build (`build.ps1`).
+- `bin/` — Binários e dependências nativas (ex: `duckdb.dll`).
+- `infra/` — Orquestração de containers e infraestrutura de rede.
+- `internal/` — Lógica de negócio, agentes e motores analíticos.
+- `frontend/` — Interface do usuário Vue.js 3 e motor gráfico Deck.gl.
+
 ---
 
 ## 🚀 Funcionalidades de Elite

@@ -227,7 +227,7 @@ func (a *App) ResetQdrantDB() string {
 		a.GEngine.Clear()
 	}
 
-	os.Remove(".lumaestro/topology.json") // Expurga cache visual 3D
+	os.Remove(".lumaestro/cache/topology.json") // Expurga cache visual 3D
 
 	// 3. Recria Infraestrutura do zero
 	dim := 3072
@@ -251,7 +251,7 @@ func (a *App) ResetQdrantDB() string {
 
 // PurgeCache limpa todo o histórico de indexação local.
 func (a *App) PurgeCache() string {
-	os.Remove(".lumaestro/topology.json") // Invalida Topology Cache
+	os.Remove(".lumaestro/cache/topology.json") // Invalida Topology Cache
 	if a.crawler == nil {
 		return "⚠️ Motor de indexação indisponível."
 	}
@@ -281,12 +281,12 @@ func (a *App) saveTopologyCache(nodes []map[string]interface{}, edges []map[stri
 	}
 	data, err := json.Marshal(cache)
 	if err == nil {
-		os.WriteFile(".lumaestro/topology.json", data, 0644)
+		os.WriteFile(".lumaestro/cache/topology.json", data, 0644)
 	}
 }
 
 func (a *App) loadTopologyCache() *TopologyCache {
-	data, err := os.ReadFile(".lumaestro/topology.json")
+	data, err := os.ReadFile(".lumaestro/cache/topology.json")
 	if err != nil {
 		return nil
 	}

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -287,11 +288,20 @@ func (c *Config) GroqKeyCount() int {
 }
 
 func getConfigPath() string {
-	// Migração automática de config.json legado
-	if _, err := os.Stat("config.json"); err == nil && !strings.Contains(os.Getenv("WAILS_WASM"), "true") {
-		_ = os.Rename("config.json", ".lumaestro.json")
+	configDir := filepath.Join(".lumaestro", "cache")
+	// Garante que o diretorio exista
+	_ = os.MkdirAll(configDir, 0755)
+
+	// Migração automática da raiz para a subpasta cache
+	oldPath := ".lumaestro.json"
+	newPath := filepath.Join(configDir, ".lumaestro.json")
+	
+	if _, err := os.Stat(oldPath); err == nil {
+		fmt.Printf("[Config] 🔄 Migrando arquivo de configuração para %s\n", newPath)
+		_ = os.Rename(oldPath, newPath)
 	}
-	return ".lumaestro.json"
+
+	return newPath
 }
 
 // Save armazena as configurações em um arquivo JSON.

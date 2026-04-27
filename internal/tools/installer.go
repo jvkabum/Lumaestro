@@ -92,7 +92,14 @@ func (i *Installer) CheckGeminiAuth() bool {
 			return true
 		}
 
-		// Padrão Nativo Gemini CLI (oauth_creds.json) - Muito comum no Windows/NPM
+		// 1. Prioridade: Verifica na identidade consolidada do projeto (.lumaestro)
+		cwd, _ := os.Getwd()
+		projectIdentity := filepath.Join(cwd, ".lumaestro", "identity", ".gemini", "oauth_creds.json")
+		if _, err := os.Stat(projectIdentity); err == nil {
+			return true
+		}
+
+		// 2. Fallback: Verifica no padrão global do sistema (~/.gemini)
 		geminiPath := filepath.Join(home, ".gemini", "oauth_creds.json")
 		if _, err := os.Stat(geminiPath); err == nil {
 			return true
@@ -253,7 +260,12 @@ func (i *Installer) SyncPath() {
 		filepath.Join(appData, "nvm"),                              // NVM Windows
 		filepath.Join(home, "scoop", "shims"),                      // Scoop
 		`C:\Program Files\nodejs`,                                 // Node.js padrão
+		filepath.Join(home, "AppData", "Local", "Programs", "Lumaestro", "bin"), // Produção
 	}
+
+	// 🔍 Busca dinâmica pelo diretório de trabalho para DuckDB Local
+	cwd, _ := os.Getwd()
+	paths = append(paths, filepath.Join(cwd, "deps", "duckdb"))
 
 	// 🔍 Busca dinâmica pelo diretório do WinGet (Portátil)
 	winGetDir := filepath.Join(home, "AppData", "Local", "Microsoft", "WinGet", "Packages")

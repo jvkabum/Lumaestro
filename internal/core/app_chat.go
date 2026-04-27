@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -288,7 +289,7 @@ func (a *App) ConsolidateChatKnowledge(sessionID string, chatText string) string
 		return "Erro ao tecer sinapses: " + err.Error()
 	}
 
-	_ = os.Remove(".lumaestro_topology.json")
+	_ = os.Remove(filepath.Join(".lumaestro", "cache", "topology.json"))
 	a.emitAgentStatus("memory", "Memória consolidada e mapa 3D atualizado", "memory")
 
 	return "✅ Sinapses consolidadas com sucesso no Grafo de Conhecimento."

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 )
 
 // Startup é o gatilho inicial quando o sistema decola.
@@ -56,7 +57,7 @@ func (a *App) injectContexts() {
 	os.MkdirAll(".lumaestro", 0755)
 
 	// 💎 Inicialização Atômica do Cache de Topologia (se não existir)
-	topologyPath := ".lumaestro/topology.json"
+	topologyPath := filepath.Join(".lumaestro", "cache", "topology.json")
 	if _, err := os.Stat(topologyPath); os.IsNotExist(err) {
 		fmt.Println("[Init] 🛠️ Criando arquivo de topologia base em .lumaestro/...")
 		baseCache := `{"nodes":[], "edges":[]}`
