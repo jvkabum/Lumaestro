@@ -13,6 +13,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"hash/fnv"
 
 	"Lumaestro/internal/config"
 	"Lumaestro/internal/lightning"
@@ -31,19 +32,24 @@ type Crawler struct {
 	Embedder  provider.Embedder
 	Qdrant    *provider.QdrantClient
 	Ontology  *provider.OntologyService
-	LStore    *lightning.DuckDBStore // 📊 Banco analítico para isolamento de projetos
 	cachePath string
 	cache     IndexCache
 	mu        sync.Mutex
 	workerCount int // 👷 Número de workers paralelos (reduzido para evitar burst de cota)
+	LStore      *lightning.DuckDBStore // 📊 Banco analítico para isolamento de projetos
+
+	// 🧠 Motor de Sinapses Semânticas (ID Vinculador)
+	nodeNames map[string]string // Mapeamento nome_amigavel -> id_unico
+	nameMu    sync.RWMutex
 }
 
 type crawlTask struct {
 	path          string
-	workspacePath string // 📂 Identificador da órbita do projeto
+	workspacePath string // 📁 Identificador da órbita do projeto
 	info          os.FileInfo
 	docType       string
 	implicitLinks []string
+	parentID      string // 🛰️ ID do pai para gravidade orbital
 }
 
 // SetContext injeta o contexto oficial do Wails para emissão de eventos assíncronos.
@@ -61,7 +67,8 @@ func NewCrawler(vaultPath string, embedder provider.Embedder, qdrant *provider.Q
 		LStore:      lStore,
 		cachePath:   ".context/index_cache.json",
 		cache:       make(IndexCache),
-		workerCount: 2,
+		workerCount: 2, // ⚙️ Reduzido para 2 — evita burst de cota em chaves gratuitas
+		nodeNames:   make(map[string]string),
 	}
 	c.loadCache()
 	return c
@@ -135,7 +142,10 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 		"what-it-does":  "Funciona como raiz estrutural da base de conhecimento no grafo 3D.",
 	})
 	if c.LStore != nil {
-		c.LStore.UpsertGraphNode(folderPath, galaxyID, galaxyName, "galaxy-core", nil)
+		c.LStore.UpsertGraphNode(folderPath, galaxyID, galaxyName, "galaxy-core", "", map[string]interface{}{
+			"celestial-type": "sun",
+			"mass":          100.0,
+		})
 	}
 
 	err := filepath.Walk(c.VaultPath, func(path string, info os.FileInfo, err error) error {
@@ -175,7 +185,11 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 					"what-it-does":  "Atua como centro de gravidade local para documentos e subpastas orbitais.",
 				})
 				if c.LStore != nil {
-					c.LStore.UpsertGraphNode(folderPath, folderID, folderName, "folder", nil)
+					c.LStore.UpsertGraphNode(folderPath, folderID, folderName, "folder", "", map[string]interface{}{
+						"celestial-type":    celestialType,
+						"mass":              mass,
+						"parent_gravity_id": parentID,
+					})
 				}
 				// Aresta de Órbita Física (Parentesco)
 				utils.SafeEmit(c.ctx, "graph:edge", map[string]interface{}{
@@ -239,9 +253,10 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 				for _, target := range links {
 					targetID := "moon:" + pathHash + ":" + strings.ToLower(target)
 					utils.SafeEmit(c.ctx, "graph:edge", map[string]interface{}{
-						"source": nodeID,
-						"target": targetID,
-						"weight": 1, // Link semântico
+						"source":    nodeID,
+						"target":    targetID,
+						"weight":    1, // Link semântico
+						"edge-type": "link",
 					})
 					if c.LStore != nil {
 						c.LStore.InsertGraphEdge(folderPath, nodeID, targetID, 1, "mention")
@@ -268,8 +283,18 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 						"what-it-does":   fileWhatItDoes,
 					})
 					if c.LStore != nil {
-						c.LStore.UpsertGraphNode(folderPath, nodeID, nodeName, docType, nil)
+						c.LStore.UpsertGraphNode(folderPath, nodeID, nodeName, docType, "", map[string]interface{}{
+							"celestial-type":    "moon",
+							"mass":              5.0,
+							"parent_gravity_id": parentID,
+							"summary":           fileSummary,
+						})
+						c.LStore.InsertGraphEdge(folderPath, parentID, nodeID, 3, "orbital")
 					}
+					// Registro no Motor de Sinapses também para arquivos em cache
+					c.nameMu.Lock()
+					c.nodeNames[nodeName] = nodeID
+					c.nameMu.Unlock()
 					return nil
 				}
 			}
@@ -292,8 +317,24 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 			"summary":        fileSummary,
 			"what-it-does":   fileWhatItDoes,
 		})
+		
+		// Registro no Motor de Sinapses (Para vínculo automático posterior)
+		c.nameMu.Lock()
+		c.nodeNames[nodeName] = nodeID
+		c.nameMu.Unlock()
 
-		pendingFiles = append(pendingFiles, crawlTask{path: path, info: info, docType: docType})
+		pendingFiles = append(pendingFiles, crawlTask{path: path, info: info, docType: docType, parentID: parentID})
+		
+		// [NOVO] Salva no DuckDB imediatamente para visualização estrutural (Fase 1)
+		if c.LStore != nil {
+			c.LStore.UpsertGraphNode(folderPath, nodeID, nodeName, docType, "", map[string]interface{}{
+				"celestial-type":    "moon",
+				"mass":              5.0,
+				"parent_gravity_id": parentID,
+				"summary":           fileSummary,
+			})
+			c.LStore.InsertGraphEdge(folderPath, parentID, nodeID, 3, "orbital")
+		}
 		return nil
 	})
 
@@ -322,7 +363,7 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 		go func() {
 			defer wg.Done()
 			for task := range tasks {
-				indexed, processErr := c.processFile(ctx, task.path, c.VaultPath, task.info, task.docType, task.implicitLinks)
+				indexed, processErr := c.processFile(ctx, task.path, c.VaultPath, task.info, task.docType, task.implicitLinks, task.parentID)
 				if processErr == nil && indexed {
 					atomic.AddInt32(&totalIndexed, 1)
 				}
@@ -350,6 +391,27 @@ func (c *Crawler) IndexSystemDocs(ctx context.Context, rootPath string) error {
 		return err
 	}
 
+	// Sol Central da Galáxia de Documentação do Sistema
+	h := sha256.New()
+	h.Write([]byte(rootPath))
+	pathHash := hex.EncodeToString(h.Sum(nil))[:6]
+	galaxyID := "galaxy:" + pathHash + ":system-docs"
+	
+	utils.SafeEmit(c.ctx, "graph:node", map[string]interface{}{
+		"id":            galaxyID,
+		"name":          "System Docs",
+		"document-type": "galaxy-core",
+		"celestial-type": "sun",
+		"mass":          60.0,
+		"summary":       "Núcleo de documentação técnica interna do projeto.",
+	})
+	if c.LStore != nil {
+		c.LStore.UpsertGraphNode(rootPath, galaxyID, "System Docs", "galaxy-core", "", map[string]interface{}{
+			"celestial-type": "sun",
+			"mass":           60.0,
+		})
+	}
+
 	tasks := make(chan crawlTask, 100)
 	var wg sync.WaitGroup
 	var totalIndexed int32 = 0
@@ -359,7 +421,7 @@ func (c *Crawler) IndexSystemDocs(ctx context.Context, rootPath string) error {
 		go func() {
 			defer wg.Done()
 			for task := range tasks {
-				indexed, err := c.processFile(ctx, task.path, rootPath, task.info, task.docType, nil)
+				indexed, err := c.processFile(ctx, task.path, rootPath, task.info, task.docType, nil, task.parentID)
 				if err == nil && indexed {
 					atomic.AddInt32(&totalIndexed, 1)
 				}
@@ -387,7 +449,7 @@ func (c *Crawler) IndexSystemDocs(ctx context.Context, rootPath string) error {
 			return nil
 		}
 
-		tasks <- crawlTask{path: path, info: info, docType: "system"}
+		tasks <- crawlTask{path: path, info: info, docType: "system", parentID: galaxyID}
 		return nil
 	})
 
@@ -432,7 +494,7 @@ func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.P
 			"what-it-does":  "Conecta código/projetos externos ao RAG radial sem misturar domínios.",
 		})
 		if c.LStore != nil {
-			c.LStore.UpsertGraphNode(repo.Path, galaxyID, repo.CoreNode, "galaxy-core", nil)
+			c.LStore.UpsertGraphNode(repo.Path, galaxyID, repo.CoreNode, "galaxy-core", "", nil)
 		}
 
 		fmt.Printf("[Crawler] 🪐 Expandindo Galáxia Radial: %s\n", repo.CoreNode)
@@ -442,7 +504,7 @@ func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.P
 			go func() {
 				defer wg.Done()
 				for task := range tasks {
-					indexed, err := c.processFile(ctx, task.path, task.workspacePath, task.info, task.docType, task.implicitLinks)
+					indexed, err := c.processFile(ctx, task.path, task.workspacePath, task.info, task.docType, task.implicitLinks, task.parentID)
 					if err == nil && indexed {
 						atomic.AddInt32(&totalIndexed, 1)
 					}
@@ -499,6 +561,14 @@ func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.P
 						"weight": 5,
 						"edge-type": "orbital",
 					})
+					if c.LStore != nil {
+						c.LStore.UpsertGraphNode(repo.Path, folderID, folderName, "folder", "", map[string]interface{}{
+							"celestial-type":    celestialType,
+							"mass":              mass,
+							"parent_gravity_id": parentID,
+						})
+						c.LStore.InsertGraphEdge(repo.Path, parentID, folderID, 5, "orbital")
+					}
 					processedFolders[folderID] = true
 				}
 				return nil
@@ -555,6 +625,9 @@ func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.P
 				"weight": 3,
 				"edge-type": "orbital",
 			})
+			if c.LStore != nil {
+				c.LStore.InsertGraphEdge(repo.Path, parentID, nodeID, 3, "orbital")
+			}
 
 			tasks <- crawlTask{
 				path: path, 
@@ -562,6 +635,7 @@ func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.P
 				info: info, 
 				docType: docType, 
 				implicitLinks: []string{repo.CoreNode},
+				parentID: parentID,
 			}
 			return nil
 		})
@@ -580,7 +654,7 @@ func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.P
 }
 
 // processFile é o núcleo de inteligência que processa, extrai triplas e salva no Qdrant e DuckDB.
-func (c *Crawler) processFile(ctx context.Context, path string, workspacePath string, info os.FileInfo, forcedDocType string, implicitLinks []string) (bool, error) {
+func (c *Crawler) processFile(ctx context.Context, path string, workspacePath string, info os.FileInfo, forcedDocType string, implicitLinks []string, parentID string) (bool, error) {
 	ext := strings.ToLower(filepath.Ext(path))
 	isMD := ext == ".md"
 	isImage := ext == ".png" || ext == ".jpg" || ext == ".jpeg"
@@ -627,9 +701,8 @@ func (c *Crawler) processFile(ctx context.Context, path string, workspacePath st
 		textContent = string(rawContent)
 		links = extractLinks(textContent)
 
-		// 🧠 Extração de Triplas: Pula para notas muito pequenas (< 100 chars)
-		// Para notas gigantes, trunca para evitar estouro de contexto (Erro 500)
-		if len(textContent) >= 100 {
+		// 🧠 Extração de Triplas: Pula se Ontology estiver indisponível ou nota for curta
+		if c.Ontology != nil && len(textContent) >= 100 {
 			// Truncamento de Segurança para Lógica (Max 6k chars no Qwen)
 			safeText := textContent
 			if len(safeText) > 6000 {
@@ -643,8 +716,16 @@ func (c *Crawler) processFile(ctx context.Context, path string, workspacePath st
 			} else {
 				fmt.Printf("[Crawler] 🧠 %d Triplas extraídas de %s\n", len(triples), nodeName)
 			}
+		} else if c.Ontology == nil {
+			fmt.Printf("[Crawler] 💨 Ontology indisponível, pulando extração semântica para %s\n", nodeName)
 		} else {
 			fmt.Printf("[Crawler] 💨 Nota curta (%d chars), pulando extração de triplas para %s\n", len(textContent), nodeName)
+		}
+
+		// 🧠 Motor de Sinapses Semânticas (ID Vinculador - Invisível)
+		// Varre o conteúdo em busca de menções a outros neurônios conhecidos.
+		if c.LStore != nil {
+			c.scanImplicitLinks(workspacePath, nodeID, textContent)
 		}
 	} else {
 		// Visão Computacional / OCR
@@ -655,35 +736,58 @@ func (c *Crawler) processFile(ctx context.Context, path string, workspacePath st
 			mimeType = "image/jpeg"
 		}
 
-		utils.SafeEmit(c.ctx, "agent:log", map[string]string{
-			"source":  "CRAWLER",
-			"content": fmt.Sprintf("👁️ Analisando mídia: %s...", info.Name()),
-		})
+		if c.Ontology != nil {
+			utils.SafeEmit(c.ctx, "agent:log", map[string]string{
+				"source":  "CRAWLER",
+				"content": fmt.Sprintf("👁️ Analisando mídia: %s...", info.Name()),
+			})
 
-		desc, tri, errMedia := c.Ontology.ProcessMedia(ctx, rawContent, mimeType)
-		if errMedia == nil {
-			textContent = desc
-			triples = tri
+			desc, tri, errMedia := c.Ontology.ProcessMedia(ctx, rawContent, mimeType)
+			if errMedia == nil {
+				textContent = desc
+				triples = tri
+			}
 		}
 	}
 
 	// Emite arestas das triplas extraídas para o grafo visual (Asteroides)
 	for _, t := range triples {
 		if t.Object != "" && len(t.Object) < 50 {
+			asteroidID := "asteroid:" + strings.ToLower(t.Object)
 			utils.SafeEmit(c.ctx, "graph:node", map[string]interface{}{
-				"id":            strings.ToLower(t.Object),
-				"name":          t.Object,
-				"document-type": "keyword",
-				"celestial-type": "asteroid",
-				"mass":          1.0,
+				"id":                asteroidID,
+				"name":              t.Object,
+				"document-type":     "keyword",
+				"celestial-type":    "asteroid",
+				"mass":              1.0,
 				"parent_gravity_id": nodeID,
 			})
 			utils.SafeEmit(c.ctx, "graph:edge", map[string]interface{}{
-				"source": nodeID,
-				"target": strings.ToLower(t.Object),
-				"weight": 0.3,
+				"source":    nodeID,
+				"target":    asteroidID,
+				"weight":    0.3,
 				"edge-type": "semantic",
 			})
+			if c.LStore != nil {
+				c.LStore.UpsertGraphNode(workspacePath, asteroidID, t.Object, "keyword", "", nil)
+				c.LStore.InsertGraphEdge(workspacePath, nodeID, asteroidID, 0.3, "semantic")
+			}
+		}
+	}
+
+	// 🖇️ Emite arestas de Links Diretos do Obsidian [[Link]]
+	for _, link := range links {
+		if link != "" {
+			targetID := "moon:" + pathHash + ":" + strings.ToLower(link)
+			utils.SafeEmit(c.ctx, "graph:edge", map[string]interface{}{
+				"source":    nodeID,
+				"target":    targetID,
+				"weight":    0.8, // Links diretos são mais fortes
+				"edge-type": "link",
+			})
+			if c.LStore != nil {
+				c.LStore.InsertGraphEdge(workspacePath, nodeID, targetID, 0.8, "link")
+			}
 		}
 	}
 
@@ -691,22 +795,31 @@ func (c *Crawler) processFile(ctx context.Context, path string, workspacePath st
 	// PERSISTÊNCIA VETORIAL (Depende da API Gemini)
 	// ══════════════════════════════════════════════════════════
 	var vector []float32
-	if isImage || isPDF {
-		mimeType := "image/png"
-		if isPDF { mimeType = "application/pdf" }
-		vector, err = c.Embedder.GenerateMultimodalEmbedding(ctx, rawContent, mimeType, false)
-	} else {
-		// Truncamento de Segurança para Embeddings (Max 1.5k chars)
-		// Nota: Idealmente faríamos chunk-averaging, mas truncar previne o Erro 500 no llama-server.
-		safeEmbedText := textContent
-		if len(safeEmbedText) > 1500 {
-			safeEmbedText = safeEmbedText[:1500]
+	if c.Embedder != nil {
+		if isImage || isPDF {
+			mimeType := "image/png"
+			if isPDF { mimeType = "application/pdf" }
+			vector, err = c.Embedder.GenerateMultimodalEmbedding(ctx, rawContent, mimeType, false)
+		} else {
+			// Truncamento de Segurança para Embeddings (Max 1.5k chars para evitar estouro de tokens no motor nativo)
+			safeEmbedText := textContent
+			if len(safeEmbedText) > 1500 {
+				safeEmbedText = safeEmbedText[:1500]
+			}
+			vector, err = c.Embedder.GenerateEmbedding(ctx, safeEmbedText, false)
 		}
-		vector, err = c.Embedder.GenerateEmbedding(ctx, safeEmbedText, false)
+	} else {
+		err = fmt.Errorf("embedder indisponível")
 	}
 
 	if err != nil {
-		fmt.Printf("[Crawler] ⚠️ Embedding falhou para %s: %s\n", nodeName, utils.FormatGenAIError(err))
+		fmt.Printf("[Crawler] ⚠️ Embedding ignorado para %s (Modo Estrutural): %s\n", nodeName, utils.FormatGenAIError(err))
+		
+		// Mesmo sem embedding, marcamos no cache para evitar reprocessamento constante de arquivos grandes/problemáticos
+		c.mu.Lock()
+		c.cache[path] = hash
+		c.mu.Unlock()
+		
 		return true, nil
 	}
 
@@ -726,8 +839,13 @@ func (c *Crawler) processFile(ctx context.Context, path string, workspacePath st
 	}
 
 	// Persistência no Qdrant (inclui campos de resumo para SyncAllNodes futuro)
-	c.Qdrant.UpsertPoint("obsidian_knowledge", uint64(time.Now().UnixNano()), vector, map[string]interface{}{
-		"path": path, "name": nodeName, "content": textContent,
+	// [FIX] ID Determinístico para evitar duplicatas em cada scan
+	h_qdrant := fnv.New64a()
+	h_qdrant.Write([]byte(path))
+	qdrantID := h_qdrant.Sum64()
+
+	c.Qdrant.UpsertPoint("obsidian_knowledge", qdrantID, vector, map[string]interface{}{
+		"id": nodeID, "path": path, "name": nodeName, "content": textContent,
 		"triples": triples, "links": links, "type": ext,
 		"document-type": forcedDocType, "status": "active",
 		"observed_at":   time.Now().Format(time.RFC3339),
@@ -736,20 +854,32 @@ func (c *Crawler) processFile(ctx context.Context, path string, workspacePath st
 	})
 
 	// Emite nó atualizado com resumo real (garante que o grafo exibe conteúdo indexado)
-	utils.SafeEmit(c.ctx, "graph:node", map[string]interface{}{
-		"id":            nodeID,
-		"document-type": forcedDocType,
-		"summary":       nodeSummary,
-		"what-it-does":  nodeWhatItDoes,
-	})
+	nodeData := map[string]interface{}{
+		"id":                nodeID,
+		"name":              nodeName,
+		"document-type":     forcedDocType,
+		"summary":           nodeSummary,
+		"what-it-does":      nodeWhatItDoes,
+		"parent_gravity_id": parentID,
+	}
+
+	utils.SafeEmit(c.ctx, "graph:node", nodeData)
+	utils.SafeEmit(c.ctx, "graph:nodes:batch", []map[string]interface{}{nodeData})
+
+	// 📊 [NOVO] Sincronização Analítica (DuckDB): Essencial para o Radar Relâmpago
 	if c.LStore != nil {
-		c.LStore.UpsertGraphNode(workspacePath, nodeID, nodeName, forcedDocType, nil)
+		c.LStore.UpsertGraphNode(workspacePath, nodeID, nodeName, forcedDocType, textContent, map[string]interface{}{
+			"path": path, "summary": nodeSummary, "observed_at": time.Now().Unix(),
+			"parent_gravity_id": parentID,
+		})
 	}
 
 	// Atualiza o cache com o hash do conteúdo
 	c.mu.Lock()
 	c.cache[path] = hash
 	c.mu.Unlock()
+
+	return true, nil
 
 	// ⏱️ Throttle suave: Respira 200ms entre cada arquivo para distribuir as chamadas
 	time.Sleep(200 * time.Millisecond)
@@ -774,6 +904,47 @@ func extractLinks(content string) []string {
 		}
 	}
 	return links
+}
+
+// scanImplicitLinks procura por nomes de outros nós no conteúdo e registra no DuckDB.
+func (c *Crawler) scanImplicitLinks(workspacePath, sourceID, content string) {
+	c.nameMu.RLock()
+	defer c.nameMu.RUnlock()
+
+	// 🛡️ Lista de Ruído (Stop-words): Evita vínculos em palavras muito comuns
+	stopWords := map[string]bool{
+		"para": true, "com": true, "este": true, "esta": true, "isso": true,
+		"pelo": true, "pela": true, "mais": true, "como": true, "tudo": true,
+		"onde": true, "quando": true, "quem": true, "qual": true, "seus": true,
+		"suas": true, "sua": true, "seu": true, "então": true, "entre": true,
+		"sobre": true, "mesmo": true, "muito": true, "pode": true,
+	}
+
+	contentLower := strings.ToLower(content)
+	
+	for targetName, targetID := range c.nodeNames {
+		// Pula auto-referência, nomes muito curtos e stop-words
+		targetNameLower := strings.ToLower(targetName)
+		if targetID == sourceID || len(targetNameLower) < 4 || stopWords[targetNameLower] {
+			continue
+		}
+
+		// Busca simples — se o nome do outro neurônio aparece aqui, vinculamos!
+		// Otimização: strings.Contains é muito rápido em Go.
+		if strings.Contains(contentLower, targetNameLower) {
+			// Vinculamos com peso menor (0.3) por ser uma relação automática/implícita
+			err := c.LStore.InsertGraphEdge(workspacePath, sourceID, targetID, 0.3, "semantic")
+			if err == nil {
+				// ⚡ [MAGNETISMO INVISÍVEL] Notifica o frontend para a física, mas não desenha
+				utils.SafeEmit(c.ctx, "graph:edge", map[string]interface{}{
+					"source":    sourceID,
+					"target":    targetID,
+					"weight":    0.3,
+					"edge-type": "semantic", // O LinkLayer irá filtrar isso para não desenhar
+				})
+			}
+		}
+	}
 }
 
 // EnsureCollections verifica e cria as coleções necessárias no Qdrant.
