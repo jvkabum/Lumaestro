@@ -33,8 +33,8 @@ export function createSimulation({
             .distance(link => {
                 const sDeg = nodeDegrees.get(link.source.id) || 0;
                 const tDeg = nodeDegrees.get(link.target.id) || 0;
-                if (sDeg > 3 && tDeg > 3) return 200; 
-                return 25; 
+                if (sDeg > 3 && tDeg > 3) return 200;
+                return 25;
             })
             .strength(link => {
                 // 🧠 [MAGNETISMO INVISÍVEL] Vínculos semânticos puxam de leve
@@ -46,8 +46,8 @@ export function createSimulation({
         custom: forceAll(communityCenters, parentMap),
 
         // 3. Repulsão (ManyBody) - Essencial para o formato visual de exploração (Mixer Dev)
-        charge: d3.forceManyBody().strength(d => -1200).distanceMax(5000),
-        
+        charge: d3.forceManyBody().strength(d => -4200).distanceMax(10000),
+
         // 🧲 Força Magnética, Radial e Limit (Restauradas do Main para controle UI, iniciam zeradas/suaves)
         magnetic: d3.forceManyBody().strength(d => (d.weight || 1.0) * -15).distanceMin(20).distanceMax(800),
         radial: d3.forceRadial(200, 0, 0, 0).strength(0),
@@ -100,13 +100,13 @@ export function createSimulation({
         updateForce: (name, params) => {
             const force = registry[name];
             if (!force) return;
-            
+
             Object.keys(params).forEach(key => {
                 if (typeof force[key] === 'function') {
                     force[key](params[key]);
                 }
             });
-            
+
             // "Acorda" a simulação para aplicar a mudança
             simulation.alpha(0.3).restart();
         }
