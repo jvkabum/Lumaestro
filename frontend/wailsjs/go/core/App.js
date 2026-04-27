@@ -74,6 +74,10 @@ export function DetectLMStudioEmbeddingDimension(arg1) {
   return window['go']['core']['App']['DetectLMStudioEmbeddingDimension'](arg1);
 }
 
+export function ExecuteFullSync() {
+  return window['go']['core']['App']['ExecuteFullSync']();
+}
+
 export function ExportRLHFDataset() {
   return window['go']['core']['App']['ExportRLHFDataset']();
 }
@@ -360,6 +364,10 @@ export function TestLMStudioModel(arg1, arg2) {
 
 export function ToggleProjectCodeRAG(arg1) {
   return window['go']['core']['App']['ToggleProjectCodeRAG'](arg1);
+}
+
+export function TriggerInitialSync() {
+  return window['go']['core']['App']['TriggerInitialSync']();
 }
 
 export function TriggerReflection(arg1) {

@@ -42,6 +42,8 @@ export function DeleteSession(arg1:string):Promise<void>;
 
 export function DetectLMStudioEmbeddingDimension(arg1:string):Promise<number>;
 
+export function ExecuteFullSync():Promise<string>;
+
 export function ExportRLHFDataset():Promise<string>;
 
 export function ExportTelemetry():Promise<string>;
@@ -185,6 +187,8 @@ export function SyncAllNodes():Promise<void>;
 export function TestLMStudioModel(arg1:string,arg2:string):Promise<Record<string, any>>;
 
 export function ToggleProjectCodeRAG(arg1:string):Promise<Record<string, any>>;
+
+export function TriggerInitialSync():Promise<string>;
 
 export function TriggerReflection(arg1:string):Promise<string>;
 

@@ -112,6 +112,7 @@ export namespace config {
 	    graph_depth: number;
 	    graph_neighbor_limit: number;
 	    graph_context_limit: number;
+	    enable_neural_edges: boolean;
 	    security: SecurityConfig;
 	    lightning_enabled: boolean;
 	    lightning_proxy_port: string;
@@ -132,6 +133,7 @@ export namespace config {
 	    groq_model: string;
 	    active_groq_models: string[];
 	    active_google_models: string[];
+	    active_native_models: string[];
 	    active_workspace: string;
 	
 	    static createFrom(source: any = {}) {
@@ -160,6 +162,7 @@ export namespace config {
 	        this.graph_depth = source["graph_depth"];
 	        this.graph_neighbor_limit = source["graph_neighbor_limit"];
 	        this.graph_context_limit = source["graph_context_limit"];
+	        this.enable_neural_edges = source["enable_neural_edges"];
 	        this.security = this.convertValues(source["security"], SecurityConfig);
 	        this.lightning_enabled = source["lightning_enabled"];
 	        this.lightning_proxy_port = source["lightning_proxy_port"];
@@ -180,6 +183,7 @@ export namespace config {
 	        this.groq_model = source["groq_model"];
 	        this.active_groq_models = source["active_groq_models"];
 	        this.active_google_models = source["active_google_models"];
+	        this.active_native_models = source["active_native_models"];
 	        this.active_workspace = source["active_workspace"];
 	    }
 	
