@@ -402,8 +402,8 @@ func (a *App) SyncAllNodes() {
 	}
 
 	fmt.Println("[Sync] Sincronizando todos os nós do Qdrant com o Frontend (BATCH)...")
-	// Busca um lote grande o suficiente para cobrir o vault do usuário (1500+)
-	points, err := a.qdrant.Search("obsidian_knowledge", nil, 1500)
+	// Busca um lote grande o suficiente para cobrir o vault e o workspace do usuário (Sem limite de teto de vidro)
+	points, err := a.qdrant.Search("obsidian_knowledge", nil, 10000)
 	nodesBatch := make([]map[string]interface{}, 0)
 	edgesBatch := make([]map[string]interface{}, 0)
 	var memoryPoints []map[string]interface{}

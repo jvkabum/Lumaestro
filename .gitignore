@@ -43,3 +43,4 @@ tmp/
 qdrant_storage/
 debug_stderr.log
 *.exe
+Lumaestro-res.syso

@@ -2,7 +2,6 @@ package core
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"Lumaestro/internal/rag"
@@ -73,39 +72,12 @@ func (a *App) AnalyzeGraphHealth() (map[string]interface{}, error) {
 		return nil, fmt.Errorf("banco vetorial offline")
 	}
 
-	// 📂 Agregação de Contagem Multi-Fonte (v20)
-	count := 0
-	if a.LStore != nil {
-		vaultPath := ""
-		if a.config != nil {
-			vaultPath = a.config.ObsidianVaultPath
-		}
-		
-		pathsToCount := []string{a.executor.Workspace, vaultPath}
-		if a.executor.Workspace != "" {
-			pathsToCount = append(pathsToCount, filepath.Join(a.executor.Workspace, "docs"))
-		}
-
-		uniqueIDs := make(map[string]bool)
-		for _, p := range pathsToCount {
-			if p == "" {
-				continue
-			}
-			nodes, _, _ := a.LStore.GetFullGraph(p)
-			for _, n := range nodes {
-				if id, ok := n["id"].(string); ok {
-					uniqueIDs[id] = true
-				}
-			}
-		}
-		count = len(uniqueIDs)
-	}
-
-	if count == 0 {
-		// Fallback para Qdrant se DuckDB falhar
-		obsidianCount, _ := a.qdrant.CountPoints("obsidian_knowledge")
-		count = obsidianCount
-	}
+	// 📂 Contagem Estrita e Fiel à Renderização Visual
+	// Consultamos diretamente o banco vetorial, pois ele é a fonte da verdade do motor D3
+	obsidianCount, _ := a.qdrant.CountPoints("obsidian_knowledge")
+	memoryCount, _ := a.qdrant.CountPoints("knowledge_graph")
+	
+	count := obsidianCount + memoryCount
 
 	// Cálculo de Densidade Orgânica (Progressão Logarítmica)
 	densityValue := 0.05 // Base 5%
