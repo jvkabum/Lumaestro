@@ -51,8 +51,17 @@ func (a *App) Shutdown(ctx context.Context) {
 
 // injectContexts garante que todos os motores de RAG tenham o contexto oficial.
 func (a *App) injectContexts() {
-	// Garante que os diretórios de cache existam
+	// 📂 Garante que os diretórios de infraestrutura existam
 	os.MkdirAll(".context", 0755)
+	os.MkdirAll(".lumaestro", 0755)
+
+	// 💎 Inicialização Atômica do Cache de Topologia (se não existir)
+	topologyPath := ".lumaestro/topology.json"
+	if _, err := os.Stat(topologyPath); os.IsNotExist(err) {
+		fmt.Println("[Init] 🛠️ Criando arquivo de topologia base em .lumaestro/...")
+		baseCache := `{"nodes":[], "edges":[]}`
+		os.WriteFile(topologyPath, []byte(baseCache), 0644)
+	}
 
 	if a.ctx == nil {
 		return

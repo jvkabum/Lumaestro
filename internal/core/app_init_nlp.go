@@ -24,6 +24,21 @@ func (a *App) initNLPEngine(cfg *config.Config) (provider.ContentGenerator, erro
 	if ragProvider == "" {
 		ragProvider = "gemini"
 	}
+
+	// 🛑 PROTOCOLO DE LIMPEZA: Mata motores nativos anteriores para liberar VRAM/RAM
+	if a.nativeExtraction != nil {
+		fmt.Println("[NLP] 🧹 Liberando memória: Encerrando motor nativo anterior...")
+		
+		// O método Stop() agora aguarda ativamente a morte do processo (cmd.Wait())
+		if err := a.nativeExtraction.Stop(); err != nil {
+			fmt.Printf("[NLP] ❌ Erro ao parar motor nativo: %v\n", err)
+		} else {
+			fmt.Println("[NLP] ✅ Memória VRAM liberada com sucesso.")
+		}
+		
+		a.nativeExtraction = nil
+	}
+
 	fmt.Printf("[NLP] 🔍 Inicializando motores... RAG Alvo: %s | Embeddings Alvo: %s\n", ragProvider, embProvider)
 
 	// ─── Motor de Embeddings ──────────────────────────────────────────────────
@@ -183,6 +198,12 @@ func (a *App) initNLPEngine(cfg *config.Config) (provider.ContentGenerator, erro
 		} else if ragProvider == "native" {
 			a.emitBoot("expert", "🧩", "Iniciando Especialista Claude-Distilled (Lógica Elite)...")
 
+			// --- MOTOR NATIVO DINÂMICO (Escolha do Usuário) ---
+			modelToUse := cfg.RAGModel
+			if modelToUse == "" {
+				modelToUse = "ozgurpolat/gemma-4-E2B-it-text-only-GGUF:Q4_K_M" // Default se estiver vazio
+			}
+
 			// --- TIME DE ELITE 2026 (Modelos Especialistas em Extração RAG) ---
 			
 			// [ OPÇÕES OTIMIZADAS PARA PLACAS ANTIGAS / RX 580 ]
@@ -194,12 +215,25 @@ func (a *App) initNLPEngine(cfg *config.Config) (provider.ContentGenerator, erro
 			// qwenModel := "Jackrong/Qwen3.5-4B-Claude-4.6-Opus-Reasoning-Distilled-v2-GGUF:Qwen3.5-4B.Q5_K_M.gguf"
 
 			// --- [ ATIVO ] Padrão de Ouro RX 580 (Equilíbrio Inteligência e Velocidade Vulkan) ---
-			qwenModel := "mradermacher/Qwen3.5-4B-Claude-4.6-Opus-Reasoning-Distilled-v2-heretic-GGUF:Qwen3.5-4B-Claude-4.6-Opus-Reasoning-Distilled-v2-heretic.Q4_K_M.gguf"
+			// qwenModel := "mradermacher/Qwen3.5-4B-Claude-4.6-Opus-Reasoning-Distilled-v2-heretic-GGUF:Qwen3.5-4B-Claude-4.6-Opus-Reasoning-Distilled-v2-heretic.Q4_K_M.gguf"
 
-			a.emitBoot("expert", "🧪", "Lançando Especialista de Lógica Slerp (Alta Velocidade na 8086)...")
-			nativeExtraction := provider.NewNativeGenerator(qwenModel, 8086, "QWEN-SLERP")
+			a.emitBoot("expert", "🧪", "Lançando Especialista de Lógica (Motor: "+modelToUse+")...")
+			nativeExtraction := provider.NewNativeGenerator(modelToUse, 8086, "NATIVE-EXPERT")
+			
+			progressRe := regexp.MustCompile(`(\d+\.?\d*)%`)
+			
 			nativeExtraction.OnLog = func(line string) {
-				a.emitBoot("expert", "⏳", "Baixando Especialista: "+line)
+				a.emitBoot("expert", "⏳", "Motor Local: "+line)
+				
+				// 📡 Envia progresso estruturado apenas se o regex capturar uma porcentagem válida
+				if match := progressRe.FindStringSubmatch(line); len(match) > 1 && a.ctx != nil {
+					a.emitEvent("native:progress", map[string]interface{}{
+						"model":    modelToUse,
+						"progress": match[0], // "45.5%"
+						"value":    match[1], // "45.5"
+						"stage":    "downloading",
+					})
+				}
 			}
 
 			// --- CHAT & ORQUESTRAÇÃO ---
@@ -217,7 +251,7 @@ func (a *App) initNLPEngine(cfg *config.Config) (provider.ContentGenerator, erro
 			*/
 
 			if err := nativeExtraction.Start(); err == nil {
-				a.emitBoot("expert", "✅", "Especialista Claude-Distilled (Qwen 3.5 Q5) ONLINE")
+				a.emitBoot("expert", "✅", "Especialista Nativo (RAG Engine) ONLINE")
 				a.nativeExtraction = nativeExtraction
 				contentGen = nativeExtraction
 			}

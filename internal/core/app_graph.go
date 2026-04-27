@@ -1,10 +1,11 @@
 package core
 
 import (
-	"Lumaestro/internal/rag"
 	"fmt"
 	"path/filepath"
 	"strings"
+
+	"Lumaestro/internal/rag"
 )
 
 // ============================================================
@@ -64,7 +65,6 @@ func (a *App) GetNeuralNodeContext(nodeID string) (map[string]interface{}, error
 	return result, nil
 }
 
-
 // AnalyzeGraphHealth analisa a integridade semântica do grafo.
 func (a *App) AnalyzeGraphHealth() (map[string]interface{}, error) {
 	fmt.Println("[Audit] Analisando saúde do Grafo de Contexto...")
@@ -83,7 +83,9 @@ func (a *App) AnalyzeGraphHealth() (map[string]interface{}, error) {
 
 		uniqueIDs := make(map[string]bool)
 		for _, p := range pathsToCount {
-			if p == "" { continue }
+			if p == "" {
+				continue
+			}
 			nodes, _, _ := a.LStore.GetFullGraph(p)
 			for _, n := range nodes {
 				if id, ok := n["id"].(string); ok {
@@ -289,8 +291,10 @@ func (a *App) GetSkeletalGraph() map[string]interface{} {
 
 // helper para contar comunidades únicas
 func countCommunities(ge *rag.GraphEngine) int {
-	if ge == nil { return 0 }
-	
+	if ge == nil {
+		return 0
+	}
+
 	unique := make(map[int]struct{})
 	// Precisamos expor ou acessar os IDs de comunidade
 	for _, id := range ge.GetCommunityIDs() {

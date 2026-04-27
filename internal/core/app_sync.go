@@ -14,31 +14,31 @@ import (
 
 // ScanVault percorre o Obsidian e indexa no Qdrant com Embeddings
 func (a *App) ScanVault() string {
-	fmt.Println("[BACKEND] ScanVault disparado assincronamente...")
-
-	// 🛡️ Segurança: ScanVault não deve disparar initServices. Se os motores não
-	// estiverem prontos, o bootSequence cuidará disso ou o usuário fará manual.
-	if a.crawler == nil || a.ctx == nil {
-		fmt.Println("[Sync] ⏳ ScanVault bloqueado: Motores em transição ou offline.")
-		// Retornamos silenciosamente ou com erro informativo, mas SEM disparar o loop de boot.
-		return "⚠️ Motores em transição. Aguarde a inicialização do sistema."
-	}
-
+	fmt.Println("[BACKEND] 🚀 Comando ScanVault recebido.")
 	if a.ctx == nil {
 		return "⚠️ Sincronização indisponível: contexto do app ainda não inicializado."
 	}
 
 	if a.crawler == nil {
-		a.emitEvent("agent:log", map[string]string{
-			"source":  "SYSTEM",
-			"content": "⚠️ Sync Obsidian 3D bloqueado: sem motor de embeddings ativo. Verifique se o seu provedor (Local, Gemini ou Claude) está configurado e online.",
-		})
-		return "⚠️ Sync Obsidian 3D bloqueado: sem motor de embeddings ativo. Garanta que o motor selecionado nas configurações está respondendo."
+		fmt.Println("[BACKEND] ⚠️ Crawler é nil. Tentando inicializar...")
+		_ = a.initServices()
 	}
 
-	// 🕵️⚡ RAG em Segundo Plano: Previne travamento total da UI e do Chat
+	if a.crawler == nil {
+		return "⚠️ Sync Obsidian 3D bloqueado: crawler não pôde ser inicializado."
+	}
+
+	if a.IsScanning {
+		return "⚠️ Scan já em progresso."
+	}
+
+	a.IsScanning = true
+	// 🕵️⚡ RAG em Segundo Plano
 	go func() {
-		// ⚡ Captura local de referências (Escudo Anti-Panic)
+		defer func() { a.IsScanning = false }()
+		fmt.Println("[BACKEND] 🕵️ Iniciando Scan em segundo plano...")
+
+		// Captura local
 		crawler := a.crawler
 		ctx := a.ctx
 		qdrant := a.qdrant
@@ -58,6 +58,9 @@ func (a *App) ScanVault() string {
 			})
 			return
 		}
+
+		// ⚡ Sync intermediário: mostra as notas do Obsidian imediatamente na UI
+		a.SyncAllNodes()
 
 		// 2. Indexar a documentação do projeto (Lumaestro Core)
 		// Isso garante que o conhecimento 'RAG' do sistema também esteja disponível.
@@ -90,15 +93,19 @@ func (a *App) ScanVault() string {
 		}
 
 		// 3. Força a atualização visual de todos os nós (isolados e conectados)
-		os.Remove(".lumaestro_topology.json") // Invalida Topology Cache
 		a.SyncAllNodes()
 	}()
 
 	return "Indexação iniciada em segundo plano. O Maestro agora está integrando seu Obsidian e as memórias do sistema."
 }
 
-// FullSync limpa o cache e inicia uma indexação completa atômica.
+// FullSync limpa o cache e inicia uma indexação completa atômica (Alias para compatibilidade).
 func (a *App) FullSync() string {
+	return a.ExecuteFullSync()
+}
+
+// ExecuteFullSync limpa o cache e inicia uma indexação completa atômica.
+func (a *App) ExecuteFullSync() string {
 	if a.crawler == nil {
 		_ = a.initServices()
 	}
@@ -160,7 +167,7 @@ func (a *App) ToggleProjectCodeRAG(path string) map[string]interface{} {
 
 	config.Save(*cfg)
 	a.config = cfg
-	
+
 	// Re-sincroniza o grafo para refletir a nova profundidade semântica
 	_ = a.ScanVault()
 
@@ -204,12 +211,23 @@ func (a *App) ResetQdrantDB() string {
 		fmt.Printf("[RESET] ✅ Coleção %s excluída.\n", name)
 	}
 
-	// 2. Limpa Cache Local
+	// 2. Limpa Cache Local e Analítico
 	if a.crawler != nil {
 		fmt.Println("[RESET] 🧹 Limpando cache do Crawler...")
 		a.crawler.PurgeCache()
 	}
-	os.Remove(".lumaestro_topology.json") // Expurga cache visual 3D
+	
+	// 🔥 RESET PROFUNDO: DuckDB e Motor em RAM
+	if a.LStore != nil {
+		fmt.Println("[RESET] 🧹 Limpando Grafos Analíticos (DuckDB)...")
+		_ = a.LStore.ClearGraph()
+	}
+	if a.GEngine != nil {
+		fmt.Println("[RESET] 🧠 Zerando Motor de Grafos (RAM)...")
+		a.GEngine.Clear()
+	}
+
+	os.Remove(".lumaestro/topology.json") // Expurga cache visual 3D
 
 	// 3. Recria Infraestrutura do zero
 	dim := 3072
@@ -221,18 +239,19 @@ func (a *App) ResetQdrantDB() string {
 		a.crawler.EnsureCollections(a.ctx)
 	}
 
-	// 4. Notifica o Frontend
+	// 4. Notifica o Frontend (Log + Limpeza de Tela)
 	a.emitEvent("agent:log", map[string]string{
 		"source":  "SYSTEM",
-		"content": "☢️ RESET COMPLETO: Banco de dados Qdrant e cache local foram expurgados.",
+		"content": "☢️ RESET COMPLETO: Banco de dados, DuckDB e cache local foram expurgados.",
 	})
+	a.emitEvent("graph:clear", nil)
 
 	return "✅ O banco de dados foi resetado com sucesso! Inicie um novo SCAN para repovoar."
 }
 
 // PurgeCache limpa todo o histórico de indexação local.
 func (a *App) PurgeCache() string {
-	os.Remove(".lumaestro_topology.json") // Invalida Topology Cache
+	os.Remove(".lumaestro/topology.json") // Invalida Topology Cache
 	if a.crawler == nil {
 		return "⚠️ Motor de indexação indisponível."
 	}
@@ -251,18 +270,23 @@ type TopologyCache struct {
 
 // Sincronização e I/O Desacoplado do Motor Físico
 func (a *App) saveTopologyCache(nodes []map[string]interface{}, edges []map[string]interface{}) {
+	// 🛡️ Proteção contra gravação de cache vazio que apagaria dados anteriores
+	if len(nodes) == 0 {
+		fmt.Println("[Sync] ⚠️ Ignorando gravação de cache vazio (0 nós). Cache anterior preservado.")
+		return
+	}
 	cache := TopologyCache{
 		Nodes: nodes,
 		Edges: edges,
 	}
 	data, err := json.Marshal(cache)
 	if err == nil {
-		os.WriteFile(".lumaestro_topology.json", data, 0644)
+		os.WriteFile(".lumaestro/topology.json", data, 0644)
 	}
 }
 
 func (a *App) loadTopologyCache() *TopologyCache {
-	data, err := os.ReadFile(".lumaestro_topology.json")
+	data, err := os.ReadFile(".lumaestro/topology.json")
 	if err != nil {
 		return nil
 	}
@@ -273,27 +297,29 @@ func (a *App) loadTopologyCache() *TopologyCache {
 	return &cache
 }
 
-// LoadFastGraph realiza o "Início a Frio": emite o grafo do cache/DuckDB instantaneamente (v20)
+// LoadFastGraph realiza o "Início a Frio": emite o grafo do cache/DuckDB instantaneamente
 func (a *App) LoadFastGraph() {
-	fmt.Println("[Sync] ⚡ Acionando Início a Frio (Fast-Track)...")
+	// Aguarda um pouco para o Wails Handshake estabilizar
+	time.Sleep(1500 * time.Millisecond)
 	
+	fmt.Println("[Sync] ⚡ Acionando Início a Frio (Fast-Track)...")
+
 	// 1. Tenta carregar do Cache de Topologia (Nós + Arestas)
 	cache := a.loadTopologyCache()
 	if cache != nil && len(cache.Nodes) > 0 {
 		fmt.Printf("[Sync] 🚀 Emitindo %d nós do cache para carregamento instantâneo.\n", len(cache.Nodes))
 		a.emitEvent("graph:nodes:batch", cache.Nodes)
-		
-		// Pequeno delay para garantir que o frontend processou os nós antes de tentar desenhar as arestas
-		time.Sleep(100 * time.Millisecond)
-		for _, edge := range cache.Edges {
-			a.emitEvent("graph:edge", edge)
-		}
+
+		// Delay maior para garantir que o Deck.gl montou a camada de nós antes das arestas
+		time.Sleep(500 * time.Millisecond)
+		fmt.Printf("[Sync] 🚀 Emitindo %d arestas do cache.\n", len(cache.Edges))
+		a.emitEvent("graph:edges:batch", cache.Edges)
 		return
 	}
 
 	// 2. Fallback: Se não houver cache, tenta ler apenas os nós do DuckDB
 	if a.LStore != nil {
-		nodes, _, err := a.LStore.GetFullGraph("")
+		nodes, _, err := a.LStore.GetFullGraph(a.config.ObsidianVaultPath)
 		if err == nil && len(nodes) > 0 {
 			fmt.Printf("[Sync] 💾 Fallback: Emitindo %d nós do DuckDB.\n", len(nodes))
 			a.emitEvent("graph:nodes:batch", nodes)
@@ -303,6 +329,10 @@ func (a *App) LoadFastGraph() {
 
 // UpdateNodePositions recebe as coordenadas atuais do Frontend e persiste no DuckDB e Cache.
 func (a *App) UpdateNodePositions(nodes []map[string]interface{}) string {
+	// 🛡️ Proteção: Nunca gravar 0 nós (destruiria o cache existente)
+	if len(nodes) == 0 {
+		return "Nenhum nó para atualizar."
+	}
 	fmt.Printf("[Sync] 💾 Recebendo atualização de layout para %d nós...\n", len(nodes))
 
 	// 1. Persistência Analítica (DuckDB)
@@ -314,9 +344,11 @@ func (a *App) UpdateNodePositions(nodes []map[string]interface{}) string {
 	}
 
 	// 2. Persistência de Carregamento Rápido (Topology Cache)
-	// Carregamos o cache atual para preservar as arestas, mudando apenas as coordenadas.
 	cache := a.loadTopologyCache()
-	if cache != nil {
+	if cache == nil {
+		// Se não existe cache, cria um novo com o que recebemos
+		a.saveTopologyCache(nodes, []map[string]interface{}{})
+	} else {
 		nodeMap := make(map[string]int)
 		for i, n := range cache.Nodes {
 			if id, ok := n["id"].(string); ok {
@@ -324,20 +356,19 @@ func (a *App) UpdateNodePositions(nodes []map[string]interface{}) string {
 			}
 		}
 
-		updatedCount := 0
 		for _, n := range nodes {
 			id, _ := n["id"].(string)
 			if idx, exists := nodeMap[id]; exists {
+				// Atualiza posição de nó existente
 				cache.Nodes[idx]["x"] = n["x"]
 				cache.Nodes[idx]["y"] = n["y"]
 				cache.Nodes[idx]["z"] = n["z"]
-				updatedCount++
+			} else {
+				// Adiciona novo nó descoberto ao cache!
+				cache.Nodes = append(cache.Nodes, n)
 			}
 		}
-
-		if updatedCount > 0 {
-			a.saveTopologyCache(cache.Nodes, cache.Edges)
-		}
+		a.saveTopologyCache(cache.Nodes, cache.Edges)
 	}
 
 	return fmt.Sprintf("Layout sincronizado com sucesso (%d nós atualizados).", len(nodes))
@@ -356,8 +387,7 @@ func (a *App) SyncAllNodes() {
 	// ⚡ Carrega posições salvas do DuckDB para merge
 	savedPositions := make(map[string][]float64)
 	if a.LStore != nil {
-		// Mock de workspace path (precisa ser dinâmico no futuro se houver múltiplos)
-		nodes, _, _ := a.LStore.GetFullGraph("") 
+		nodes, _, _ := a.LStore.GetFullGraph(a.config.ObsidianVaultPath)
 		for _, n := range nodes {
 			id, _ := n["id"].(string)
 			x, _ := n["x"].(float64)
@@ -366,63 +396,17 @@ func (a *App) SyncAllNodes() {
 			savedPositions[id] = []float64{x, y, z}
 		}
 	}
+
 	fmt.Println("[Sync] Sincronizando todos os nós do Qdrant com o Frontend (BATCH)...")
 	// Busca um lote grande o suficiente para cobrir o vault do usuário (1500+)
 	points, err := a.qdrant.Search("obsidian_knowledge", nil, 1500)
-	if err != nil {
-		fmt.Printf("[Sync] Erro ao buscar nós para sincronização: %v\n", err)
-		
-		// 🛠️ AUTO-REPARO: Se for erro 404 (coleção não existe), tenta criar
-		if strings.Contains(err.Error(), "Status 404") || strings.Contains(err.Error(), "Not found") {
-			if a.crawler != nil && a.ctx != nil {
-				fmt.Println("[Sync] 🏗️ Gatilho de Auto-Reparo: Coleção não encontrada. Criando agora...")
-				_ = a.crawler.EnsureCollections(a.ctx)
-			}
-		}
-		return
-	}
-	memoryPoints, err := a.qdrant.Search("knowledge_graph", nil, 1500)
-	if err != nil {
-		fmt.Printf("[Sync] Erro ao buscar memórias para sincronização: %v\n", err)
-	}
-
 	nodesBatch := make([]map[string]interface{}, 0)
 	edgesBatch := make([]map[string]interface{}, 0)
+	var memoryPoints []map[string]interface{}
+
 	batchIndex := map[string]struct{}{}
 	edgeIndex := map[string]struct{}{}
-
-	// 2. ADICIONA ARESTAS AO MOTOR (Passo 1: Construir a topologia em RAM)
-	fmt.Println("[Sync] Construindo topologia neural em memória...")
-	for _, p := range points {
-		name, _ := p["name"].(string)
-		if name == "" { continue }
-		nodeID := strings.ToLower(name)
-		a.GEngine.AddNode(nodeID, name, p["document-type"].(string))
-		
-		if linksRaw, ok := p["links"].([]interface{}); ok {
-			for _, target := range linksRaw {
-				if t, ok := target.(string); ok && t != "" {
-					a.GEngine.AddEdge(nodeID, strings.ToLower(t), 1, "link")
-				}
-			}
-		}
-	}
-	for _, p := range memoryPoints {
-		subject, _ := p["subject"].(string)
-		object, _ := p["object"].(string)
-		if subject != "" && object != "" {
-			a.GEngine.AddNode(subject, subject, "memory")
-			a.GEngine.AddNode(object, object, "memory")
-			a.GEngine.AddEdge(subject, object, 1, "memory")
-		}
-	}
-
-	// 3. COMPUTAÇÃO ATÔMICA (O segredo das Nebulosas)
-	fmt.Println("[Sync] 🧠 Inteligência Neural: Calculando autoridade e comunidades Louvain...")
-	a.GEngine.ComputePageRank()
-	a.GEngine.ComputeCommunities()
-	a.GEngine.ComputeBetweenness()
-	a.GEngine.ComputeHITS()
+	nameToID := make(map[string]string) // 👈 Movido para o topo para evitar erro de 'goto jumps'
 
 	addNode := func(node map[string]interface{}) {
 		id, _ := node["id"].(string)
@@ -436,28 +420,177 @@ func (a *App) SyncAllNodes() {
 		nodesBatch = append(nodesBatch, node)
 	}
 
-	addEdge := func(source, target string, weight int) {
-		if source == "" || target == "" { return }
+	addEdge := func(source, target string, weight float64, relType string) {
+		if source == "" || target == "" || source == target {
+			return
+		}
 		pairID := fmt.Sprintf("%s->%s", source, target)
-		if _, exists := edgeIndex[pairID]; exists { return }
+		if _, exists := edgeIndex[pairID]; exists {
+			return
+		}
 		edgeIndex[pairID] = struct{}{}
-		
+
 		edge := map[string]interface{}{
-			"source": source,
-			"target": target,
-			"weight": weight,
+			"source":    source,
+			"target":    target,
+			"weight":    weight,
+			"edge-type": relType,
 		}
 		edgesBatch = append(edgesBatch, edge)
-		a.emitEvent("graph:edge", edge)
+	}
+
+	// 🛠️ FALLBACK: Se Qdrant estiver vazio, tenta carregar a estrutura básica do DuckDB (Fase 1)
+	if len(points) == 0 && a.LStore != nil {
+		fmt.Println("[Sync] ⚠️ Qdrant vazio. Utilizando estrutura local do DuckDB (Modo Estrutural)...")
+		dbNodes, dbEdges, _ := a.LStore.GetFullGraph(a.config.ObsidianVaultPath)
+		
+		if len(dbNodes) > 0 {
+			a.emitEvent("agent:log", map[string]string{
+				"source":  "SYNC",
+				"content": fmt.Sprintf("🌐 Exibindo estrutura de arquivos (%d objetos). Sincronização IA em progresso...", len(dbNodes)),
+			})
+			
+			// Processamento via GEngine para layout
+			for _, n := range dbNodes {
+				id, _ := n["id"].(string)
+				name, _ := n["name"].(string)
+				docType, _ := n["type"].(string)
+				parent, _ := n["parent_gravity_id"].(string)
+				a.GEngine.AddNode(id, name, docType)
+				
+				nodeData := map[string]interface{}{
+					"id":                id,
+					"name":              name,
+					"document-type":     docType,
+					"parent_gravity_id": parent,
+					"summary":           fmt.Sprintf("Objeto estrutural: %s", name),
+					"what-it-does":      "Carregado via DuckDB (Modo Estrutural).",
+				}
+				if pos, exists := savedPositions[id]; exists {
+					nodeData["x"] = pos[0]
+					nodeData["y"] = pos[1]
+					nodeData["z"] = pos[2]
+				}
+				addNode(nodeData)
+			}
+			for _, e := range dbEdges {
+				src, _ := e["source"].(string)
+				tgt, _ := e["target"].(string)
+				weight, _ := e["weight"].(float64)
+				relType, _ := e["relation_type"].(string)
+
+				if src == "" || tgt == "" || src == tgt { continue }
+				a.GEngine.AddEdge(src, tgt, weight, relType)
+				addEdge(src, tgt, weight, relType)
+			}
+
+			// 🧠 Cálculos de Inteligência para layout visual coerente
+			a.GEngine.ComputePageRank()
+			a.GEngine.ComputeCommunities()
+			
+			goto finalize_sync
+		}
+	}
+
+	if err != nil {
+		fmt.Printf("[Sync] Erro ao buscar nós para sincronização: %v\n", err)
+		
+		// 🛠️ AUTO-REPARO: Se for erro 404 (coleção não existe), tenta criar
+		if strings.Contains(err.Error(), "Status 404") || strings.Contains(err.Error(), "Not found") {
+			fmt.Println("[Sync] 🏗️ Gatilho de Auto-Reparo: Coleção não encontrada. Criando agora...")
+			if a.crawler != nil && a.ctx != nil {
+				_ = a.crawler.EnsureCollections(a.ctx)
+			} else {
+				// Fallback: Cria a coleção diretamente via Qdrant (sem crawler)
+				dim := 1024 // Default para embeddings nativos
+				if a.config != nil && a.config.EmbeddingDimension > 0 {
+					dim = a.config.EmbeddingDimension
+				}
+				_ = a.qdrant.CreateCollection("obsidian_knowledge", dim)
+				_ = a.qdrant.CreateCollection("knowledge_graph", dim)
+				fmt.Printf("[Sync] 🏗️ Coleções criadas diretamente (%d dim). Execute um SCAN para popular.\n", dim)
+			}
+			
+			// Notifica o usuário via UI
+			a.emitEvent("agent:log", map[string]string{
+				"source":  "SYSTEM",
+				"content": "⚠️ Base de conhecimento vazia. Clique em SINCRONIZAR no grafo para indexar seus dados.",
+			})
+		}
+		return
+    }
+	memoryPoints, err = a.qdrant.Search("knowledge_graph", nil, 1500)
+	if err != nil {
+		fmt.Printf("[Sync] Erro ao buscar memórias para sincronização: %v\n", err)
+	}
+
+	// 2. ADICIONA ARESTAS AO MOTOR (Passo 1: Construir a topologia em RAM)
+	fmt.Println("[Sync] Construindo topologia neural em memória...")
+	for _, p := range points {
+		name, _ := p["name"].(string)
+		if name == "" { continue }
+		nodeID := strings.ToLower(name)
+		
+		docType, _ := p["document-type"].(string)
+		if docType == "" { docType = "markdown" }
+		
+		a.GEngine.AddNode(nodeID, name, docType)
+		
+		if linksRaw, ok := p["links"].([]interface{}); ok {
+			for _, target := range linksRaw {
+				if t, ok := target.(string); ok && t != "" {
+					targetID := strings.ToLower(t)
+					if targetID != nodeID {
+						a.GEngine.AddEdge(nodeID, targetID, 1, "link")
+					}
+				}
+			}
+		}
+	}
+	for _, p := range memoryPoints {
+		subject, _ := p["subject"].(string)
+		object, _ := p["object"].(string)
+		if subject != "" && object != "" {
+			subjectID := strings.ToLower(subject)
+			objectID := strings.ToLower(object)
+			
+			a.GEngine.AddNode(subjectID, subject, "memory")
+			a.GEngine.AddNode(objectID, object, "memory")
+			
+			if subjectID != objectID {
+				a.GEngine.AddEdge(subjectID, objectID, 1, "memory")
+			}
+		}
+	}
+
+	// 3. COMPUTAÇÃO ATÔMICA (O segredo das Nebulosas)
+	fmt.Println("[Sync] 🧠 Inteligência Neural: Calculando autoridade e comunidades Louvain...")
+	a.GEngine.ComputePageRank()
+	a.GEngine.ComputeCommunities()
+	a.GEngine.ComputeBetweenness()
+	a.GEngine.ComputeHITS()
+
+	// (Limpando declarações antigas que foram movidas para o topo)
+
+	// 🗺️ Mapeamento de nomes para IDs para resolver links Obsidian [[ ]]
+	for _, p := range points {
+		name, _ := p["name"].(string)
+		id, _ := p["id"].(string)
+		if name != "" && id != "" {
+			nameToID[strings.ToLower(name)] = id
+		}
 	}
 
 	for _, p := range points {
 		name, _ := p["name"].(string)
-		if name == "" {
-			continue
+		nodeID, _ := p["id"].(string) // 👈 Usa o ID estrutural persistido
+		
+		if nodeID == "" {
+			if name == "" { continue }
+			nodeID = strings.ToLower(name)
 		}
+		if name == "" { name = nodeID }
 
-		nodeID := strings.ToLower(name)
 		summary := summarizeNodeContent(p)
 		whatItDoes := inferNodePurpose(p, summary)
 
@@ -500,7 +633,12 @@ func (a *App) SyncAllNodes() {
 		if linksRaw, ok := p["links"].([]interface{}); ok {
 			for _, target := range linksRaw {
 				if t, ok := target.(string); ok && t != "" {
-					addEdge(nodeID, strings.ToLower(t), 1)
+					targetNameLower := strings.ToLower(t)
+					targetID := targetNameLower
+					if realID, ok := nameToID[targetNameLower]; ok {
+						targetID = realID
+					}
+					addEdge(nodeID, targetID, 1.0, "link")
 				}
 			}
 		}
@@ -510,7 +648,12 @@ func (a *App) SyncAllNodes() {
 			for _, t := range triplesRaw {
 				if tm, ok := t.(map[string]interface{}); ok {
 					if obj, ok := tm["object"].(string); ok && obj != "" {
-						addEdge(nodeID, strings.ToLower(obj), 2)
+						targetNameLower := strings.ToLower(obj)
+						targetID := targetNameLower
+						if realID, ok := nameToID[targetNameLower]; ok {
+							targetID = realID
+						}
+						addEdge(nodeID, targetID, 2.0, "semantic")
 					}
 				}
 			}
@@ -523,46 +666,55 @@ func (a *App) SyncAllNodes() {
 		sessionID, _ := p["session_id"].(string)
 		predicate, _ := p["predicate"].(string)
 
+		subjectID := strings.ToLower(subject)
+		objectID := strings.ToLower(object)
+
 		if subject != "" {
 			nodeData := map[string]interface{}{
-				"id":            subject,
+				"id":            subjectID,
 				"name":          subject,
 				"document-type": "memory",
 				"session-id":    sessionID,
 				"summary":       fmt.Sprintf("Fato semântico em memória: %s %s %s", subject, predicate, object),
 				"what-it-does":  "Conecta fatos aprendidos no chat para dar contexto em respostas futuras.",
 			}
-			if pos, exists := savedPositions[subject]; exists {
-				nodeData["x"] = pos[0]; nodeData["y"] = pos[1]; nodeData["z"] = pos[2]
+			if pos, exists := savedPositions[subjectID]; exists {
+				nodeData["x"] = pos[0]
+				nodeData["y"] = pos[1]
+				nodeData["z"] = pos[2]
 			}
 			addNode(nodeData)
 		}
 		if object != "" {
 			nodeData := map[string]interface{}{
-				"id":            object,
+				"id":            objectID,
 				"name":          object,
 				"document-type": "memory",
 				"session-id":    sessionID,
 				"summary":       fmt.Sprintf("Entidade relacionada ao fato: %s %s %s", subject, predicate, object),
 				"what-it-does":  "Serve como nó de ligação da memória semântica no grafo.",
 			}
-			if pos, exists := savedPositions[object]; exists {
-				nodeData["x"] = pos[0]; nodeData["y"] = pos[1]; nodeData["z"] = pos[2]
+			if pos, exists := savedPositions[objectID]; exists {
+				nodeData["x"] = pos[0]
+				nodeData["y"] = pos[1]
+				nodeData["z"] = pos[2]
 			}
 			addNode(nodeData)
 		}
 		if subject != "" && object != "" {
-			addEdge(subject, object, 1)
+			addEdge(subjectID, objectID, 1.0, "memory")
 		}
 	}
 
+finalize_sync:
 	// Grava o Cache novinho em folha (Nós + Arestas)
 	a.saveTopologyCache(nodesBatch, edgesBatch)
 
-	// Emite o pacote completo de nós de uma só vez
-	fmt.Printf("[Sync] Emitindo batch final de %d nós para o Wails...\n", len(nodesBatch))
+	// Emite o pacote completo de nós e arestas de uma só vez
+	fmt.Printf("[Sync] Emitindo batch final de %d nós e %d arestas para o Wails...\n", len(nodesBatch), len(edgesBatch))
 	a.emitEvent("graph:nodes:batch", nodesBatch)
-	fmt.Printf("[Sync] ✅ %d nós e %d arestas sincronizados e cacheados.\n", len(nodesBatch), len(edgesBatch))
+	a.emitEvent("graph:edges:batch", edgesBatch) // 🚀 Lançamento em Lote Atômico
+	fmt.Printf("[Sync] ✅ Sincronização de Massa concluída.\n")
 
 	// 🐝 Automação: Dispara saúde e tecelagem automaticamente após o Sync
 	go func() {
@@ -572,6 +724,13 @@ func (a *App) SyncAllNodes() {
 		a.emitEvent("graph:health:update", stats)
 		_ = ctx // Mantém a referência viva
 	}()
+}
+
+// TriggerInitialSync é chamado pelo frontend ao montar o componente para garantir que os dados apareçam.
+func (a *App) TriggerInitialSync() string {
+	fmt.Println("[Sync] 📥 Requisição de Sincronização Inicial recebida do Frontend.")
+	go a.SyncAllNodes()
+	return "Sincronização em lote solicitada."
 }
 
 func summarizeNodeContent(payload map[string]interface{}) string {
@@ -651,18 +810,23 @@ func clampSummary(text string, limit int) string {
 func (a *App) RunVectorDiagnostic() map[string]interface{} {
 	fmt.Println("[BACKEND] 🧪 Iniciando Diagnóstico de Integridade Vetorial...")
 
+	// 🛡️ Segurança: Garante que os serviços básicos estejam inicializados
+	if a.crawler == nil || a.ctx == nil {
+		return map[string]interface{}{"success": false, "error": "Motor do Crawler ou Contexto não inicializados."}
+	}
+
+	// 🛡️ Segurança: Garante que os motores fundamentais (Embedder/Qdrant) estejam ativos
+	if a.embedder == nil || a.qdrant == nil {
+		fmt.Println("[BACKEND] ⚠️ Motores não inicializados. Tentando reativar para o diagnóstico...")
+		if err := a.initServices(); err != nil || a.embedder == nil || a.qdrant == nil {
+			return map[string]interface{}{"success": false, "error": "Motores de IA não inicializados ou offline. Verifique sua conectividade e API Key."}
+		}
+	}
+
 	// 🏗️ Garantia de Infraestrutura: Cria as coleções se não existirem antes do teste
 	if err := a.crawler.EnsureCollections(a.ctx); err != nil {
 		fmt.Printf("[BACKEND] Erro ao preparar coleções: %v\n", err)
 		return map[string]interface{}{"success": false, "error": "Falha ao preparar coleções no Qdrant: " + err.Error()}
-	}
-
-	// 🛡️ Segurança: Garante que os serviços estejam inicializados
-	if a.embedder == nil || a.qdrant == nil {
-		fmt.Println("[BACKEND] ⚠️ Motores não inicializados. Tentando reativar...")
-		if err := a.initServices(); err != nil || a.embedder == nil {
-			return map[string]interface{}{"success": false, "error": "Motores de IA n├úo inicializados. Verifique sua Gemini API Key."}
-		}
 	}
 
 	start := time.Now()

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"Lumaestro/internal/config"
+	"Lumaestro/internal/utils"
 )
 
 func (a *App) emitAgentStatus(agent string, action string, kind string) {
@@ -45,9 +46,11 @@ func (a *App) AskAgent(agentName string, prompt string) string {
 		ctx := a.ctx // Ancoragem de segurança
 		fmt.Printf("[BACKEND] Iniciando chamada de Chat para: %s\n", agentName)
 		a.emitAgentStatus(agentName, "Orquestrando contexto e intenção do usuário", "status")
-		
+
 		// 🛡️ Prevenção contra contexto nulo ou cancelado
-		if ctx == nil { return }
+		if ctx == nil {
+			return
+		}
 
 		// Usamos "default" como sessionID para manter o histórico em memória nesta sessão do app.
 		response, err := a.chat.Ask(ctx, agentName, "default", prompt)
@@ -84,7 +87,7 @@ func (a *App) SendAgentInput(agent string, input string, images []map[string]str
 	if a.executor != nil && a.executor.IsTurnPending(agent) {
 		fmt.Printf("[App] 🧭 Direcionamento (Steering) detectado para %s. Enviando dica...\n", agent)
 		a.emitAgentStatus(agent, "Direcionando motor em tempo real (Steering Hint)", "status")
-		
+
 		// Envia diretamente sem passar por RAG/Orquestrador para garantir latência zero na dica
 		return a.executor.SendInput(agent, "[DIRECIONAMENTO DO USUÁRIO]: "+input, images)
 	}
@@ -104,76 +107,7 @@ func (a *App) SendAgentInput(agent string, input string, images []map[string]str
 	}
 
 	// 🧠 Injetor de Memória Semântica com Ligações Nervosas (RAG + Grafo)
-	contextInfo := ""
-	if a.embedder != nil && a.navigator != nil && a.config.ObsidianVaultPath != "" {
-		a.emitAgentStatus(agent, "Consultando memória e contexto do projeto", "memory")
-		// 🏁 FAST-TRACK: Se o pool estiver em hibernação forçada, pulamos o RAG imediatamente
-		// para não travar o envio da mensagem por 30s.
-		fmt.Println("[RAG] Explorando ligações nervosas no Grafo de Conhecimento...")
-		
-		var fastNodeFound bool
-		// 🏁 FAST-PATH: DuckDB (Busca Léxica Instantânea por Nome)
-		if a.LStore != nil && a.config.ObsidianVaultPath != "" {
-			fastNodeId, err := a.LStore.FindNodeInText(input)
-			if err == nil && fastNodeId != "" {
-				fmt.Printf("[RAG] ⚡ Fast-Path DuckDB: Match PERFEITO -> Focando %s\n", fastNodeId)
-				a.emitEvent("node:active", fastNodeId)
-				fastNodeFound = true
-			} else {
-				fmt.Printf("[RAG] ⚠️ Fast-Path falhou ao encontrar '%s' no DuckDB (erro: %v)\n", input, err)
-			}
-		}
-
-		// 🐌 SLOW-PATH & RAG: Busca Semântica por Similaridade e Expansão de Contexto
-		vector, err := a.embedder.GenerateEmbedding(a.ctx, input, true)
-		if err == nil {
-			a.emitAgentStatus(agent, "Buscando referências semânticas relevantes", "memory")
-			
-			// Busca 3 nós para formar o contexto, usando Scores para filtrar zooms ruins
-			points, err := a.qdrant.SearchWithScores("obsidian_knowledge", vector, 3)
-			if err == nil && len(points) > 0 {
-				
-				// 🎯 FOCO DE CÂMERA (ZOOM)
-				if !fastNodeFound {
-					topPoint := points[0]
-					score, _ := topPoint["_score"].(float64)
-					fmt.Printf("[RAG] 🐌 Qdrant Top Result: %+v (Score: %.2f)\n", topPoint["name"], score)
-					
-					// Evita pulos aleatórios para nós irrelevantes se a similaridade for baixa
-					if score > 0.5 {
-						if name, ok := topPoint["name"].(string); ok && name != "" {
-							slowNodeId := strings.ToLower(name)
-							fmt.Printf("[RAG] 🐌 Slow-Path Qdrant: Similaridade Alta -> Focando %s\n", slowNodeId)
-							a.emitEvent("node:active", slowNodeId)
-						}
-					} else {
-						fmt.Printf("[RAG] ⚠️ Qdrant score muito baixo (%.2f). Ignorando zoom semântico para não confundir o usuário.\n", score)
-					}
-				}
-
-				// 🧠 EXPANSÃO DE CONTEXTO RAG
-				a.emitAgentStatus(agent, "Expandindo contexto com memória conectada", "memory")
-				fullContext := a.navigator.ExpandContext(a.ctx, points)
-				contextInfo = "\n\n[CONHECIMENTO ORQUESTRADO (OBSIDIAN + SINAPSES)]\n"
-				maxContextChars := 3000000 // Limite seguro para ~800k tokens do Gemini
-				for _, ctxPart := range fullContext {
-					if len(contextInfo)+len(ctxPart) > maxContextChars {
-						contextInfo += "\n\n[⚠️ CONTEÚDO ADICIONAL TRUNCADO POR LIMITE DE MEMÓRIA SEMÂNTICA]"
-						break
-					}
-					contextInfo += ctxPart + "\n\n"
-				}
-				fmt.Printf("[RAG] Contexto expandido via Grafo com %d fontes (Tamanho: %d chars).\n", len(fullContext), len(contextInfo))
-				
-			} else {
-				fmt.Printf("[RAG] ⚠️ Qdrant não retornou pontos úteis. Erro: %v\n", err)
-			}
-		} else {
-			// 🚀 Se falhou por cota (429) ou hibernação, não bloqueamos o chat.
-			fmt.Printf("[RAG] ⚠️ Erro ao gerar embedding para RAG: %v\n", err)
-			fmt.Println("[RAG] Fast-track ativado: Pulando busca de contexto.")
-		}
-	}
+	contextInfo := a.buildHybridContext(agent, input, previewInput)
 
 	// 🧠 Orquestração Soberana: Decide o Agente e monta o Prompt Contextual (RAG + Skills)
 	a.emitAgentStatus(agent, "Definindo estratégia e montando prompt final", "status")
@@ -228,8 +162,117 @@ func (a *App) SendAgentInput(agent string, input string, images []map[string]str
 		"content": "🧠 Maestro processando sinapses e raciocinando...",
 		"type":    "progress",
 	})
-	
+
 	return nil
+}
+
+// buildHybridContext constrói o contexto de inteligência mesclando Busca Lexical, Semântica e Memórias em um pipeline unificado.
+func (a *App) buildHybridContext(agent string, input string, previewInput string) string {
+	contextInfo := ""
+
+	// 🔒 Validação de Resiliência: Só executa o RAG se o Vault estiver mapeado e os motores estiverem online.
+	if a.embedder == nil || a.navigator == nil || a.GetConfig().ObsidianVaultPath == "" {
+		return contextInfo
+	}
+
+	a.emitAgentStatus(agent, "Consultando memória e contexto do projeto", "memory")
+	fmt.Println("[RAG] Explorando ligações nervosas no Grafo de Conhecimento...")
+
+	// 📡 1. ENGINE LEXICAL: Radar de Palavra-Chave (Prioridade Máxima de UX e Relevância Exata)
+	nodes := a.navigator.SearchByKeyword(a.ctx, input)
+	foundByRadar := len(nodes) > 0
+	discoveryEmitted := ""
+
+	// 🎬 FAST-TRACK ZOOM
+	if foundByRadar {
+		if id, ok := nodes[0]["id"].(string); ok {
+			discoveryEmitted = id
+			fmt.Printf("[RAG] 🎬 [FAST-TRACK] Radar identificou alvo: \"%s\". Disparando Zoom!\n", id)
+			a.emitAgentStatus(agent, "Alvo identificado pelo Radar Neural! Iniciando Voo...", "memory")
+			utils.SafeEmit(a.ctx, "node:active", discoveryEmitted)
+		}
+	} else {
+		fmt.Printf("[RAG] 🔍 Radar Neural não encontrou correspondências diretas para: \"%s\"\n", previewInput)
+	}
+
+	// 🧠 2. ENGINE SEMÂNTICO (IA): Enriquecimento Vectorial e Memórias
+	vector, err := a.embedder.GenerateEmbedding(a.ctx, input, true)
+	if err == nil {
+		a.emitAgentStatus(agent, "Buscando referências semânticas relevantes", "memory")
+
+		semanticNotes, _ := a.qdrant.Search("obsidian_knowledge", vector, 5) // Busca expandida (Top 5)
+		semanticMems, _ := a.qdrant.Search("knowledge_graph", vector, 3)     // Memórias recentes (Top 3)
+
+		seen := make(map[string]bool)
+		for _, n := range nodes {
+			if name, ok := n["name"].(string); ok {
+				seen[name] = true
+			}
+		}
+
+		// 🛡️ RANKING DE MERGE E LIMITE DE NÓS (Prevenção de Context Overflow)
+		const MAX_NODES = 12 // Teto absoluto de nós injetados no prompt
+
+		for _, sn := range semanticNotes {
+			if len(nodes) >= MAX_NODES {
+				break
+			}
+			if name, ok := sn["name"].(string); ok && !seen[name] {
+				nodes = append(nodes, sn)
+				seen[name] = true
+			}
+		}
+
+		for _, sm := range semanticMems {
+			if len(nodes) >= MAX_NODES {
+				break
+			}
+			if subj, ok := sm["subject"].(string); ok && !seen[subj] {
+				sm["name"] = subj
+				sm["document-type"] = "memory"
+				nodes = append(nodes, sm)
+				seen[subj] = true
+			}
+		}
+	} else {
+		fmt.Printf("[RAG] ⚠️ Falha na API de Vetores (%v). Operando apenas no modo Degredado (Radar).\n", err)
+	}
+
+	// 🎬 3. MONTAGEM FINAL DO CONTEXTO
+	if len(nodes) > 0 {
+		statusMsg := "Expandindo contexto com memória conectada"
+		if foundByRadar {
+			statusMsg = "Alvo identificado pelo Radar Neural!"
+		}
+
+		// Fallback semântico para zoom (se o radar falhou, voamos para o Top-1 semântico)
+		if discoveryEmitted == "" {
+			if topID, ok := nodes[0]["id"].(string); ok {
+				fmt.Printf("[RAG] 🎬 Zoom semântico (fallback): %s\n", topID)
+				utils.SafeEmit(a.ctx, "node:active", topID)
+			}
+		}
+
+		a.emitAgentStatus(agent, statusMsg, "memory")
+
+		// O navigator expande a estrutura com sinapses conectadas
+		fullContext := a.navigator.ExpandContext(a.ctx, nodes)
+
+		contextInfo = "\n\n[CONHECIMENTO ORQUESTRADO (OBSIDIAN + SINAPSES)]\n"
+
+		// 🛡️ Limite Absoluto de Caracteres (Proteção de Custos API LLM)
+		const MAX_CHARS = 100000
+		for _, ctxPart := range fullContext {
+			if len(contextInfo)+len(ctxPart) > MAX_CHARS {
+				contextInfo += "\n\n[⚠️ CONTEÚDO ADICIONAL TRUNCADO POR LIMITE DE MEMÓRIA (Max Tokens Atingido)]"
+				break
+			}
+			contextInfo += ctxPart + "\n\n"
+		}
+		fmt.Printf("[RAG] 🧠 Contexto Híbrido Finalizado: %d Fontes Base -> Tamanho total: %d caracteres.\n", len(nodes), len(contextInfo))
+	}
+
+	return contextInfo
 }
 
 // ConsolidateChatKnowledge analisa o diálogo recente e cria ligações nervosas (sinapses).
@@ -271,7 +314,7 @@ func (a *App) SetAgentModel(agent string, model string) error {
 		if _, ok := a.executor.ActiveSessions[agent]; ok {
 			fmt.Printf("[App] ⚡ Tentando troca dinâmica via RPC (unstable_setSessionModel)...\n")
 			errRPC := a.executor.SetSessionModel(agent, model)
-			
+
 			if errRPC == nil {
 				fmt.Printf("[App] ✅ Troca dinâmica concluída com sucesso para %s!\n", model)
 				a.emitEvent("agent:log", map[string]string{
@@ -281,19 +324,18 @@ func (a *App) SetAgentModel(agent string, model string) error {
 				return nil
 			}
 
-			// Fallback silencioso para reinício se a troca dinâmica não for suportada
-			if errRPC != nil {
-				if s, ok := a.executor.ActiveSessions[agent]; ok {
-					if s.Cancel != nil {
-						s.Cancel()
-					}
-					delete(a.executor.ActiveSessions, agent)
-					
-					a.emitEvent("agent:log", map[string]string{
-						"source":  "SYSTEM",
-						"content": "🔄 Aplicando novo modelo via reinício: " + model,
-					})
+			// Se falhou (ex: método não suportado no binário atual), fazemos o fallback para Reinício
+			fmt.Printf("[App] ⚠️ Falha na troca dinâmica (%v). Fazendo fallback para reinício do motor...\n", errRPC)
+			if s, ok := a.executor.ActiveSessions[agent]; ok {
+				if s.Cancel != nil {
+					s.Cancel()
 				}
+				delete(a.executor.ActiveSessions, agent)
+
+				a.emitEvent("agent:log", map[string]string{
+					"source":  "SYSTEM",
+					"content": "🔄 Reiniciando motor para aplicar novo modelo: " + model,
+				})
 			}
 		}
 	}
@@ -355,7 +397,7 @@ func (a *App) SendTerminalData(agent string, data string) {
 // SendSteeringHint envia uma dica de direcionamento em tempo real para a sessão ativa do agente.
 func (a *App) SendSteeringHint(agent string, input string) string {
 	fmt.Printf("[App] ⚡ Enviando Steering Hint para %s: '%s'\n", agent, input)
-	
+
 	// No Lumaestro, a sessão ACP de chat principal usa o nome do agente como ID.
 	sessionID := agent
 	err := a.executor.SendSteeringHint(sessionID, input)
@@ -374,7 +416,7 @@ func (a *App) SetPlanMode(agent string, enabled bool) bool {
 	if ok {
 		session.PlanMode = enabled
 		fmt.Printf("[App] 🛡️ Plan Mode alterado para %v na sessão %s\n", enabled, agent)
-		
+
 		status := "Modo Execução (⚡) ativado"
 		if enabled {
 			status = "Modo Plano (📝) ativado — Escrita bloqueada"
