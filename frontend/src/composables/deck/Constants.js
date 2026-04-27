@@ -9,7 +9,13 @@ export const colors = {
     chunk: [100, 160, 255],    // Azul Celeste
     system: [255, 255, 255],   // Branco Puro
     memory: [244, 114, 182],   // Rosa Quente (igual original)
-    active: [252, 211, 77]     // Dourado
+    active: [252, 211, 77],     // Dourado
+    celestial: [192, 132, 252], // Violeta Cósmico
+    semantic: [34, 211, 238],   // Cyan (Sinapse)
+    galaxyCore: [255, 200, 50], // Ouro (Núcleo)
+    solarCore: [255, 100, 50],  // Laranja (Sistema)
+    planet: [100, 200, 255],    // Azul claro
+    asteroid: [180, 180, 200]   // Cinza (Memória)
 };
 
 export const communityColors = [

@@ -12,46 +12,54 @@ export function createSimulation({
     nodesData,
     linksData,
     nodeDegrees,
+    communityCenters,
+    parentMap,
     onTick,
     onEnd
 }) {
-    const manualVelDecay = 0.3;
+    const HUB_PHYS_LIMIT = 40;
+    const velocityDecay = 0.35;
+    const manualVelDecay = 0.3; // Para o eixo Z manual
 
     // 1. Inicializa a simulação
     const simulation = d3.forceSimulation(nodesData, 3)
-        .alphaDecay(0.08)
-        .velocityDecay(0.45);
+        .alphaDecay(0.02)       // ← Mais tempo para expandir (v18.15)
+        .velocityDecay(0.3);    // ← Menos fricção para movimentos mais amplos
 
     // 2. Registro de Forças (Arsenal Premium - d3-force-registry inspired)
     const registry = {
-        // Arestas: O "esqueleto" que mantém a estrutura
+        // 1. Força de Elástico (Links) - Estilo Dente-de-Leão com Lógica Semântica (Mixer Dev)
         link: d3.forceLink(linksData).id(d => d.id)
             .distance(link => {
                 const sDeg = nodeDegrees.get(link.source.id) || 0;
                 const tDeg = nodeDegrees.get(link.target.id) || 0;
-                return (sDeg > 3 && tDeg > 3) ? 250 : 35;
+                if (sDeg > 3 && tDeg > 3) return 200; 
+                return 25; 
             })
-            .strength(1.0),
-        
-        // Repulsão Base (ManyBody): Evita sobreposição imediata
-        charge: d3.forceManyBody().strength(-300).distanceMax(2000),
-        
-        // 🧲 Força Magnética (Inverso do Quadrado): Gera o agrupamento orgânico
-        magnetic: d3.forceManyBody().strength(d => {
-            return (d.weight || 1.0) * -150; 
-        }).distanceMin(20).distanceMax(800),
+            .strength(link => {
+                // 🧠 [MAGNETISMO INVISÍVEL] Vínculos semânticos puxam de leve
+                if (link['edge-type'] === 'semantic') return 0.1;
+                return 1.0;
+            }),
 
-        // ⭕ Força Radial: Cria o efeito de "Órbita" ao redor do centro (0,0,0)
-        radial: d3.forceRadial(200, 0, 0, 0).strength(0.1),
-        
-        // 🧱 Força de Limite (Boundary): Mantém o cosmos contido em uma esfera
-        limit: d3.forceRadial(0, 0, 0, 0).strength(0.01),
+        // 2. Força Customizada (Expansão de Clusters e Z-Push) - RESTAURADA
+        custom: forceAll(communityCenters, parentMap),
 
+        // 3. Repulsão (ManyBody) - Essencial para o formato visual de exploração (Mixer Dev)
+        charge: d3.forceManyBody().strength(d => -1200).distanceMax(5000),
+        
+        // 🧲 Força Magnética, Radial e Limit (Restauradas do Main para controle UI, iniciam zeradas/suaves)
+        magnetic: d3.forceManyBody().strength(d => (d.weight || 1.0) * -15).distanceMin(20).distanceMax(800),
+        radial: d3.forceRadial(200, 0, 0, 0).strength(0),
+        limit: d3.forceRadial(0, 0, 0, 0).strength(0),
+
+        // 4. Centro Global
         center: d3.forceCenter(0, 0, 0).strength(0.01),
-        
+
+        // 5. Colisão física (Mixer Dev)
         collide: d3.forceCollide(node => {
-            const importance = (node.pagerank && node.pagerank > 0) ? (node.pagerank * 18) : (nodeDegrees.get(node.id) || 0);
-            return (1 + Math.pow(importance, 0.5) * 4.0) + 6;
+            const importance = (node.pagerank && node.pagerank > 0) ? (node.pagerank * 15) : (nodeDegrees.get(node.id) || 0);
+            return (1 + Math.pow(importance, 0.5) * 3.5) + 6;
         })
     };
 
@@ -63,7 +71,7 @@ export function createSimulation({
     let tickCount = 0;
 
     simulation.on('tick', () => {
-        // Integração Z Manual
+        // Integração Z Manual (Bug fix para d3-force-3d v3)
         for (let i = 0; i < nodesData.length; i++) {
             const n = nodesData[i];
             if (n.fz !== undefined && n.fz !== null) {
@@ -80,12 +88,13 @@ export function createSimulation({
             onTick(nodesData);
         }
     });
-    
+
+    // Restaurando evento 'end' do Main
     simulation.on('end', () => {
         if (onEnd) onEnd(nodesData);
     });
 
-    // 4. Retorna a interface de controle (API do Registry)
+    // 4. Retorna a interface de controle (API do Registry - Mixer Main)
     return {
         simulation,
         updateForce: (name, params) => {

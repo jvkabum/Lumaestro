@@ -5,7 +5,7 @@
  * Gerencia a comunicação com a API do sistema (Wails) para recuperar 
  * o contexto dos nós neurais.
  */
-export function useEventBridge({ store, pilotFocus, startPhysicsDrag, handlePhysicsDrag, endPhysicsDrag, updateLayers }) {
+export function useEventBridge({ store, pilotFocus, activateNetwork, startPhysicsDrag, handlePhysicsDrag, endPhysicsDrag, updateLayers }) {
 
     const onHover = (info) => {
         if (info.object) {
@@ -18,18 +18,32 @@ export function useEventBridge({ store, pilotFocus, startPhysicsDrag, handlePhys
     };
 
     const onClick = (info, deckInstance, currentViewState, activeNodeIdRef) => {
-        if (!info.object) return;
+        if (!info.object) {
+            activeNodeIdRef.value = null;
+            store.resetHighlights();
+            updateLayers();
+            return;
+        }
 
-        store.activeNodeId = info.object.id;
-        activeNodeIdRef.value = info.object.id;
+        const nodeId = info.object.id;
+        store.activeNodeId = nodeId;
+        activeNodeIdRef.value = nodeId;
+
+        // ✨ ATIVAÇÃO DE REDE NEURAL (Local Integration)
+        if (activateNetwork) activateNetwork(nodeId);
+
+        // [Mixer] Sincroniza links destacados (Limpa o rastro anterior)
+        store.highlightedLinks.clear();
+        store.clickedNodeLinks.clear();
+
         store.selectedNode = info.object;
         store.nodeDetails = { loading: true, path: '', content: '', isVirtual: false };
 
         // Integração Dinâmica com o Backend (Wails)
         const bridge = (window.go?.core?.App) || (window.go?.main?.App);
-        
+
         if (bridge && bridge.GetNeuralNodeContext) {
-            bridge.GetNeuralNodeContext(info.object.id).then(res => {
+            bridge.GetNeuralNodeContext(nodeId).then(res => {
                 if (res && res.success !== false) {
                     store.nodeDetails = {
                         loading: false,
@@ -37,10 +51,8 @@ export function useEventBridge({ store, pilotFocus, startPhysicsDrag, handlePhys
                         content: res.content || res.summary || 'Sem metadados',
                         isVirtual: res.document_type === 'memory'
                     };
-                    
-                    // Sincroniza links destacados
-                    store.highlightedLinks.clear();
-                    store.clickedNodeLinks.clear();
+
+                    // Enriquecimento: Se o backend devolver arestas específicas, as adicionamos!
                     if (res.related_edges) {
                         res.related_edges.forEach(edgeId => store.clickedNodeLinks.add(edgeId));
                     }

@@ -19,9 +19,16 @@ export function useLayerComposer() {
         store,
         eventHandlers
     }) => {
-        const zoom = currentViewState.zoom;
-        const clLinks = store.clickedNodeLinks;
-        const hlLinks = store.highlightedLinks;
+        const zoom = currentViewState?.zoom || -3;
+        
+        // 🔗 Links de Ativação
+        const clLinks = store.clickedNodeLinks; // Conexões do nó ativo (Neon Brilhante)
+        const hlLinks = store.highlightedNeighbors; // Vizinhos (Para lógica de rótulos se necessário)
+
+        // 🧠 [VÍNCULO SEMÂNTICO] IDs capturados pelo motor de sinapses invisíveis
+        const semanticNeighborIds = new Set(
+            (store.nodeDetails?.semanticNeighbors || []).map(n => String(n.id))
+        );
 
         // Cálculo O(L) de densidade para uso compartilhado pelas camadas
         const degreeCounts = new Map();
@@ -36,14 +43,29 @@ export function useLayerComposer() {
         // Montagem do Pipeline de Renderização
         return [
             // 1. Etiquetas (LOD) - CARTESIAN Sync
-            createLabelLayer({ currentNodes, degreeCounts, zoom, store, tickCounter: animationTime }),
+            createLabelLayer({ 
+                currentNodes, 
+                degreeCounts, 
+                zoom, 
+                showLabels: store.showLabels !== false,
+                hoveredNodeId: store.hoveredNodeId,
+                selectedNodeId: store.selectedNodeId,
+                tickCounter: animationTime 
+            }),
             
             // 2. Conexões + Fótons (GPU Sync V9)
             createLinkLayer({ currentLinks, clLinks, hlLinks, animationTime }),
             
             // 3. Nós (Interação) - CARTESIAN Sync
             createNodeLayer({ 
-                currentNodes, degreeCounts, zoom, activeNodeId, store, tickCounter: animationTime,
+                currentNodes, 
+                degreeCounts, 
+                zoom, 
+                activeNodeId, 
+                hoveredNodeId: store.hoveredNodeId,
+                highlightedNeighbors: store.highlightedNeighbors,
+                semanticNeighborIds, // ← PROJETANDO AS SINAPSES NO 3D
+                tickCounter: animationTime,
                 ...eventHandlers
             })
         ];

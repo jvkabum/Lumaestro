@@ -32,10 +32,44 @@ export function useInteractionPilot() {
             target: [node.x, node.y, node.z],
             zoom: 0.5, // Reduzido de 3.5 para 1.5 para a câmera parar mais longe do nó
             transitionDuration: 3500, // Efeito "nave viajando"
+            pitch: 35, // Inclinação leve para profundidade 3D
+            bearing: -15, // Rotação leve para estética
             transitionInterpolator: NAV_CONFIG.transitionInterpolator
         };
-        deckInstance.setProps({ initialViewState: targetViewState });
+        deckInstance.setProps({ viewState: targetViewState });
         currentViewState.value = targetViewState;
+    };
+
+    /**
+     * 🚀 [Mixer v2] Foca em um nó pelo ID ou Nome com resiliência cinematográfica
+     */
+    const focusNodeById = (id, { nodeMap, deckInstance, currentViewState }) => {
+        if (!id || !nodeMap || !deckInstance) return null;
+
+        const targetId = String(id).trim();
+        const cleanId = targetId.toLowerCase().replace(/^["']|["']$/g, '');
+
+        // 1. Busca Exata (O(1) - Alta Performance)
+        let node = (nodeMap instanceof Map) ? nodeMap.get(targetId) : (nodeMap[targetId] || nodeMap[id]);
+
+        // 2. [Mixer Vermelho] Busca por Aproximação / Nome Normalizado (Plano B)
+        if (!node) {
+            console.log(`[Pilot] ⚠️ ID direto não encontrado. Iniciando busca radial...`);
+            const normalizedTarget = cleanId.replace(/[\s\-_]+/g, ' ');
+            const allNodes = (nodeMap instanceof Map) ? Array.from(nodeMap.values()) : Object.values(nodeMap);
+            
+            node = allNodes.find(n => {
+                const nid = String(n.id).toLowerCase().trim().replace(/[\s\-_]+/g, ' ');
+                const nName = String(n.name || '').toLowerCase().trim().replace(/[\s\-_]+/g, ' ');
+                return nid === normalizedTarget || nName === normalizedTarget || nid.includes(cleanId);
+            });
+        }
+
+        if (node) {
+            focusNode(deckInstance, currentViewState, node);
+            return node;
+        }
+        return null;
     };
 
     const zoomToFit = (deckInstance, currentViewState) => {
@@ -46,7 +80,7 @@ export function useInteractionPilot() {
             transitionDuration: 1500,
             transitionInterpolator: NAV_CONFIG.transitionInterpolator
         };
-        deckInstance.setProps({ initialViewState: targetViewState });
+        deckInstance.setProps({ viewState: targetViewState });
         currentViewState.value = targetViewState;
     };
 
@@ -62,7 +96,7 @@ export function useInteractionPilot() {
             target: [currentViewState.value.target[0] + dx * speedFactor, currentViewState.value.target[1] + moveRawY * speedFactor, currentViewState.value.target[2] + dz * speedFactor],
             transitionDuration: 0
         };
-        deckInstance.setProps({ initialViewState: targetViewState });
+        deckInstance.setProps({ viewState: targetViewState });
         currentViewState.value = targetViewState;
     };
 
@@ -78,7 +112,7 @@ export function useInteractionPilot() {
             transitionDuration: NAV_CONFIG.transitionDuration,
             transitionInterpolator: NAV_CONFIG.transitionInterpolator
         };
-        deckInstance.setProps({ initialViewState: targetViewState });
+        deckInstance.setProps({ viewState: targetViewState });
         currentViewState.value = targetViewState;
     };
 
@@ -90,7 +124,7 @@ export function useInteractionPilot() {
             transitionDuration: duration,
             transitionInterpolator: NAV_CONFIG.transitionInterpolator
         };
-        deckInstance.setProps({ initialViewState: targetViewState });
+        deckInstance.setProps({ viewState: targetViewState });
         currentViewState.value = targetViewState;
     };
 
@@ -152,7 +186,7 @@ export function useInteractionPilot() {
 
             if (changed) {
                 newView.zoom = Math.max(NAV_CONFIG.minZoom, Math.min(NAV_CONFIG.maxZoom, newView.zoom));
-                deckInstance.setProps({ initialViewState: newView });
+                deckInstance.setProps({ viewState: newView });
                 currentViewState.value = newView;
             }
 
@@ -171,7 +205,7 @@ export function useInteractionPilot() {
     };
 
     return {
-        focusNode, zoomToFit, panTarget,
+        focusNode, focusNodeById, zoomToFit, panTarget,
         goToPreset, animateTo, setupKeyboardNav,
         VIEW_PRESETS, NAV_CONFIG
     };

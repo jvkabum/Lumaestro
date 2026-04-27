@@ -19,56 +19,54 @@ export function forceAll(communityCenters, parentMap) {
     let nodes;
 
     function force(alpha) {
+        const sCluster = CONFIG.clusterRepulsion * alpha;
+        const sZ = CONFIG.zRepulsionStrength * alpha;
+
         for (let i = 0; i < nodes.length; i++) {
             const node = nodes[i];
 
-            // 1. EXPANSÃO RADIAL DE CLUSTER (v18.9 - Anti-Gravidade)
+            // 1. EXPANSÃO RADIAL DE CLUSTER (v18.15 - Anti-Gravidade Dinâmica)
             const center = communityCenters.get(node.community);
             if (center) {
-                const s = CONFIG.clusterRepulsion * alpha;
-                const dx = node.x - center.x; // Direção: Centro -> Nó (EMPURA PARA FORA)
+                const dx = node.x - center.x; 
                 const dy = node.y - center.y;
                 const dz = node.z - center.z;
-                const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
+                const distSq = dx * dx + dy * dy + dz * dz || 1;
+                const dist = Math.sqrt(distSq);
                 
-                // Força repulsiva constante para garantir expansão radial
-                const force = s / (dist / 1000 + 1); 
-                node.vx += dx * force;
-                node.vy += dy * force;
-                node.vz += dz * force;
+                // Força repulsiva baseada no inverso da distância (Suavizada)
+                const f = sCluster * 150 / (dist / 100 + 1); 
+                node.vx += (dx / dist) * f;
+                node.vy += (dy / dist) * f;
+                node.vz += (dz / dist) * f;
             }
 
             // 2. BIAS HIERÁRQUICO (Tree Expansion)
             const parent = parentMap.get(node.id);
             if (parent) {
-                const s = 0.02 * alpha;
-                // Empurra o filho para longe do pai
+                const s = 0.05 * alpha;
                 const dx = node.x - parent.x;
                 const dy = node.y - parent.y;
                 const dz = node.z - parent.z;
                 const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
                 
                 if (dist < CONFIG.hierarchyMaxDist) { 
-                    const push = (CONFIG.hierarchyMaxDist - dist) / CONFIG.hierarchyMaxDist * s * 150;
+                    const push = (CONFIG.hierarchyMaxDist - dist) / CONFIG.hierarchyMaxDist * s * 200;
                     node.vx += (dx / dist) * push;
                     node.vy += (dy / dist) * push;
                     node.vz += (dz / dist) * push;
                 }
             }
 
-            // 3. REPULSÃO Z CUSTOMIZADA (Evita o achatamento 3D)
-            const pushZ = CONFIG.zRepulsionStrength * alpha;
-            for (let j = i + 1; j < nodes.length; j++) {
-                const other = nodes[j];
-                const dz = (node.z || 0) - (other.z || 0);
-                const absZ = Math.abs(dz);
-                if (absZ < CONFIG.zRepulsionThreshold) {
-                    const sign = dz >= 0 ? 1 : -1;
-                    node.vx += (Math.random() - 0.5) * pushZ; // Adiciona pequeno offset caótico (Z-fighting prevention)
-                    node.vy += (Math.random() - 0.5) * pushZ;
-                    node.vz += sign * pushZ;
-                    other.vz -= sign * pushZ;
-                }
+            // 3. EXPANSÃO Z ESTRUTURADA (v18.16 - Bias Esférico O(N))
+            // Aplica um bias de profundidade baseado na distância radial XY para criar uma "esfera de neurônios"
+            const radialDist = Math.sqrt(node.x * node.x + node.y * node.y) || 1;
+            const zBias = (radialDist / 400) * sZ; 
+            
+            if (Math.abs(node.z || 0) < 40) {
+                // Empurra suavemente para fora do plano XY com base na posição atual
+                const direction = node.z >= 0 ? 1 : -1;
+                node.vz += direction * zBias * 8;
             }
         }
     }

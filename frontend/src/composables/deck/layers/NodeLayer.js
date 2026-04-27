@@ -1,5 +1,5 @@
-import { ScatterplotLayer } from '@deck.gl/layers';
 import { COORDINATE_SYSTEM } from '@deck.gl/core';
+import { ScatterplotLayer } from '@deck.gl/layers';
 import { colors, getCommunityColor } from '../Constants';
 
 /**
@@ -68,7 +68,9 @@ export function createNodeLayer({
     degreeCounts,
     zoom,
     activeNodeId,
-    store,
+    hoveredNodeId,
+    highlightedNeighbors,
+    semanticNeighborIds, // ← IDs vindos do motor de sinapses
     tickCounter,
     onHover,
     onClick,
@@ -82,10 +84,28 @@ export function createNodeLayer({
         data: [...currentNodes], // Clone para garantir atualização no Deck.gl
         getPosition: node => [node.x || 0, node.y || 0, node.z || 0],
         getFillColor: node => {
-            if (node.id === activeNodeId) return colors.active;
-            if (store.hoveredNodeId === node.id) return [...colors.active];
+            const nodeId = String(node.id);
+            if (nodeId === String(activeNodeId)) return colors.active; // Dourado (Foco)
+            if (String(hoveredNodeId) === nodeId) return [...colors.active];
 
-            // Cor da Comunidade (Cluster Semântico)
+            // 💎 SINAPSE ATIVA (Dev Gain): Brilha em Cyan se for um vizinho semântico
+            if (semanticNeighborIds && semanticNeighborIds.has(nodeId)) {
+                return colors.semantic;
+            }
+
+            // 🪐 ESTÉTICA CELESTIAL (Main Gain): Cores por hierarquia
+            const celestial = node['celestial-type'] || 'moon';
+            if (celestial === 'galaxy-core') return [...colors.galaxyCore, 255]; // Ouro para núcleos de Galáxia
+            if (celestial === 'solar-system-core') return [...colors.solarCore, 255]; // Laranja para Planetas Raíz
+            if (celestial === 'planet') return [...colors.planet, 230]; // Azul claro para pastas
+            if (celestial === 'asteroid') return [...colors.asteroid, 180]; // Cinza translúcido para memórias
+
+            // Neon Activation: Vizinhos estruturais ganham brilho dourado suave
+            if (highlightedNeighbors && highlightedNeighbors.has(nodeId)) {
+                return [...colors.active, 220];
+            }
+
+            // Cor da Comunidade (Cluster Semântico) como fallback
             const cCol = getCommunityColor(node.community);
             if (cCol) return [...cCol, 230];
 
@@ -94,22 +114,39 @@ export function createNodeLayer({
             return colors[type] ? [...colors[type], 220] : [155, 155, 155, 220];
         },
         getRadius: node => {
-            // 📏 HIERARQUIA VISUAL (Escalonamento Quadrático)
+            // 📏 HIERARQUIA CELESTIAL (Main Gain: Escalonamento por Massa)
+            const celestial = node['celestial-type'] || 'moon';
+
+            // 1. Massa Base por Tipo
+            let baseMass = node.mass || 4.0;
+            if (celestial === 'galaxy-core') baseMass = 60.0;
+            if (celestial === 'solar-system-core') baseMass = 30.0;
+            if (celestial === 'planet') baseMass = 15.0;
+            if (celestial === 'asteroid') baseMass = 1.5;
+
+            // 2. Bônus de Importância (Conexões)
             const deg = degreeCounts.get(String(node.id)) || node.degree || 0;
             const pr = (node.pagerank && node.pagerank > 0) ? (node.pagerank * 15) : deg;
-
-            const isActive = node.id === activeNodeId;
             const importance = Math.max(deg, pr);
-            
-            // Ajuste fino para balancear legibilidade e impacto visual
-            const baseScale = 1.0 + Math.pow(importance, 0.5) * 0.8; 
-            const finalScale = isActive ? baseScale * 1.2 : baseScale;
-            
-            return Math.pow(finalScale, 2); // ← Quadrático para maior estabilidade visual
+
+            const nodeId = String(node.id);
+            const isActive = nodeId === String(activeNodeId);
+            const isNeighbor = highlightedNeighbors && highlightedNeighbors.has(nodeId);
+            const isSemantic = semanticNeighborIds && semanticNeighborIds.has(nodeId);
+
+            const baseScale = (baseMass + Math.pow(importance, 0.5) * 1.5);
+
+            // ✨ Pulso visual (Dev Gain)
+            let finalScale = baseScale;
+            if (isActive) finalScale *= 1.3;
+            else if (isSemantic) finalScale *= 1.25;
+            else if (isNeighbor) finalScale *= 1.15;
+
+            return Math.pow(finalScale, 0.95); // Escalonamento sublinear para estabilidade visual
         },
-        radiusScale: 1, // Desativado o multiplicador de galáxia, agora usamos valores exatos volumétricos
-        radiusUnits: 'common', // 🌍 Mudança para unidades globais para perspectiva natural
-        radiusMinPixels: 2.0,  // 🔍 Garante legibilidade de longe
+        radiusScale: 1,
+        radiusUnits: 'common',
+        radiusMinPixels: 2.0,
         radiusMaxPixels: 1500,
         pickable: true,
         opacity: 1,
@@ -117,9 +154,9 @@ export function createNodeLayer({
         antialiasing: true,
         stroked: false,
         updateTriggers: {
-            getFillColor: [activeNodeId, store.hoveredNodeId],
+            getFillColor: [activeNodeId, hoveredNodeId, highlightedNeighbors?.size, semanticNeighborIds?.size],
             getPosition: tickCounter,
-            getRadius: [zoom, degreeCounts.size]
+            getRadius: [zoom, degreeCounts.size, highlightedNeighbors?.size, semanticNeighborIds?.size]
         },
         onHover,
         onClick,

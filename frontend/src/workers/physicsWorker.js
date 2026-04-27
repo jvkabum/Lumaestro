@@ -9,7 +9,7 @@ import { createSimulation } from './physics/SimulationEngine';
  * - SimulationEngine (Motor D3-Force-3D)
  */
 
-let engine = null; // Agora guarda o objeto { simulation, updateForce }
+let engine = null;
 let nodesData = [];
 let linksData = [];
 
@@ -32,17 +32,26 @@ self.onmessage = function (event) {
         const { nodeDegrees, validLinks } = processDegrees(links, idMap);
 
         // 🌟 3. A PODAGEM MÁGICA (BFS MST)
+        // Corta todas as linhas de teia redundantes e força o design 'Dente-de-Leão' do D3
         linksData = convertToBFSTree(nodesData, validLinks, nodeDegrees);
 
+        // Envia a teia limpa de volta para o Visualizador Deck.gl parar de desenhar "Miojo" na GPU!
         self.postMessage({ type: 'PRUNED_LINKS', payload: { links: linksData } });
 
-        // 3. Reinicialização do Motor com Registry
+        const communityCenters = computeCommunityCenters(nodesData);
+        const parentMap = mapHierarchy(nodesData, idMap);
+
+        console.log(`[Physics] ${nodesData.length} nós, ${parentMap.size} com pai, ${communityCenters.size} comunidades, ${linksData.length} links válidos`);
+
+        // 3. Reinicialização do Motor D3
         if (engine && engine.simulation) engine.simulation.stop();
 
         engine = createSimulation({
             nodesData,
             linksData,
             nodeDegrees,
+            communityCenters,
+            parentMap,
             onTick: (nodes) => {
                 const positions = nodes.map(n => ({ id: n.id, x: n.x, y: n.y, z: n.z || 0 }));
                 self.postMessage({ type: 'TICK', payload: { positions } });
@@ -56,7 +65,7 @@ self.onmessage = function (event) {
         engine.simulation.tick(100); // Warmup
         engine.simulation.alpha(0.6).restart();
     }
-
+    
     else if (type === 'UPDATE_FORCE') {
         const { name, params } = payload;
         if (engine && engine.updateForce) {

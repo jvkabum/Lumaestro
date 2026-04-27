@@ -14,81 +14,97 @@ export function useStoreContract({
     pilotFocus, 
     pilotZoom, 
     pilotPan, 
+    focusNodeById, // ⚡ Recebendo a ferramenta de busca robusta
     updateGraphFn 
 }) {
+    
+    let unsubscribeActive;
     
     const bind = () => {
         const zoomToFit = () => pilotZoom(deckInstanceRef.value, currentViewState);
         const cameraPosition = (pos, node) => node && pilotFocus(deckInstanceRef.value, currentViewState, node);
         const panTarget = (x, y, z) => pilotPan(deckInstanceRef.value, currentViewState, x, y, z);
-        
+ 
+        // 🚀 [Mixer v2] Ponte de Descoberta: Encapsula a busca robusta com feedback visual
         const focusNode = (id) => {
             if (!id) {
                 zoomToFit();
                 return;
             }
-            const targetId = String(id).toLowerCase();
-            
-            let node = currentNodesRef.value.find(n => String(n.id).toLowerCase() === targetId);
-            
-            if (!node) {
-                node = currentNodesRef.value.find(n => {
-                    const nid = String(n.id).toLowerCase();
-                    return nid.includes(targetId) || targetId.includes(nid);
-                });
-            }
 
+            // 🛡️ [PROTEÇÃO] Evita múltiplas buscas simultâneas que podem travar a câmera
+            if (store.discoveryStatus === 'searching') return;
+            store.discoveryStatus = 'searching';
+
+            const node = focusNodeById(id);
+            
             if (node) {
-                console.log("[Contract] ✅ Nó encontrado para zoom + detalhes:", node.id);
-                pilotFocus(deckInstanceRef.value, currentViewState, node);
+                console.log("[Contract] ✅ Nó identificado via Contrato:", node.id);
                 
-                // 🧠 AUTO-DETAIL: Abre a descrição do nó automaticamente
-                store.selectedNode = node;
-                store.nodeDetails = { loading: true, path: '', content: '', isVirtual: false };
+                // 🧠 AUTO-DETAIL: Abre a descrição do nó e busca contexto (Mixer Vermelho)
+                store.setSelectedNode(node);
+                store.setNodeDetails({ loading: true, path: '', content: '', isVirtual: false });
 
                 const bridge = (window.go?.core?.App) || (window.go?.main?.App);
                 if (bridge && bridge.GetNeuralNodeContext) {
                     bridge.GetNeuralNodeContext(node.id).then(res => {
                         if (res && res.success !== false) {
-                            store.nodeDetails = {
+                            store.setNodeDetails({
                                 loading: false,
                                 path: res.path || 'Memória Virtual',
                                 content: res.content || res.summary || 'Sem metadados',
-                                isVirtual: res.document_type === 'memory'
-                            };
+                                isVirtual: res.type === 'memory' // Padronizado conforme backend core/app.go
+                            });
+                            store.discoveryStatus = 'found';
                         } else {
-                            store.nodeDetails = { loading: false, path: 'Informativo', content: 'Nota identificada, mas conteúdo ainda em processamento.' };
+                            store.setNodeDetails({ 
+                                loading: false, 
+                                path: 'Informativo', 
+                                content: 'Nota identificada, mas conteúdo ainda em processamento.' 
+                            });
+                            store.discoveryStatus = 'failed';
                         }
                     }).catch(err => {
                         console.error("[Contract] Erro ao buscar contexto automático:", err);
+                        store.discoveryStatus = 'failed';
                     });
                 }
             } else {
-                console.warn("[Contract] ❌ Nó não encontrado para ID:", id);
+                console.warn("[Contract] ❌ Nó não localizado para ID:", id);
+                store.discoveryStatus = 'failed';
             }
         };
-
+ 
         // Registro do contrato do grafo na Store
         store.graphInstance = {
             zoomToFit,
             cameraPosition,
             panTarget,
-            focusNode,
+            focusNode, // Agora usa a versão robusta com feedback
+            // Busca exposta sem side-effects
+            search: (id) => focusNodeById(id),
             graphData: (newData) => {
-                // Getter: Retorna dados atuais
                 if (newData === undefined) {
-                    return { 
-                        nodes: currentNodesRef.value, 
-                        links: currentLinksRef.value 
-                    };
+                    return { nodes: currentNodesRef.value, links: currentLinksRef.value };
                 }
-                // Setter: Dispara sincronização
                 updateGraphFn(newData.nodes, newData.links);
             }
         };
+ 
+        // 📡 Escuta o chat para zoom automático (Discovery Effect)
+        if (window.runtime && window.runtime.EventsOn) {
+            unsubscribeActive = window.runtime.EventsOn("node:active", (id) => {
+                console.log("[Contract] 📡 Sinal de Ativação Neural recebido:", id);
+                focusNode(id);
+            });
+        }
     };
-
+ 
     const unbind = () => {
+        if (unsubscribeActive) {
+            unsubscribeActive();
+            unsubscribeActive = null;
+        }
         store.graphInstance = null;
     };
 
