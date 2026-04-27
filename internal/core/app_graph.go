@@ -76,7 +76,12 @@ func (a *App) AnalyzeGraphHealth() (map[string]interface{}, error) {
 	// 📂 Agregação de Contagem Multi-Fonte (v20)
 	count := 0
 	if a.LStore != nil {
-		pathsToCount := []string{a.executor.Workspace, a.config.ObsidianVaultPath}
+		vaultPath := ""
+		if a.config != nil {
+			vaultPath = a.config.ObsidianVaultPath
+		}
+		
+		pathsToCount := []string{a.executor.Workspace, vaultPath}
 		if a.executor.Workspace != "" {
 			pathsToCount = append(pathsToCount, filepath.Join(a.executor.Workspace, "docs"))
 		}

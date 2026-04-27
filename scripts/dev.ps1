@@ -38,5 +38,5 @@ if (-not $wailsExe) {
     exit 1
 }
 
-# 4. Execucao com as tags de estabilidade do DuckDB
-& $wailsExe dev -debounce 500 -v 2 -tags "duckdb_use_lib,no_duckdb_arrow"
+# 4. Execucao com as tags de estabilidade do DuckDB (modo silencioso)
+& $wailsExe dev -debounce 500 -tags "duckdb_use_lib,no_duckdb_arrow"

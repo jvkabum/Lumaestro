@@ -319,7 +319,11 @@ func (a *App) LoadFastGraph() {
 
 	// 2. Fallback: Se não houver cache, tenta ler apenas os nós do DuckDB
 	if a.LStore != nil {
-		nodes, _, err := a.LStore.GetFullGraph(a.config.ObsidianVaultPath)
+		vaultPath := ""
+		if a.config != nil {
+			vaultPath = a.config.ObsidianVaultPath
+		}
+		nodes, _, err := a.LStore.GetFullGraph(vaultPath)
 		if err == nil && len(nodes) > 0 {
 			fmt.Printf("[Sync] 💾 Fallback: Emitindo %d nós do DuckDB.\n", len(nodes))
 			a.emitEvent("graph:nodes:batch", nodes)
