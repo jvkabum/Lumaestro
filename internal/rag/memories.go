@@ -104,22 +104,29 @@ func (w *KnowledgeWeaver) WeaveChatKnowledge(ctx context.Context, sessionID stri
 
 		w.Qdrant.UpsertPoint("knowledge_graph", id, vector, payload)
 
-		// 4. ATUALIZAÇÃO VISUAL
-		utils.SafeEmit(w.ctx, "graph:node", map[string]string{
-			"id":            t.Subject,
-			"name":          t.Subject,
-			"document-type": "memory",
-			"session-id":    sessionID,
+		// 4. ATUALIZAÇÃO VISUAL (Efeito Cérebro Vivo)
+		subjectID := "asteroid:" + utils.CleanNodeID(t.Subject)
+		objectID := "asteroid:" + utils.CleanNodeID(t.Object)
+
+		utils.SafeEmit(w.ctx, "graph:node", map[string]interface{}{
+			"id":             subjectID,
+			"name":           t.Subject,
+			"document-type":  "memory",
+			"celestial-type": "asteroid",
+			"session-id":     sessionID,
 		})
-		utils.SafeEmit(w.ctx, "graph:node", map[string]string{
-			"id":            t.Object,
-			"name":          t.Object,
-			"document-type": "memory",
-			"session-id":    sessionID,
+		utils.SafeEmit(w.ctx, "graph:node", map[string]interface{}{
+			"id":             objectID,
+			"name":           t.Object,
+			"document-type":  "memory",
+			"celestial-type": "asteroid",
+			"session-id":     sessionID,
 		})
-		utils.SafeEmit(w.ctx, "graph:edge", map[string]string{
-			"source": t.Subject,
-			"target": t.Object,
+		utils.SafeEmit(w.ctx, "graph:edge", map[string]interface{}{
+			"source":    subjectID,
+			"target":    objectID,
+			"weight":    0.5,
+			"edge-type": "semantic",
 		})
 	}
 

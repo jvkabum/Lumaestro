@@ -48,7 +48,11 @@ func (r *AgentRecon) ScanMissingLinks(ctx context.Context, workspacePath string)
 	var proposals []ReconProposal
 
 	for _, p := range points {
-		sourceID := strings.ToLower(p["name"].(string))
+		// 🛡️ Ajuste Mixer: Usar o ID real (moon:hash:nome) em vez de apenas o nome
+		sourceID, _ := p["id"].(string)
+		if sourceID == "" {
+			sourceID = strings.ToLower(p["name"].(string))
+		}
 		
 		// 2. Procurar vizinhos semânticos no Qdrant (K=5)
 		// NOTA: Passamos nil aqui para listar outros pontos relevantes da coleção enquanto
@@ -57,7 +61,10 @@ func (r *AgentRecon) ScanMissingLinks(ctx context.Context, workspacePath string)
 		if err != nil { continue }
 
 		for _, n := range neighbors {
-			targetID := strings.ToLower(n["name"].(string))
+			targetID, _ := n["id"].(string)
+			if targetID == "" {
+				targetID = strings.ToLower(n["name"].(string))
+			}
 			if sourceID == targetID { continue }
 
 			// 3. Verificar se já existe conexão no Cérebro Relacional (Go-Engine)

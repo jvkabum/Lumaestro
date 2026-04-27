@@ -87,6 +87,9 @@ func (ge *GraphEngine) AddNode(id, name, docType string) {
 
 // AddEdge cria uma sinapse com peso e rótulo (Explicação semântica).
 func (ge *GraphEngine) AddEdge(sourceID, targetID string, weight float64, label string) {
+	if sourceID == "" || targetID == "" || sourceID == targetID {
+		return
+	}
 	ge.mu.Lock()
 	defer ge.mu.Unlock()
 
