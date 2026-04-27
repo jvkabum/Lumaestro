@@ -89,6 +89,7 @@ type Config struct {
 	GroqModel             string   `json:"groq_model"`        // Modelo padrão para Groq (ex: qwen/qwen3-32b)
 	ActiveGroqModels      []string `json:"active_groq_models"` // 🚀 Lista de modelos ativos na Frota de Resiliência Groq
 	ActiveGoogleModels    []string `json:"active_google_models"` // 🌟 Lista de modelos ativos na Frota de Resiliência Google
+	ActiveNativeModels    []string `json:"active_native_models"` // 🧩 Lista de modelos GGUF locais (Qwen, Gemma, etc)
 
 	// 📂 Workspace Ativo (diretório de trabalho da IA)
 	ActiveWorkspace       string   `json:"active_workspace"` // Caminho absoluto do projeto alvo (vazio = raiz do Lumaestro)
@@ -155,6 +156,13 @@ func (c *Config) NormalizeProviders() {
 			"gemini-2.5-flash-lite",
 			"gemma-4-31b-it",
 			"gemma-4-26b-a4b-it",
+			"gemma-4-E2B-it-text-only",
+		}
+	}
+	if len(c.ActiveNativeModels) == 0 {
+		c.ActiveNativeModels = []string{
+			"ozgurpolat/gemma-4-E2B-it-text-only-GGUF:Q4_K_M",
+			"Jackrong/Qwen3.5-4B-Claude-4.6-Opus-Reasoning-Distilled-v2-GGUF:Q5_K_M",
 		}
 	}
 }

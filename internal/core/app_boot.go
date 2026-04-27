@@ -112,8 +112,12 @@ func (a *App) initServices() error {
 	// 5. Analytics & Lightning (app_init_lightning.go)
 	a.initLightningAnalytics(cfg)
 
+	// 6. Injeção Final de Contexto (Garante que todos os novos serviços tenham o "telefone" do Wails)
+	a.injectContexts()
+
 	a.emitBoot("ready", "✅", "Maestro pronto.")
 	a.isBooted = true
+	a.NLPReady = true
 	return nil
 }
 
