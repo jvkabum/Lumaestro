@@ -64,17 +64,13 @@ export function useSettingsProjects() {
         console.log("[Projects] Sucesso:", res.message)
         store.notify("🪐 Sinfonia sincronizada: Projeto Satélite integrado ao enxame.", "success")
         
-        // Limpa os inputs imediatamente
+        // Atualiza a configuração global e limpa os inputs
+        const cfg = await safeGetConfig()
+        if (cfg) store.config = Object.assign({}, store.config, cfg)
+        
         store.repoPathInput = ''
         store.coreNodeInput = ''
         store.includeCodeToggle = false
-
-        // Recarrega a configuração global para atualizar a lista na UI
-        const cfg = await safeGetConfig()
-        if (cfg) {
-          console.log("[Projects] Nova configuração carregada. Projetos:", cfg.external_projects?.length)
-          store.config = cfg
-        }
       } else {
         console.error("[Projects] Falha na Órbita:", res.error)
         store.notify("Falha na Órbita: " + res.error, "error")

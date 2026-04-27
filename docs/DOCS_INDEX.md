@@ -44,6 +44,7 @@ BRIDGE GUIDE  FLOW  STACK       BRAIN  ENGINE
 |---|---|---|
 | [FRONTEND_GUIDE.md](./FRONTEND_GUIDE.md) | **Guia Mestre de UI, Componentes e Wails Bridge** | [WAILS_BRIDGE](./WAILS_BRIDGE.md), [FRONTEND_STACK](./FRONTEND_STACK.md) |
 | [FRONTEND_STACK.md](./FRONTEND_STACK.md) | Vue 3, D3.js, Xterm.js, Vite | [WAILS_BRIDGE](./WAILS_BRIDGE.md), [NEURAL_BRAIN](./NEURAL_BRAIN.md) |
+| [RENDER_ENGINE_3D.md](./RENDER_ENGINE_3D.md) | Motor Deck.gl, Shaders GLSL, Física e Zoom Cinematográfico | [NEURAL_BRAIN](./NEURAL_BRAIN.md), [FRONTEND_STACK](./FRONTEND_STACK.md) |
 | [NEURAL_BRAIN.md](./NEURAL_BRAIN.md) | Dashboard 3D, PageRank, X-Ray, Recon | [RAG_FLOW](./RAG_FLOW.md), [LIGHTNING_ENGINE](./LIGHTNING_ENGINE.md) |
 
 ## 🧠 Inteligência & Aprendizado
@@ -53,6 +54,8 @@ BRIDGE GUIDE  FLOW  STACK       BRAIN  ENGINE
 | [RAG_FLOW.md](./RAG_FLOW.md) | Crawler → Embeddings → Qdrant → Chat | [NEURAL_BRAIN](./NEURAL_BRAIN.md), [DOCUMENTATION](./DOCUMENTATION.md) |
 | [MODEL_PROVIDER_MATRIX.md](./MODEL_PROVIDER_MATRIX.md) | Matriz de dependências Gemini e plano de troca por Claude/LM Studio | [RAG_FLOW](./RAG_FLOW.md), [LIGHTNING_ENGINE](./LIGHTNING_ENGINE.md) |
 | [LIGHTNING_ENGINE.md](./LIGHTNING_ENGINE.md) | DuckDB, APO Beam Search, RLHF, Custos | [RAG_FLOW](./RAG_FLOW.md), [AGENTS_GUIDE](./AGENTS_GUIDE.md) |
+| [DUCKDB_ENGINE.md](./DUCKDB_ENGINE.md) | Schema de grafos, busca textual e persistência 3D | [LIGHTNING_ENGINE](./LIGHTNING_ENGINE.md), [SEMANTIC_NAVIGATOR](./SEMANTIC_NAVIGATOR.md) |
+| [SEMANTIC_NAVIGATOR.md](./SEMANTIC_NAVIGATOR.md) | Navegador de Trajetória Semântica (4 fases) | [RAG_FLOW](./RAG_FLOW.md), [RENDER_ENGINE_3D](./RENDER_ENGINE_3D.md) |
 | [GEMINI.md](./GEMINI.md) | Configuração de comunicação e idioma | [AGENTS_GUIDE](./AGENTS_GUIDE.md) |
 
 ## 📜 Histórico
@@ -81,6 +84,12 @@ graph LR
     LIGHTNING_ENGINE --> RAG_FLOW
     NEURAL_BRAIN --> FRONTEND_STACK
     SINFONIA --> NEURAL_BRAIN
+    SEMANTIC_NAVIGATOR --> RAG_FLOW
+    SEMANTIC_NAVIGATOR --> RENDER_ENGINE_3D
+    RENDER_ENGINE_3D --> NEURAL_BRAIN
+    RENDER_ENGINE_3D --> FRONTEND_STACK
+    DUCKDB_ENGINE --> LIGHTNING_ENGINE
+    DUCKDB_ENGINE --> SEMANTIC_NAVIGATOR
 ```
 
 ---

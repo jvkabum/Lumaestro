@@ -24,7 +24,7 @@ export function useGraphOrchestrator(props) {
   // ── Importações de Sub-Lógicas (Domínio Deck) ──
   const { 
     initGraph, updateGraph, destroyGraph, updateForce, 
-    currentViewState, savePositions, currentNodes 
+    currentViewState, savePositions, currentNodes, focusNodeById 
   } = useDeckRender()
   const { transform } = useDataTransformer()
   const { registerKeyboardControls } = useInputDriver()
@@ -42,6 +42,12 @@ export function useGraphOrchestrator(props) {
 
     // 1. Inicializar o Deck.gl via useDeckRender
     initGraph(containerRef.value, props.nodes, props.edges, props.activeNode)
+    
+    // 🚀 [CONEXÃO VITAL] Registra a interface do grafo na Store para controle externo (Efeito de Descoberta)
+    Object.assign(store.graphInstance, { 
+        focusNodeById,
+        pan: (dx, dy, dz) => focusNodeById(null)
+    })
 
     // 2. Sincronizar banco local na partida
     syncAllOnStartup()
@@ -49,7 +55,7 @@ export function useGraphOrchestrator(props) {
     // 3. Registrar Listeners (Eventos Wails e Teclado)
     cleanupEvents = registerGraphEvents({ 
         updateGraph, 
-        focusNode: (id) => store.graphInstance?.focusNode(id) // Ponte para o Pilot via Store Contract
+        focusNode: (id) => focusNodeById(id)
     })
     cleanupKeyboard = registerKeyboardControls(currentViewState, (dx, dy, dz) => {
         store.graphInstance?.panTarget(dx, dy, dz)
@@ -83,6 +89,27 @@ export function useGraphOrchestrator(props) {
 
   // ── Watchers Críticos ──
 
+  // W3: ✨ EFEITO DE DESCOBERTA — Quando o RAG identifica um neurônio relevante,
+  // o backend emite node:active → App.vue atualiza state.activeNode → 
+  // esta prop muda → fazemos zoom cinematográfico + abrimos detalhes.
+  watch(() => props.activeNode, (newNodeId, oldNodeId) => {
+    if (!newNodeId || newNodeId === oldNodeId) return
+    
+    // O BridgeDriver já cuida do Efeito de Descoberta via evento direto.
+    // Este watcher serve como rede de segurança para garantir a sincronização.
+    setTimeout(() => {
+      // 🛡️ Normalização de IDs: Previne falso re-trigger por diferenças de case/formato
+      const normalizedNew = String(newNodeId).toLowerCase().trim()
+      const normalizedCurrent = String(store.selectedNode?.id || '').toLowerCase().trim()
+      
+      // Só reforça se o BridgeDriver NÃO conseguiu resolver (status !== 'found')
+      if (normalizedCurrent !== normalizedNew && store.discoveryStatus !== 'found') {
+        console.log(`[Watcher] 🔍 Reforçando Efeito de Descoberta para: ${newNodeId}`)
+        focusNodeById(newNodeId)
+      }
+    }, 800) // Aumentado de 600ms para 800ms para dar mais tempo ao BridgeDriver
+  })
+
   // W4: Vigia dados de backend + Filtros UI (X-Ray, Esqueleto) com DEBOUNCE Híbrido
   let renderTimeout = null
   watch(() => [props.nodes, props.edges, store.xRayThreshold, store.skeletalMode], () => {
@@ -94,14 +121,9 @@ export function useGraphOrchestrator(props) {
         
         // 2. Sincronização Incremental (Zero Jitter) em vez de rebuild total
         updateGraph(filteredNodes, filteredEdges)
-      }, 450) // Agrupa rajadas de websocket E cliques rápidos no Slider de X-Ray
+      }, 150) // Reduzido de 450ms para 150ms para suportar o Efeito de Descoberta em tempo real
     }
   }, { deep: true })
-
-  // W6: Foco em Nó Ativo (Zoom reativo via Props)
-  watch(() => props.activeNode, (newId) => {
-    store.graphInstance?.focusNode(newId)
-  })
 
   // W5: Auto-scroll dos logs
   watch(() => props.graphLogs, () => {
@@ -120,3 +142,4 @@ export function useGraphOrchestrator(props) {
     currentViewState
   }
 }
+

@@ -180,8 +180,17 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
       if (type === 'thought') {
         pushStatus(content, 'think');
       }
-      if (source === 'ERROR') {
+      if (source === 'ERROR' || type === 'error') {
         pushStatus(content, 'error');
+      }
+
+      // 🔍 VISIBILIDADE UI: Encaminha logs neurais e de sistema para o Terminal de Processamento
+      if (['NEURAL', 'SYSTEM', 'CRAWLER', 'RAG'].includes(source.toUpperCase())) {
+        let kind = 'status';
+        if (source === 'NEURAL' || source === 'RAG') kind = 'memory';
+        if (source === 'CRAWLER') kind = 'status';
+        if (source === 'ERROR') kind = 'error';
+        pushStatus(content, kind);
       }
 
       // TRATAMENTO DE SISTEMA
@@ -214,7 +223,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
       } else {
           messages.value[idx].isPlanning = false;
           messages.value[idx].text += content;
-
+          
           // 🎬 Zoom Cinematográfico: Extração reativa de links
           const matches = [...messages.value[idx].text.matchAll(/\[\[(.*?)\]\]/g)];
           for (const match of matches) {
@@ -424,7 +433,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   const ask = async (agent, prompt) => {
     // 🚀 RESET DE NAVEGAÇÃO: Limpa o foco atual para evitar zooms residuais de pesquisas anteriores
     window.dispatchEvent(new CustomEvent('cinematic:zoom', { detail: null }));
-
+    
     messages.value.push({ role: 'user', text: prompt });
     isThinking.value = true;
     activeAgent.value = agent;

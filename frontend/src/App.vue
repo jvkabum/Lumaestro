@@ -1,6 +1,6 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
-import { CheckConnection } from '../wailsjs/go/core/App'
+import { CheckConnection, GetProjectDoc, GetToolsStatus } from '../wailsjs/go/core/App'
 import { EventsOn } from '../wailsjs/runtime'
 import ChatPanel from './components/ChatPanel.vue'
 import GraphVisualizer from './components/GraphVisualizer.vue'
@@ -11,8 +11,8 @@ import SwarmDashboard from './components/SwarmDashboard.vue'
 import AgentTerminal from './components/AgentTerminal.vue'
 import ReposManager from './components/ReposManager.vue'
 import { useOrchestratorStore } from './stores/orchestrator'
-import { GetProjectDoc, GetToolsStatus } from '../wailsjs/go/core/App'
 import { useSettingsStore } from './stores/settings'
+const CACHE_BUST = "2026-04-21T17:44:00" // 🚀 Bypass de Cache
 
 const orchestrator = useOrchestratorStore()
 const settingsStore = useSettingsStore()
@@ -91,12 +91,12 @@ const startResize = (e) => {
 }
 
 onMounted(async () => {
-  // 🚀 [PRIORIDADE MÁXIMA] Registro Imediato de Listeners para evitar perda de dados no boot
+  // 🚀 [PRIORIDADE MÁXIMA] Registro Imediato de Listeners
   EventsOn('view:change', (view) => {
     currentView.value = view
   })
 
-  // ── Throttling de Logs para Performance ──
+  // 🚀 [Mixer v2] Throttling de Logs + Streaming para Performance e Fluidez
   let logBuffer = []
   const flushLogs = () => {
     if (logBuffer.length === 0) return
@@ -106,37 +106,44 @@ onMounted(async () => {
   }
   setInterval(flushLogs, 200)
 
-  // Escuta os logs em tempo real com proteção de estouro
+  // Escuta os logs em tempo real
   EventsOn('agent:log', (log) => {
     if (!log || !log.content) return
-    
     const lastLog = state.logs[state.logs.length - 1]
+    
+    // 🧠 Lógica de Streaming (Verde): Se for o Maestro e o último também for Maestro, anexa direto
     if (log.source === 'MAESTRO' && lastLog && lastLog.source === 'MAESTRO') {
       lastLog.content += log.content
     } else {
+      // 🛡️ Lógica de Buffer (Vermelho): Protege contra estouro de logs de outros agentes
       logBuffer.push(log)
     }
   })
 
-  // Escuta os dados do Grafo (Nodes e Edges) com verificação de nulidade
+  // 🚀 Otimização de Massa: Processamento em lote (Batch Sync)
   EventsOn('graph:nodes:batch', (batchNodes) => {
-    if (!batchNodes || currentView.value !== 'orchestrator') return
-    batchNodes.forEach(node => {
-      if (!state.nodes.find(n => n.id === node.id)) {
-        state.nodes.push(node)
-      }
-    })
+    if (!batchNodes || batchNodes.length === 0) return
+    const existingIds = new Set(state.nodes.map(n => n.id))
+    const freshNodes = batchNodes.filter(n => !existingIds.has(n.id))
+    if (freshNodes.length > 0) {
+      state.nodes.push(...freshNodes)
+    }
+  })
+
+  EventsOn('graph:edges:batch', (batchEdges) => {
+    if (!batchEdges || batchEdges.length === 0) return
+    state.edges.push(...batchEdges)
   })
 
   EventsOn('graph:node', (node) => {
-    if (!node || currentView.value !== 'orchestrator') return
+    if (!node) return
     if (!state.nodes.find(n => n.id === node.id)) {
       state.nodes.push(node)
     }
   })
 
   EventsOn('graph:edge', (edge) => {
-    if (!edge || currentView.value !== 'orchestrator') return
+    if (!edge) return
     const s = edge.source?.id || edge.source
     const t = edge.target?.id || edge.target
     if (!s || !t) return
@@ -153,40 +160,28 @@ onMounted(async () => {
   EventsOn('graph:log', (glog) => {
     if (!glog) return
     state.graphLogs.push(glog)
-    if(state.graphLogs.length > 20) {
-      state.graphLogs.shift() // Mantém o console UI leve (apenas os 20 últimos pensamentos)
-    }
+    if(state.graphLogs.length > 20) state.graphLogs.shift()
   })
 
-  // Escuta saltos entre notas nas pesquisas
   EventsOn('node:active', (nodeId) => {
     state.activeNode = nodeId
   })
 
-  // 🧠 Escuta o Diagnóstico de Boot (cada estágio do backend)
   EventsOn('boot:stage', (data) => {
     if (data.stage === 'error') {
       bootError.value = data.message
       return
     }
-    // REATIVIDADE FORÇADA: Atualiza estágio existente ou adiciona um novo
     const index = bootStages.value.findIndex(s => s.stage === data.stage)
     if (index !== -1) {
-      // Usar atribuição direta para garantir que o Vue 3 detecte a mudança na propriedade do objeto
       bootStages.value[index].message = data.message
       bootStages.value[index].icon = data.icon
     } else {
       bootStages.value.push({ ...data, done: false })
     }
-    
-    // Marca estágios anteriores como concluídos
     bootStages.value.forEach((s, i) => {
-      if (i < bootStages.value.length - 1) {
-        s.done = true
-      }
+      if (i < bootStages.value.length - 1) s.done = true
     })
-
-    // Quando o backend reporta 'ready', fecha o overlay com animação
     if (data.stage === 'ready') {
       const readyIdx = bootStages.value.findIndex(s => s.stage === 'ready')
       if (readyIdx !== -1) bootStages.value[readyIdx].done = true
@@ -194,35 +189,43 @@ onMounted(async () => {
     }
   })
 
-  // Verificar conexão inicial com diagnóstico visual
   const tryConnect = async () => {
     try {
       isOnline.value = await CheckConnection()
       if (isOnline.value) {
         connectionError.value = "Maestro Online (Backend e Motor Vetorial Ativos)"
         isBooting.value = false
-        // Update tool status badges globally upon successful connection!
+        
+        // 🛠️ [Mixer] Atualiza badges de ferramentas globalmente após conexão
         const toolsStatus = await GetToolsStatus()
         if (toolsStatus) {
             settingsStore.status.tools = toolsStatus
         }
       } else {
-        connectionError.value = "Backend respondeu, mas Qdrant ou Configuração falharam. Verifique as configurações."
+        connectionError.value = "Backend respondeu, mas Qdrant ou Configuração falharam."
       }
     } catch(e) {
       isOnline.value = false
-      connectionError.value = "Erro Wails IPC: Falha Crítica de Comunicação com o Backend Go. (" + String(e) + ")"
+      connectionError.value = "Erro Wails IPC: " + String(e)
     }
   }
 
   await tryConnect()
   
-  // 🔄 Heartbeat: Tenta reconectar a cada 5 segundos se estiver offline
+  if (isOnline.value) {
+    if (window.go?.core?.App?.TriggerInitialSync) {
+        window.go.core.App.TriggerInitialSync()
+    } else {
+        setTimeout(() => {
+            window.go?.core?.App?.TriggerInitialSync?.()
+        }, 1000)
+    }
+  }
+
   const connInterval = setInterval(() => {
     if (!isOnline.value) tryConnect()
   }, 5000)
 
-  // 🛡️ Fail-safe: Força o fim do boot após 4 segundos para evitar bloqueio total da UI
   setTimeout(() => {
     if (isBooting.value) isBooting.value = false
   }, 4000)

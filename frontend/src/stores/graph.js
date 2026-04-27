@@ -20,15 +20,23 @@ export const useGraphStore = defineStore('graph', () => {
   // ── Estado de Seleção & Proveniência ──
   const selectedNode = ref(null)
   const nodeDetails = ref(null)
+  
+  // ── Efeito de Descoberta (Discovery Status) ──
+  const discoveryStatus = ref(null) // null | 'searching' | 'found' | 'failed'
 
   // ── Saúde do Grafo ──
   const graphHealth = ref({ density: 0, conflicts: 0, active_nodes: 0 })
 
-  // ── Links Destacados (RAG Trail & Click Animation) ──
-  const highlightedLinks = ref(new Set())
-  const clickedNodeLinks = ref(new Set())
+  // ── Links Destacados (RAG Trail & Network Activation) ──
+  const highlightedLinks = ref(new Set()) // Links globais (RAG)
+  const clickedNodeLinks = ref(new Set()) // Links da rede do nó ativo
+  const highlightedNeighbors = ref(new Set()) // Vizinhos do nó ativo
 
-  // ── 🩻 X-RAY MODE & RECON ──
+  // ── Actions ──
+  const resetHighlights = () => {
+    clickedNodeLinks.value = new Set()
+    highlightedNeighbors.value = new Set()
+  }
   const xRayThreshold = ref(0)
   const scanLoading = ref(false)
   const pruneLoading = ref(false)
@@ -64,18 +72,49 @@ export const useGraphStore = defineStore('graph', () => {
     nodeDetails.value = null
   }
 
+  const setSelectedNode = (node) => {
+    selectedNode.value = node
+  }
+
+  const setNodeDetails = (details) => {
+    nodeDetails.value = details
+  }
+
   const openSource = async () => {
     if (nodeDetails.value && nodeDetails.value.path) {
-      await window.go.main.App.OpenFileInEditor(nodeDetails.value.path)
+      const bridge = (window.go?.core?.App) || (window.go?.main?.App)
+      if (bridge?.OpenFileInEditor) {
+        await bridge.OpenFileInEditor(nodeDetails.value.path)
+      }
     }
   }
 
   const checkHealth = async () => {
     try {
-      const stats = await window.go.main.App.AnalyzeGraphHealth()
-      graphHealth.value = stats
+      const bridge = (window.go?.core?.App) || (window.go?.main?.App)
+      if (bridge?.AnalyzeGraphHealth) {
+        const stats = await bridge.AnalyzeGraphHealth()
+        graphHealth.value = stats
+      }
     } catch (e) {
       console.error("Erro ao analisar saúde:", e)
+    }
+  }
+
+  const clearGraph = () => {
+    nodes.value = []
+    edges.value = []
+    selectedNode.value = null
+    nodeDetails.value = null
+    discoveryStatus.value = null
+    graphHealth.value = { density: 0, conflicts: 0, active_nodes: 0 }
+    highlightedLinks.value = new Set()
+    clickedNodeLinks.value = new Set()
+    highlightedNeighbors.value = new Set()
+
+    // 🚀 [Mixer] Força a limpeza no motor de renderização Deck.gl
+    if (graphInstance.value && graphInstance.value.graphData) {
+      graphInstance.value.graphData({ nodes: [], links: [] })
     }
   }
 
@@ -83,15 +122,16 @@ export const useGraphStore = defineStore('graph', () => {
     // Estado
     nodes, edges, graphLogs, activeNode,
     graphInstance,
-    selectedNode, nodeDetails,
+    selectedNode, nodeDetails, discoveryStatus,
     graphHealth,
-    highlightedLinks, clickedNodeLinks,
+    highlightedLinks, clickedNodeLinks, highlightedNeighbors,
     xRayThreshold, scanLoading, pruneLoading, skeletalMode,
     showFps, currentFps,
     scanning, showConfirmModal, modalMode,
     currentConflict,
     communityPalette,
     // Actions
-    closeDetails, openSource, checkHealth,
+    closeDetails, openSource, checkHealth, resetHighlights, clearGraph,
+    setSelectedNode, setNodeDetails
   }
 })

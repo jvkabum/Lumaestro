@@ -918,3 +918,92 @@
 .fade-enter-from, .fade-leave-to {
   opacity: 0;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   DISCOVERY HUD (EFEITO DE DESCOBERTA)
+   ═══════════════════════════════════════════════════════════════ */
+
+.discovery-hud {
+  position: absolute;
+  bottom: 120px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px;
+  background: rgba(15, 23, 42, 0.8);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 50px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 0 20px rgba(59, 130, 246, 0.1);
+  pointer-events: none;
+  min-width: 240px;
+  justify-content: center;
+}
+
+.discovery-hud.searching {
+  border-color: rgba(79, 172, 254, 0.5);
+  box-shadow: 0 0 20px rgba(79, 172, 254, 0.2);
+}
+
+.discovery-hud.found {
+  border-color: rgba(34, 211, 238, 0.6);
+  background: rgba(8, 47, 73, 0.8);
+  box-shadow: 0 0 30px rgba(34, 211, 238, 0.3);
+  animation: discovery-bounce 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.discovery-hud.failed {
+  border-color: rgba(239, 68, 68, 0.5);
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
+}
+
+.status-icon {
+  font-size: 1.2rem;
+  z-index: 2;
+}
+
+.status-text {
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: white;
+  text-transform: uppercase;
+  z-index: 2;
+}
+
+.discovery-ring {
+  position: absolute;
+  left: 14px;
+  width: 28px;
+  height: 28px;
+  border: 2px solid rgba(79, 172, 254, 0.2);
+  border-top-color: #4facfe;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes discovery-bounce {
+  0% { transform: translate(-50%, 20px) scale(0.8); }
+  50% { transform: translate(-50%, -5px) scale(1.1); }
+  100% { transform: translate(-50%, 0) scale(1); }
+}
+
+/* Transição de entrada (Slide up) */
+.slide-up-enter-active {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.slide-up-leave-active {
+  transition: all 0.4s cubic-bezier(0.7, 0, 0.84, 0);
+}
+.slide-up-enter-from {
+  opacity: 0;
+  transform: translate(-50%, 40px);
+}
+.slide-up-leave-to {
+  opacity: 0;
+  transform: translate(-50%, 20px) scale(0.9);
+}
+

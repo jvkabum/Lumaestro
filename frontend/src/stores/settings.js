@@ -125,13 +125,35 @@ export const useSettingsStore = defineStore('settings', () => {
     return raw.split(',').filter(k => k.trim() !== '').length
   })
 
-  // ── Notificações (Toast) ──
+  // ── Notificações Premium (Fila Inteligente) ──
   const toast = ref({ message: '', show: false, type: 'info' })
-  const notify = (message, type = 'info') => {
-    toast.value = { message, type, show: true }
+  const toastQueue = []
+  let isToastActive = false
+
+  const processQueue = () => {
+    if (toastQueue.length === 0) {
+      isToastActive = false
+      toast.value.show = false
+      return
+    }
+    
+    isToastActive = true
+    const nextToast = toastQueue.shift()
+    toast.value = { ...nextToast, show: true }
+    
     setTimeout(() => {
       toast.value.show = false
-    }, 4000)
+      // Pausa para a animação de saída (fade-out) antes de mostrar o próximo
+      setTimeout(processQueue, 400) 
+    }, nextToast.duration || 4000)
+  }
+
+  const notify = (message, type = 'info', duration = 4000) => {
+    toastQueue.push({ message, type, duration })
+    // Se a fila estava parada, acorda o processador
+    if (!isToastActive) {
+      processQueue()
+    }
   }
 
   return {

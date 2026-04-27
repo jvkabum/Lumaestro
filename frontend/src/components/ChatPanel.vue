@@ -23,7 +23,7 @@ const getAgentStatusLabel = () => {
   const agent = activeAgent.value
   if (!agent) return 'PRONTO'
   
-  if (modelStats.value.agent === agent) return modelStats.value.info
+  if (isThinking.value) return 'PENSANDO...'
 
   // Se for LM Studio, checamos apenas se está habilitado
   if (agent === 'lmstudio') {
@@ -152,17 +152,30 @@ const handleSessionEnded = (agent) => {
             </div>
           </div>
         </div>
-        <div v-if="orchestrator.activeProfile" class="agent-tag" :class="orchestrator.activeProfile.name.toLowerCase()">
-          {{ orchestrator.activeProfile.name.toUpperCase() }}
+
+        <!-- 🚀 [Verde] Identidade de Perfil e Telemetria -->
+        <div class="identity-badges">
+          <span 
+            v-if="orchestrator.activeProfile" 
+            class="active-agent-badge" 
+            :class="orchestrator.activeProfile.name.toLowerCase()"
+          >
+            {{ orchestrator.activeProfile.name.toUpperCase() }}
+          </span>
+          
+          <div v-if="activeAgent && modelStats.agent === activeAgent && modelStats.info" class="quota-badge glass" title="Performance e Uso do Modelo">
+             <span class="quota-icon">⚡</span>
+             <span class="quota-value">{{ modelStats.info }}</span>
+          </div>
         </div>
       </div>
 
-      <!-- 🪐 CENTRO: Ilha Flutuante de Órbita -->
+      <!-- 🪐 CENTRO: Ilha Flutuante de Órbita (Vermelho - Mixer) -->
       <div class="header-section section-center" v-show="!props.isMinimized">
         <div class="workspace-island glass">
           <span class="ws-icon" @click="orchestrator.selectWorkspace()" title="Escolher Nova Pasta...">📂</span>
           <div class="ws-selector" @click="showProjectDropdown = !showProjectDropdown" title="Alternar entre Sistemas Solares">
-            <span class="ws-name">{{ orchestrator.workspace.name }}</span>
+            <span class="ws-name">{{ orchestrator.workspace?.path ? orchestrator.workspace.path.split(/[/\\]/).pop() : 'Nenhuma Órbita Ativa' }}</span>
             <span class="ws-arrow">▼</span>
             
             <Transition name="slide-up">
@@ -426,7 +439,7 @@ const handleSessionEnded = (agent) => {
   letter-spacing: 0.5px;
 }
 
-.agent-tag {
+.active-agent-badge {
   margin-left: 12px;
   font-size: 8px;
   font-weight: 900;
@@ -443,6 +456,182 @@ const handleSessionEnded = (agent) => {
 .active-agent-badge.gemini { background: rgba(59, 130, 246, 0.1); color: #60a5fa; }
 .active-agent-badge.claude { background: rgba(16, 185, 129, 0.1); color: #34d399; }
 .active-agent-badge.standby { background: rgba(148, 163, 184, 0.1); color: #94a3b8; }
+
+
+/* 🪐 Mixer: Ilha de Workspace (Floating Island) */
+.header-section.section-center {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  pointer-events: none; /* Deixa cliques passarem para o grafo se necessário, mas os filhos reativam */
+}
+
+.workspace-island {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 14px;
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: 100px;
+  border: 1px solid rgba(139, 92, 246, 0.15); /* Purple hint */
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.05);
+  pointer-events: auto;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.workspace-island:hover {
+  background: rgba(139, 92, 246, 0.1);
+  border-color: rgba(168, 85, 247, 0.4);
+  box-shadow: 0 6px 24px rgba(168, 85, 247, 0.15), inset 0 1px 1px rgba(255, 255, 255, 0.1);
+  transform: translateY(-1px);
+}
+
+.ws-icon {
+  font-size: 13px;
+  cursor: pointer;
+  opacity: 0.8;
+  transition: all 0.3s;
+  padding-right: 12px;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+}
+.workspace-island:hover .ws-icon { opacity: 1; filter: drop-shadow(0 0 6px rgba(168,85,247,0.5)); }
+
+.ws-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  position: relative;
+  padding: 2px 4px;
+}
+
+.ws-name {
+  font-size: 11px;
+  font-weight: 800;
+  color: #f8fafc;
+  letter-spacing: 0.5px;
+  max-width: 180px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ws-arrow {
+  font-size: 9px;
+  color: #a78bfa;
+  transition: transform 0.3s;
+}
+.workspace-island:hover .ws-arrow { color: #d8b4fe; }
+
+/* Dropdown de Órbita */
+.orbit-dropdown {
+  position: absolute;
+  top: calc(100% + 15px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 340px;
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(20px);
+  border-radius: 16px;
+  border: 1px solid rgba(139, 92, 246, 0.15); /* Soft purple border */
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.05) inset;
+  padding: 8px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dropdown-header {
+  font-size: 10px;
+  font-weight: 800;
+  color: #c084fc;
+  letter-spacing: 2px;
+  margin-bottom: 8px;
+  padding: 8px 8px 4px 8px;
+  text-transform: uppercase;
+}
+
+.orbit-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid transparent;
+}
+
+.orbit-item:hover { 
+  background: rgba(168, 85, 247, 0.08); 
+}
+
+.orbit-item.is-active { 
+  background: rgba(168, 85, 247, 0.12); 
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  box-shadow: 0 4px 15px rgba(168, 85, 247, 0.15);
+  position: relative;
+  overflow: hidden;
+}
+
+.orbit-item.is-active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 4px;
+  background: #c084fc;
+  box-shadow: 0 0 10px #c084fc;
+}
+
+.item-name { display: block; font-size: 13px; font-weight: 800; color: #f8fafc; }
+.item-path { display: block; font-size: 10px; color: #94a3b8; margin-top: 4px; font-family: 'Fira Code', monospace; }
+.item-icon { font-size: 20px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3)); }
+
+.dropdown-footer {
+  margin-top: 4px;
+  padding: 12px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 800;
+  color: #c084fc;
+  background: rgba(168, 85, 247, 0.05);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.dropdown-footer:hover { 
+  background: rgba(168, 85, 247, 0.15);
+  color: #e9d5ff;
+}
+
+/* 🎻 Maestro Brand Styling */
+.maestro-brand { display: flex; align-items: center; gap: 12px; }
+.brand-text h2 {
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 2.5px;
+  color: #f1f5f9;
+  margin: 0;
+}
+
+.status-indicator { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+.status-led { width: 5px; height: 5px; border-radius: 50%; background: #64748b; }
+.status-led.led-ready { background: #10b981; box-shadow: 0 0 8px #10b981; }
+.status-led.led-busy { background: #3b82f6; box-shadow: 0 0 8px #3b82f6; }
+.status-label { font-size: 8px; font-weight: 800; color: #64748b; text-transform: uppercase; }
+
+.identity-badges { display: flex; align-items: center; gap: 6px; margin-left: 10px; padding-left: 10px; border-left: 1px solid rgba(255, 255, 255, 0.05); }
+
+.header-section.section-right { display: flex; align-items: center; gap: 10px; }
 
 /* 📊 Monitor de Cotas Badge */
 .quota-badge {

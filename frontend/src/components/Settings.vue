@@ -319,6 +319,26 @@ watch(() => store.activeTab, (tab) => {
     }
   }
 })
+const formatModelName = (name) => {
+  if (!name) return 'Selecionar Modelo';
+  const parts = name.split(':');
+  const quant = parts.pop();
+  const repoFull = parts.join(':').split('/');
+  const modelBase = repoFull.pop().replace(/-GGUF$/i, '');
+  
+  if (quant === 'Q4_K_M' || quant === 'Q5_K_M' || quant === 'Q8_0') {
+    return `${modelBase} (${quant})`;
+  }
+  return modelBase;
+};
+
+// Escuta progresso de download de modelos nativos
+runtime.EventsOn("native:progress", (data) => {
+  store.nativeDownload = data;
+  if (data.progress.includes("100%")) {
+    setTimeout(() => { store.nativeDownload = null; }, 3000);
+  }
+});
 </script>
 
 <template>
@@ -900,9 +920,48 @@ watch(() => store.activeTab, (tab) => {
             >
               <div style="display: flex; align-items: center; gap: 10px;">
                 <span style="font-size: 1.5rem;">🛰️</span>
-                <div>
+                <div style="flex: 1;">
                   <div style="font-weight: 900; font-size: 0.9rem; color: #fff;">LLM Local (Lumaestro)</div>
-                  <div style="font-size: 0.7rem; color: #94a3b8;">Claude Distilled (Qwen 3.5 Reasoning)</div>
+                  
+                  <!-- Seletor Premium de Modelos Nativos -->
+                  <div class="custom-maestro-dropdown" v-if="store.config.active_native_models && store.config.active_native_models.length > 0">
+                    <div class="dropdown-trigger" @click.stop="store.showNativeDropdown = !store.showNativeDropdown">
+                      <span class="active-model-name">
+                        {{ formatModelName(store.config.rag_model) }}
+                      </span>
+                      <span class="dropdown-arrow" :class="{ 'open': store.showNativeDropdown }">▾</span>
+                    </div>
+                    
+                    <transition name="maestro-fade">
+                      <div v-if="store.showNativeDropdown" class="dropdown-options-list">
+                        <div v-for="m in store.config.active_native_models" 
+                             :key="m" 
+                             class="dropdown-item"
+                             :class="{ 'selected': store.config.rag_model === m }"
+                             @click.stop="store.config.rag_model = m; store.showNativeDropdown = false; save()">
+                          <div class="item-icon">{{ m.includes('gemma') ? '🌌' : '🧠' }}</div>
+                          <div class="item-meta">
+                            <div class="item-title">{{ formatModelName(m) }}</div>
+                            <div class="item-repo">{{ m.split(':')[0] }}</div>
+                          </div>
+                          <div v-if="store.config.rag_model === m" class="item-check">✓</div>
+                        </div>
+                      </div>
+                    </transition>
+                  </div>
+                  
+                  <!-- Barra de Download (Aparece apenas durante o download) -->
+                  <div v-if="store.nativeDownload && store.nativeDownload.model === store.config.rag_model" style="margin-top: 8px;">
+                    <div style="display: flex; justify-content: space-between; font-size: 0.6rem; color: #ec4899; font-weight: 900; margin-bottom: 4px;">
+                      <span>BAIXANDO MODELO...</span>
+                      <span>{{ store.nativeDownload.progress }}</span>
+                    </div>
+                    <div style="width: 100%; height: 3px; background: rgba(236, 72, 153, 0.1); border-radius: 10px; overflow: hidden;">
+                      <div :style="{ width: store.nativeDownload.progress.match(/\d+/)?.[0] + '%' }" style="height: 100%; background: #ec4899; box-shadow: 0 0 10px #ec4899; transition: width 0.3s ease;"></div>
+                    </div>
+                  </div>
+
+                  <div v-else-if="!store.config.active_native_models || store.config.active_native_models.length === 0" style="font-size: 0.7rem; color: #94a3b8;">{{ store.config.rag_model || 'Especialista Local' }}</div>
                 </div>
               </div>
               <div v-if="store.config.rag_provider === 'native'" style="font-size: 0.65rem; font-weight: 900; color: #ec4899; letter-spacing: 1px;">✓ EXPERT ATIVO</div>
@@ -1329,5 +1388,124 @@ watch(() => store.activeTab, (tab) => {
 .toast-leave-to {
   transform: translate(-50%, -60px);
   opacity: 0;
+}
+/* --- CUSTOM MAESTRO DROPDOWN PREMIUM --- */
+.custom-maestro-dropdown {
+  position: relative;
+  width: 100%;
+  margin-top: 2px;
+}
+
+.dropdown-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 0;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  transition: all 0.3s;
+}
+
+.dropdown-trigger:hover {
+  border-bottom-color: #ec4899;
+}
+
+.active-model-name {
+  font-size: 0.72rem;
+  color: #94a3b8;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dropdown-arrow {
+  font-size: 0.6rem;
+  color: #64748b;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dropdown-arrow.open {
+  transform: rotate(180deg);
+  color: #ec4899;
+}
+
+.dropdown-options-list {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: -10px;
+  right: -10px;
+  background: rgba(13, 17, 23, 0.95);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(236, 72, 153, 0.2);
+  border-radius: 12px;
+  z-index: 1000;
+  box-shadow: 0 15px 40px rgba(0,0,0,0.6);
+  padding: 8px;
+  overflow: hidden;
+  animation: dropdownIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-bottom: 4px;
+}
+
+.dropdown-item:last-child {
+  margin-bottom: 0;
+}
+
+.dropdown-item:hover {
+  background: rgba(236, 72, 153, 0.08);
+  transform: translateX(5px);
+}
+
+.dropdown-item.selected {
+  background: rgba(236, 72, 153, 0.12);
+  border: 1px solid rgba(236, 72, 153, 0.2);
+}
+
+.item-icon {
+  font-size: 1.2rem;
+}
+
+.item-meta {
+  flex: 1;
+}
+
+.item-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.item-repo {
+  font-size: 0.6rem;
+  color: #64748b;
+  font-family: monospace;
+}
+
+.item-check {
+  color: #ec4899;
+  font-weight: bold;
+}
+
+@keyframes dropdownIn {
+  from { opacity: 0; transform: translateY(-10px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.maestro-fade-enter-active, .maestro-fade-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.maestro-fade-enter-from, .maestro-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
 }
 </style>
