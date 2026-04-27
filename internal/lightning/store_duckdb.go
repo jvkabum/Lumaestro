@@ -106,6 +106,7 @@ func (s *DuckDBStore) InitSchema() error {
 			workspace_path VARCHAR,
 			name VARCHAR,
 			type VARCHAR,
+			content VARCHAR,
 			metadata JSON,
 			pos_x DOUBLE DEFAULT 0.0,
 			pos_y DOUBLE DEFAULT 0.0,
@@ -120,10 +121,13 @@ func (s *DuckDBStore) InitSchema() error {
 			relation_type VARCHAR DEFAULT 'mentions',
 			created_at DOUBLE
 		)`,
-		// Migração automática: Adiciona colunas de posição se não existirem (v20)
+		// Migração automática: Adiciona colunas de posição se não existirem (v2.0)
 		`ALTER TABLE graph_nodes ADD COLUMN IF NOT EXISTS pos_x DOUBLE DEFAULT 0.0`,
 		`ALTER TABLE graph_nodes ADD COLUMN IF NOT EXISTS pos_y DOUBLE DEFAULT 0.0`,
 		`ALTER TABLE graph_nodes ADD COLUMN IF NOT EXISTS pos_z DOUBLE DEFAULT 0.0`,
+		`ALTER TABLE graph_nodes ADD COLUMN IF NOT EXISTS workspace_path VARCHAR`,
+		`ALTER TABLE graph_edges ADD COLUMN IF NOT EXISTS workspace_path VARCHAR`,
+		`ALTER TABLE graph_nodes ADD COLUMN IF NOT EXISTS parent_id VARCHAR`,
 	}
 
 	for _, q := range queries {
@@ -248,49 +252,6 @@ func (s *DuckDBStore) ApproveCandidate(candidateID string) error {
 	return err
 }
 
-// FindNodeInText busca o nó mais relevante cujo nome está contido no texto fornecido.
-func (s *DuckDBStore) FindNodeInText(text string) (string, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	var id string
-	
-	// Limpeza profunda do texto para evitar que aspas ou pontuação quebrem o match
-	cleaner := strings.NewReplacer("\"", "", "'", "", "(", "", ")", "", "[", "", "]", "", "?", "", "!", "", ".", "", ",", "")
-	cleanText := cleaner.Replace(strings.TrimSpace(text))
-
-	// Busca Strict: Tenta encontrar o nome da nota como uma palavra isolada no texto
-	queryStrict := `
-		SELECT id 
-		FROM graph_nodes 
-		WHERE length(name) > 2 
-		  AND (
-			  ' ' || ? || ' ' ILIKE '% ' || name || ' %' OR 
-			  ? ILIKE name || ' %' OR 
-			  ? ILIKE '% ' || name
-		  )
-		ORDER BY length(name) DESC 
-		LIMIT 1
-	`
-	
-	err := s.db.QueryRow(queryStrict, cleanText, cleanText, cleanText).Scan(&id)
-	if err == nil {
-		return id, nil
-	}
-
-	// Fallback loose: ILIKE normal
-	queryLoose := `
-		SELECT id 
-		FROM graph_nodes 
-		WHERE length(name) > 3 
-		  AND ? ILIKE '%' || name || '%'
-		ORDER BY length(name) DESC 
-		LIMIT 1
-	`
-	err = s.db.QueryRow(queryLoose, cleanText).Scan(&id)
-	return id, err
-}
-
 // InsertGoldSample registra uma amostra "Gold" no DuckDB.
 func (s *DuckDBStore) InsertGoldSample(agentName, input, output string) error {
 	s.mu.Lock()
@@ -324,7 +285,90 @@ func (s *DuckDBStore) Close() error {
 	return s.db.Close()
 }
 
+// FindNodeInText busca o nó mais relevante cujo nome está contido no texto fornecido.
+func (s *DuckDBStore) FindNodeInText(text string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var id string
+
+	// Limpeza profunda do texto para evitar que aspas ou pontuação quebrem o match
+	cleaner := strings.NewReplacer("\"", "", "'", "", "(", "", ")", "", "[", "", "]", "", "?", "", "!", "", ".", "", ",", "")
+	cleanText := cleaner.Replace(strings.TrimSpace(text))
+
+	// Busca Strict: Tenta encontrar o nome da nota como uma palavra isolada no texto
+	queryStrict := `
+		SELECT id
+		FROM graph_nodes
+		WHERE length(name) > 2
+		  AND (
+		    ' ' || ? || ' ' ILIKE '% ' || name || ' %' OR
+		    ? ILIKE name || ' %' OR
+		    ? ILIKE '% ' || name
+		  )
+		ORDER BY length(name) DESC
+		LIMIT 1
+	`
+
+	err := s.db.QueryRow(queryStrict, cleanText, cleanText, cleanText).Scan(&id)
+	if err == nil {
+		return id, nil
+	}
+
+	// Fallback loose: ILIKE normal
+	queryLoose := `
+		SELECT id
+		FROM graph_nodes
+		WHERE length(name) > 3
+		  AND ? ILIKE '%' || name || '%'
+		ORDER BY length(name) DESC
+		LIMIT 1
+	`
+
+	err = s.db.QueryRow(queryLoose, cleanText).Scan(&id)
+	return id, err
+}
+
 // --- Métodos do Cérebro Relacional (Grafo) ---
+
+// UpsertGraphNode insere ou atualiza um nó no grafo analítico vinculado a um workspace.
+func (s *DuckDBStore) UpsertGraphNode(workspacePath, id, name, nodeType, content string, metadata map[string]interface{}) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	metaJSON, _ := json.Marshal(metadata)
+	
+	// 📍 Lógica de Preservação de Layout:
+	// 1. Tenta pegar do metadata (caso venha do frontend ou cache de topologia)
+	x, _ := metadata["x"].(float64)
+	y, _ := metadata["y"].(float64)
+	z, _ := metadata["z"].(float64)
+
+	// 2. Se as coordenadas forem zero (caso venha do crawler/indexador), 
+	// tenta preservar o que já está salvo no banco para não "resetar" o mapa.
+	if x == 0 && y == 0 && z == 0 {
+		_ = s.db.QueryRow(`SELECT pos_x, pos_y, pos_z FROM graph_nodes WHERE id = ?`, id).Scan(&x, &y, &z)
+	}
+
+	query := `INSERT INTO graph_nodes (id, workspace_path, name, type, content, metadata, pos_x, pos_y, pos_z, parent_id, created_at)
+			  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			  ON CONFLICT (id) DO UPDATE SET 
+			  workspace_path = excluded.workspace_path, name = excluded.name, type = excluded.type, 
+			  content = excluded.content, metadata = excluded.metadata,
+			  pos_x = CASE WHEN excluded.pos_x != 0 THEN excluded.pos_x ELSE graph_nodes.pos_x END,
+			  pos_y = CASE WHEN excluded.pos_y != 0 THEN excluded.pos_y ELSE graph_nodes.pos_y END,
+			  pos_z = CASE WHEN excluded.pos_z != 0 THEN excluded.pos_z ELSE graph_nodes.pos_z END,
+			  parent_id = CASE WHEN excluded.parent_id IS NOT NULL THEN excluded.parent_id ELSE graph_nodes.parent_id END`
+	
+	// Tenta extrair parent do metadata se não for explicitamente passado (compatibilidade)
+	parentID, _ := metadata["parent"].(string)
+	if parentID == "" {
+		parentID, _ = metadata["parent_gravity_id"].(string)
+	}
+
+	_, err := s.db.Exec(query, id, workspacePath, name, nodeType, content, string(metaJSON), x, y, z, parentID, time.Now().UnixNano())
+	return err
+}
 
 // UpdateNodePositions atualiza as coordenadas de uma lista de nós em massa.
 func (s *DuckDBStore) UpdateNodePositions(nodes []map[string]interface{}) error {
@@ -338,7 +382,6 @@ func (s *DuckDBStore) UpdateNodePositions(nodes []map[string]interface{}) error 
 
 	stmt, err := tx.Prepare(`UPDATE graph_nodes SET pos_x = ?, pos_y = ?, pos_z = ? WHERE id = ?`)
 	if err != nil {
-		tx.Rollback()
 		return err
 	}
 	defer stmt.Close()
@@ -354,27 +397,6 @@ func (s *DuckDBStore) UpdateNodePositions(nodes []map[string]interface{}) error 
 	}
 
 	return tx.Commit()
-}
-
-// UpsertGraphNode insere ou atualiza um nó no grafo analítico vinculado a um workspace.
-func (s *DuckDBStore) UpsertGraphNode(workspacePath, id, name, nodeType string, metadata map[string]interface{}) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	metaJSON, _ := json.Marshal(metadata)
-	query := `INSERT INTO graph_nodes (id, workspace_path, name, type, metadata, pos_x, pos_y, pos_z, created_at)
-			  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-			  ON CONFLICT (id) DO UPDATE SET 
-			  workspace_path = excluded.workspace_path, name = excluded.name, 
-			  type = excluded.type, metadata = excluded.metadata,
-			  pos_x = excluded.pos_x, pos_y = excluded.pos_y, pos_z = excluded.pos_z`
-	
-	x, _ := metadata["x"].(float64)
-	y, _ := metadata["y"].(float64)
-	z, _ := metadata["z"].(float64)
-
-	_, err := s.db.Exec(query, id, workspacePath, name, nodeType, string(metaJSON), x, y, z, time.Now().UnixNano())
-	return err
 }
 
 // InsertGraphEdge insere uma relação semântica entre dois nós em um workspace.
@@ -399,13 +421,13 @@ func (s *DuckDBStore) GetNodeCount(workspacePath string) (int, error) {
 	return count, err
 }
 
-// GetFullGraph recupera todos os nós e arestas de um workspace específico.
+// GetFullGraph recupera todos os nós e arestas de um workspace específico para carregar na RAM.
 func (s *DuckDBStore) GetFullGraph(workspacePath string) ([]map[string]interface{}, []map[string]interface{}, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	// 1. Recuperar Nós do Workspace
-	rowsN, err := s.db.Query(`SELECT id, name, type, pos_x, pos_y, pos_z FROM graph_nodes WHERE workspace_path = ?`, workspacePath)
+	rowsN, err := s.db.Query(`SELECT id, name, type, pos_x, pos_y, pos_z, parent_id, metadata FROM graph_nodes WHERE workspace_path = ?`, workspacePath)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -415,11 +437,26 @@ func (s *DuckDBStore) GetFullGraph(workspacePath string) ([]map[string]interface
 	for rowsN.Next() {
 		var id, name, t string
 		var x, y, z float64
-		if err := rowsN.Scan(&id, &name, &t, &x, &y, &z); err == nil {
-			nodes = append(nodes, map[string]interface{}{
-				"id": id, "name": name, "type": t,
-				"x": x, "y": y, "z": z,
-			})
+		var parent sql.NullString
+		var metadataJSON []byte
+		if err := rowsN.Scan(&id, &name, &t, &x, &y, &z, &parent, &metadataJSON); err == nil {
+			nodeData := map[string]interface{}{
+				"id": id, "name": name, "type": t, "x": x, "y": y, "z": z,
+			}
+			
+			// 🧠 Fundir metadados JSON (celestial-type, mass, etc)
+			if len(metadataJSON) > 0 {
+				var meta map[string]interface{}
+				if err := json.Unmarshal(metadataJSON, &meta); err == nil {
+					for k, v := range meta {
+						nodeData[k] = v
+					}
+				}
+			}
+			if parent.Valid {
+				nodeData["parent_gravity_id"] = parent.String
+			}
+			nodes = append(nodes, nodeData)
 		}
 	}
 
@@ -442,4 +479,131 @@ func (s *DuckDBStore) GetFullGraph(workspacePath string) ([]map[string]interface
 	}
 
 	return nodes, edges, nil
+}
+
+// SearchNodesByKeyword realiza uma busca textual rápida (Radar) no DuckDB.
+// Prioriza o nome e depois o conteúdo, com suporte a múltiplas palavras.
+func (s *DuckDBStore) SearchNodesByKeyword(keyword string, limit int) ([]map[string]interface{}, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	words := strings.Fields(strings.ToLower(keyword))
+	if len(words) == 0 {
+		return nil, nil
+	}
+
+	// 🛑 STOP WORDS (Português/Inglês) expandidas para evitar ruído na busca SQL
+	stopWords := map[string]bool{
+		"oque": true, "que": true, "é": true, "o": true, "a": true, "os": true, "as": true,
+		"de": true, "do": true, "da": true, "um": true, "uma": true, "sobre": true, "como": true,
+		"fale": true, "quem": true, "onde": true, "qual": true, "quais": true, "para": true, "pelo": true,
+		"pela": true, "com": true, "num": true, "numa": true, "está": true, "tem": true,
+		"what": true, "is": true, "how": true, "the": true, "in": true, "on": true, "at": true, "to": true,
+		"for": true, "of": true, "and": true, "or": true, "with": true, "about": true,
+	}
+
+	var scoreExprs []string
+	var args []interface{}
+
+	for _, word := range words {
+		if len(word) < 2 || stopWords[word] {
+			continue
+		}
+
+		pattern := "%" + word + "%"
+		// 1. Match no Nome (Peso 15 - Aumentado)
+		scoreExprs = append(scoreExprs, "(CASE WHEN name ILIKE ? THEN 15 ELSE 0 END)")
+		args = append(args, pattern)
+
+		// 2. Match no Conteúdo (Peso 2 - Dobrado)
+		scoreExprs = append(scoreExprs, "(CASE WHEN content ILIKE ? THEN 2 ELSE 0 END)")
+		args = append(args, pattern)
+
+		// 3. Match Exato no Nome (Peso 30 - Bônus Premium)
+		scoreExprs = append(scoreExprs, "(CASE WHEN name ILIKE ? THEN 30 ELSE 0 END)")
+		args = append(args, word)
+	}
+
+	if len(scoreExprs) == 0 {
+		return nil, nil
+	}
+
+	query := fmt.Sprintf(`
+		SELECT id, name, type, (%s) as relevance
+		FROM graph_nodes
+		WHERE relevance > 0
+		ORDER BY relevance DESC, created_at DESC
+		LIMIT ?
+	`, strings.Join(scoreExprs, " + "))
+
+	args = append(args, limit)
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []map[string]interface{}
+	for rows.Next() {
+		var id, name, nodeType string
+		var relevance int
+		if err := rows.Scan(&id, &name, &nodeType, &relevance); err == nil {
+			results = append(results, map[string]interface{}{
+				"id":        id,
+				"name":      name,
+				"type":      nodeType,
+				"relevance": relevance,
+			})
+		}
+	}
+	return results, nil
+}
+
+// GetNeighbors recupera nós vizinhos baseados em conexões explícitas ou semânticas (ID Vinculador).
+func (s *DuckDBStore) GetNeighbors(nodeID string) ([]map[string]interface{}, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	query := `
+		SELECT n.id, n.name, n.type, n.content
+		FROM graph_nodes n
+		JOIN graph_edges e ON (e.source_id = ? AND e.target_id = n.id) 
+		                   OR (e.target_id = ? AND e.source_id = n.id)
+		WHERE n.id != ?
+		LIMIT 10
+	`
+
+	rows, err := s.db.Query(query, nodeID, nodeID, nodeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []map[string]interface{}
+	for rows.Next() {
+		var id, name, nodeType, content string
+		if err := rows.Scan(&id, &name, &nodeType, &content); err == nil {
+			results = append(results, map[string]interface{}{
+				"id":      id,
+				"name":    name,
+				"type":    nodeType,
+				"content": content,
+			})
+		}
+	}
+	return results, nil
+}
+
+// ClearGraph limpa permanentemente as tabelas de nós e arestas.
+func (s *DuckDBStore) ClearGraph() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, err := s.db.Exec(`DELETE FROM graph_nodes`)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`DELETE FROM graph_edges`)
+	return err
 }
