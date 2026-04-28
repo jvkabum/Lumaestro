@@ -31,44 +31,69 @@ O Navegador vive entre o `ChatService` (que recebe a pergunta) e o `SearchServic
 
 ---
 
-## 🧬 Fluxo de Dados (Da Pergunta ao Contexto)
+### 🧬 Pipeline de Busca Neural (4 Fases)
+Abaixo, a jornada do dado desde a intenção do usuário até a composição do contexto semântico.
 
 ```mermaid
-sequenceDiagram
-    participant User as 👤 Comandante
-    participant Chat as 💬 ChatService
-    participant Nav as 🧭 GraphNavigator
-    participant Duck as ⚡ DuckDB (NavStore)
-    participant Qdrant as 🧠 Qdrant (Vetores)
-    participant Ranker as 🎯 Neural Ranker
-    participant UI as 🎨 Frontend (Grafo 3D)
+flowchart TD
+    %% Estilos
+    classDef trigger fill:#1e1e1e,stroke:#888,stroke-width:2px,stroke-dasharray: 5 5,color:#fff
+    classDef core fill:#2d333b,stroke:#6d5dfc,stroke-width:2px,color:#fff
+    classDef db fill:#2e7d32,stroke:#6d5dfc,stroke-width:2px,color:#fff
+    classDef ia fill:#6d5dfc,stroke:#fff,stroke-width:2px,color:#fff
+    classDef vis fill:#9c27b0,stroke:#6d5dfc,stroke-width:2px,color:#fff
 
-    User->>Chat: "Como funciona o crawler?"
-    Chat->>Nav: FindRelevantNodes(query)
-    
-    Note over Nav: Fase 1: Fast-Path (DuckDB)
-    Nav->>Duck: SearchNodesByKeyword("crawler", 5)
-    Duck-->>Nav: [nota-crawler, nota-indexação, ...]
-    
-    Note over Nav: Fase 2: Deep Search (Qdrant)
-    Nav->>Qdrant: SearchWithScores(vector, 10)
-    Qdrant-->>Nav: [resultados com score vetorial]
-    
-    Note over Nav: Fase 3: Re-Ranking Neural
-    Nav->>Ranker: AdjustScore(nodeId, rawScore)
-    Ranker-->>Nav: score ajustado (aprendido por cliques)
-    
-    Note over Nav: Fase 4: Expansão de Vizinhança
-    Nav->>Duck: GetNeighbors(topNodeId)
-    Duck-->>Nav: vizinhos 1-hop
+    subgraph UserAction [Intenção]
+        U([fa:fa-user Usuário])
+        Q[fa:fa-comment Prompt]
+    end
 
-    Nav-->>Chat: contexto formatado + IDs dos nós
-    Chat->>UI: node:active (zoom no nó principal)
-    Chat->>UI: semantic:neighbors (destaque de sinapses)
+    subgraph Phase1 [Fase 1: Fast-Path]
+        D1[(fa:fa-bolt DuckDB)]
+        L1[Busca Textual/Fuzzy]
+    end
 
-    style Nav fill:#2d333b,stroke:#6d5dfc,stroke-width:2px,color:#e6edf3
-    style Duck fill:#2d333b,stroke:#6d5dfc,stroke-width:2px,color:#e6edf3
-    style Ranker fill:#2d333b,stroke:#6d5dfc,stroke-width:2px,color:#e6edf3
+    subgraph Phase2 [Fase 2: Deep Search]
+        V2[(fa:fa-brain Qdrant)]
+        L2[Busca Vetorial/Semântica]
+    end
+
+    subgraph Phase3 [Fase 3: Re-Ranking]
+        R3{fa:fa-crosshairs Neural Ranker}
+        L3[Ajuste por Cliques/Histórico]
+    end
+
+    subgraph Phase4 [Fase 4: Expansão]
+        E4[(fa:fa-network-wired Graph Expansion)]
+        L4[Busca de Vizinhos 1-Hop]
+    end
+
+    subgraph UI [Visualização]
+        F[fa:fa-desktop Frontend 3D]
+        Z[Zoom Cinematográfico]
+    end
+
+    %% Fluxo
+    U --> Q
+    Q --> L1 & L2
+    L1 --> D1
+    L2 --> V2
+    
+    D1 & V2 --> R3
+    R3 --> L3
+    L3 --> E4
+    E4 --> L4
+    
+    L4 --> Context[Contexto Consolidado]
+    Context --> F
+    F --> Z
+
+    %% Estilos
+    class U,Q trigger
+    class D1,V2,E4 db
+    class R3 ia
+    class F,Z vis
+    class Context core
 ```
 
 ---

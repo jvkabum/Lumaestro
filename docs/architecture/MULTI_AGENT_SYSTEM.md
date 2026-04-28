@@ -22,41 +22,81 @@ O funcionamento multi-agente baseia-se em três pilares: **Delegação (Handoff)
 Diferente de uma simples chamada de função, a delegação no Lumaestro cria uma nova entidade no banco de dados chamada `Issue` (ou Ticket). Quando o **Agente A** percebe que uma subtarefa foge de sua especialidade, ele utiliza o `DelegateTask`.
 
 ```mermaid
-graph TD
-    %% Estilo Dark Mode
-    classDef default fill:#2d333b,stroke:#6d5dfc,color:#e6edf3;
-    
-    User[👤 Usuário] -->|Cria Tarefa| Master[🧠 Maestro Planner]
-    Master -->|Analisa e Divide| T1[Tarefa: Frontend]
-    Master -->|Analisa e Divide| T2[Tarefa: Backend]
-    
-    T1 -->|Assignee| VueAg[🎨 Vue Expert]
-    T2 -->|Assignee| GoAg[🐹 Go Gopher]
-    
-    VueAg -->|Handoff: Precisa de API| T2
-    GoAg -->|Retorna| Master
-    
-    subgraph Orquestração
-        Direction[internal/orchestration/handoff.go]
+flowchart TD
+    %% Estilos
+    classDef trigger fill:#1e1e1e,stroke:#888,stroke-width:2px,stroke-dasharray: 5 5,color:#fff
+    classDef core fill:#2d333b,stroke:#6d5dfc,stroke-width:2px,color:#fff
+    classDef ia fill:#6d5dfc,stroke:#fff,stroke-width:2px,color:#fff
+    classDef action fill:#455a64,stroke:#fff,stroke-width:1px,color:#fff
+
+    subgraph Command [Comando Central]
+        U([fa:fa-user Usuário])
+        M{fa:fa-brain Maestro Planner}
     end
+
+    subgraph Swarm [O Enxame de Especialistas]
+        direction TB
+        T1[fa:fa-ticket-alt Tarefa: Frontend]
+        T2[fa:fa-ticket-alt Tarefa: Backend]
+        
+        VueAg[fa:fa-palette Vue Expert]
+        GoAg[fa:fa-terminal Go Gopher]
+    end
+
+    subgraph Registry [Orquestração de Handoff]
+        H[internal/orchestration/handoff.go]
+    end
+
+    %% Fluxo
+    U -->|1. Solicita| M
+    M -->|2. Divide| T1 & T2
+    
+    T1 -->|Assignee| VueAg
+    T2 -->|Assignee| GoAg
+    
+    VueAg <-->|3. Handoff| H
+    H <-->|4. Delegate| GoAg
+    
+    GoAg -->|5. Report| M
+
+    %% Estilos
+    class U trigger
+    class M core
+    class VueAg,GoAg ia
+    class T1,T2,H action
 ```
 
 ### 2. Governança e "Hard Stop" Financeiro
 Para evitar gastos desenfreados com APIs de LLM, cada agente possui um "orçamento mensal". Se o limite for atingido, o sistema impõe um **Hard Stop**, pausando o agente imediatamente.
 
 ```mermaid
-sequenceDiagram
-    participant Ag as Agente
-    participant B as Budget Manager
-    participant DB as DuckDB
-    
-    Ag->>B: Executa Ação (Tokens/Custo)
-    B->>DB: Registra CostEvent
-    B->>DB: Verifica SpentMonthlyCents
-    alt Limite Excedido
-        B->>DB: Update Agent Status = 'paused'
-        B->>Ag: Interrompe Execução (Error: Out of Budget)
+flowchart TD
+    %% Estilos
+    classDef core fill:#2d333b,stroke:#6d5dfc,stroke-width:2px,color:#fff
+    classDef db fill:#2e7d32,stroke:#6d5dfc,stroke-width:2px,color:#fff
+    classDef warning fill:#ff9900,stroke:#333,stroke-width:2px,color:#000
+
+    subgraph Governance [Gestão de Recursos]
+        Ag[fa:fa-robot Agente]
+        B{fa:fa-wallet Budget Manager}
+        DB[(fa:fa-database DuckDB)]
     end
+
+    subgraph Safety [Barreira Hard Stop]
+        STOP((fa:fa-hand-paper STOP))
+    end
+
+    %% Fluxo
+    Ag -->|1. Ação LLM| B
+    B -->|2. Log Cost| DB
+    B -->|3. Check Budget| DB
+    
+    DB -- "Limite Excedido" --> STOP
+    STOP -->|4. Pause Agent| Ag
+
+    %% Estilos
+    class B,DB core
+    class STOP warning
 ```
 
 ---

@@ -1,4 +1,4 @@
-﻿---
+---
 title: DuckDB Engine - O Cérebro Analítico
 type: architecture
 tags: [duckdb, olap, rag, vectors, architecture]
@@ -17,26 +17,42 @@ No ecossistema Lumaestro, o [[DUCKDB_ENGINE]] atua como a camada **OLAP (Online 
 
 O DuckDB processa os dados de forma vetorial, utilizando instruções de CPU modernas (SIMD) para varrer colunas inteiras de uma vez.
 
-`mermaid
-graph TD
-    subgraph Ingestão
-        A[Arquivos/Docs] -->|Parsing| B[Embeddings]
-        B -->|Vector Push| C[DuckDB Storage]
-    end
-    
-    subgraph Query_Process
-        D[Pergunta do Usuário] -->|Embedding| E[Vector Search]
-        E -->|Scan Colunar| C
-        C -->|Contexto| F[Agente LLM]
+```mermaid
+flowchart TD
+    %% Estilos
+    classDef trigger fill:#1e1e1e,stroke:#888,stroke-width:2px,stroke-dasharray: 5 5,color:#fff
+    classDef core fill:#2d333b,stroke:#6d5dfc,stroke-width:2px,color:#fff
+    classDef db fill:#2e7d32,stroke:#6d5dfc,stroke-width:2px,color:#fff
+    classDef ia fill:#6d5dfc,stroke:#fff,stroke-width:2px,color:#fff
+
+    subgraph Ingestao [Ingestão de Matéria]
+        A[fa:fa-file-alt Arquivos/Docs]
+        B[fa:fa-brain Embedding Engine]
     end
 
-    style A fill:#2d333b,stroke:#6d5dfc,color:#e6edf3
-    style B fill:#2d333b,stroke:#6d5dfc,color:#e6edf3
-    style C fill:#2d333b,stroke:#6d5dfc,color:#e6edf3
-    style D fill:#2d333b,stroke:#6d5dfc,color:#e6edf3
-    style E fill:#2d333b,stroke:#6d5dfc,color:#e6edf3
-    style F fill:#2d333b,stroke:#6d5dfc,color:#e6edf3
-`
+    subgraph Storage [Armazenamento OLAP]
+        C[(fa:fa-database DuckDB Storage)]
+    end
+
+    subgraph QueryProcess [Processamento de Pergunta]
+        D[fa:fa-comment Pergunta do Usuário]
+        E{fa:fa-search Scan Colunar SIMD}
+    end
+
+    %% Fluxo
+    A -->|Parsing| B
+    B -->|Vector Push| C
+    
+    D -->|Embedding| E
+    E -->|Fast Scan| C
+    C -->|Contexto Enriquecido| F[fa:fa-robot Agente LLM]
+
+    %% Estilos
+    class A,D trigger
+    class C db
+    class B,F ia
+    class E core
+```
 
 ---
 
@@ -57,21 +73,27 @@ A implementação do DuckDB no Lumaestro está concentrada nos seguintes pontos:
 
 No Lumaestro, usamos uma arquitetura bimodal para garantir performance e segurança.
 
-`mermaid
-graph LR
-    subgraph Lumaestro_Core
-        DB[(SQLite)] --- |Sincronia Lógica| DUCK[(DuckDB)]
-    end
-    
-    DB -->|Papel| P1[Estado Transacional]
-    DB -->|Exemplo| E1[Configs, Chat ID, User]
-    
-    DUCK -->|Papel| P2[Análise e Busca]
-    DUCK -->|Exemplo| E2[Embeddings, Logs, RAG]
+```mermaid
+flowchart LR
+    %% Estilos
+    classDef core fill:#2d333b,stroke:#6d5dfc,stroke-width:2px,color:#fff
+    classDef action fill:#455a64,stroke:#fff,stroke-width:1px,color:#fff
+    classDef db fill:#2e7d32,stroke:#6d5dfc,stroke-width:2px,color:#fff
 
-    style DB fill:#2d333b,stroke:#6d5dfc,color:#e6edf3
-    style DUCK fill:#2d333b,stroke:#6d5dfc,color:#e6edf3
-`
+    subgraph DualCore [Arquitetura Bimodal]
+        direction LR
+        SQLite[(fa:fa-heart SQLite)]
+        DuckDB[(fa:fa-brain DuckDB)]
+    end
+
+    %% Papéis
+    SQLite -->|Estado Transacional| S1[Configs, Chat ID, User]
+    DuckDB -->|Análise e Busca| S2[Embeddings, Logs, RAG]
+
+    %% Estilos
+    class SQLite,DuckDB db
+    class S1,S2 action
+```
 
 ### Por que não usar apenas um?
 - **SQLite** é excelente para garantir que seus dados não sejam corrompidos em escritas rápidas (ACID).

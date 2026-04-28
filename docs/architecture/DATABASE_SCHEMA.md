@@ -1,74 +1,84 @@
-﻿# 🗄️ Esquema de Dados (Database Schema) 🏛️📊
+---
+title: "Esquema de Dados (Database Schema)"
+type: "architecture"
+status: "active"
+tags: ["database", "sqlite", "duckdb", "schema", "telemetry"]
+---
 
-O Lumaestro utiliza **DuckDB** para persistência, aproveitando sua capacidade analítica para processar telemetria de agentes em tempo real. O esquema é gerenciado via GORM em internal/db/schema.go.
+# 🗄️ Esquema de Dados: O Pulmão de Conhecimento
 
-## 🗺️ Mapa de Entidades (ERD)
+> [!ABSTRACT]
+> O Lumaestro utiliza uma arquitetura de "Pulmão Duplo" para garantir performance e soberania. O **SQLite** gerencia o estado transacional e a topologia do enxame (OLTP), enquanto o **DuckDB** processa volumes massivos de telemetria analítica e custos (OLAP) com eficiência colunar.
 
-`mermaid
-erDiagram
-    %% Estilo Dark Mode
-    AGENT ||--o{ ISSUE : assignee
-    AGENT ||--o{ COST_EVENT : incurs
-    AGENT ||--o{ ACTIVITY_LOG : performs
-    ISSUE ||--o{ ISSUE_COMMENT : timeline
-    ISSUE ||--o{ ISSUE_ATTACHMENT : contains
-    DOCUMENT ||--o{ DOCUMENT_REVISION : history
-    PROJECT ||--o{ ISSUE : contains
-    GOAL ||--o{ PROJECT : drives
-    
-    AGENT {
-        uuid id
-        string name
-        string role
-        string status
-        int budget_monthly_cents
-        int spent_monthly_cents
-    }
-    
-    ISSUE {
-        uuid id
-        uuid project_id
-        string title
-        string status
-        string priority
-    }
-    
-    COST_EVENT {
-        uuid id
-        uuid agent_id
-        string model
-        int cost_cents
-        timestamp occurred_at
-    }
-`
+## 🏗️ Arquitetura de Pulmão Duplo
 
-## 🧩 Tabelas Principais
+Abaixo, a representação da separação de responsabilidades entre os motores de persistência.
 
-### 1. Núcleo de Agentes (Agent)
-Armazena a identidade e o estado financeiro de cada trabalhador do enxame.
-- **UUID:** Identificação única global.
-- **Status:** ctive, paused, idle, unning, error.
-- **LastHeartbeatAt:** Usado para detectar agentes que travaram.
+```mermaid
+flowchart TD
+    %% Estilos
+    classDef oltp fill:#2d333b,stroke:#6d5dfc,stroke-width:2px,color:#fff
+    classDef olap fill:#2e7d32,stroke:#6d5dfc,stroke-width:2px,color:#fff
+    classDef ent fill:#455a64,stroke:#fff,stroke-width:1px,color:#fff
 
-### 2. Gestão de Trabalho (Issue, Project, Goal)
-Hierarquia de produtividade do enxame:
-- **Goal:** Visão estratégica (ex: "Lançar versão 1.0").
-- **Project:** Roadmap tático.
-- **Issue:** Unidade de trabalho atômica.
+    subgraph Dual_Lung [Arquitetura de Pulmão Duplo]
+        direction LR
+        SQLite[fa:fa-database SQLite: Estado/OLTP]
+        DuckDB[fa:fa-chart-line DuckDB: Analítico/OLAP]
+    end
 
-### 3. Memória e Conhecimento (Document, DocumentRevision)
-Onde o RAG e o enxame salvam resultados de longo prazo.
-- Suporta **Versionamento Automático** via DocumentRevision.
-- O corpo do documento é armazenado como 	ext.
+    subgraph Entities [Domínios de Dados]
+        direction TB
+        A[fa:fa-robot Agent / Issue / Goal]
+        C[fa:fa-coins Cost / Telemetry / Logs]
+        D[fa:fa-file-alt Knowledge / RAG Metadata]
+    end
 
-### 4. Telemetria e Auditoria (CostEvent, ActivityLog, HeartbeatRun)
-Essencial para auditoria técnica e financeira.
-- **CostEvent:** Detalha tokens de entrada/saída e custo em centavos.
-- **ActivityLog:** Rastro de migalhas (quem fez o quê e quando).
+    %% Fluxo
+    A & D --> SQLite
+    C --> DuckDB
+    SQLite -.->|Sync Periódico| DuckDB
 
-## 🛠️ Tipos Customizados
-- **Timestamp**: Um wrapper sobre 	ime.Time para garantir compatibilidade com o Wails v2 (JSON binding).
-- **Base**: Modelo base que utiliza UUID em vez de IDs incrementais para evitar colisões em sistemas distribuídos.
+    %% Estilos
+    class SQLite oltp
+    class DuckDB olap
+    class A,C,D ent
+```
 
 ---
-[[INDEX|⬅️ Voltar ao Índice]] | [[SWARM_ORCHESTRATION|⬅️ Voltar: Orquestração]]
+
+## 🗺️ Mapa de Entidades Principais (ERD)
+
+### 1. Núcleo de Operação (Agents & Swarm)
+Gerencia a identidade e a saúde dos agentes.
+- **Agent**: UUID, Role, Status (active, paused, idle), Budget Control.
+- **Issue / Goal**: Hierarquia de trabalho do enxame (Objetivos Estratégicos → Tarefas Táticas).
+
+### 2. Telemetria e Finanças (Lightning Engine)
+Processado via DuckDB para relatórios instantâneos.
+- **CostEvent**: Detalhamento de tokens por modelo (Gemini/Claude) e custo em centavos.
+- **ActivityLog**: Rastreabilidade total (Quem, Onde, Quando e Por que).
+
+### 3. Memória e Conhecimento (RAG Meta)
+- **Document / Revision**: Histórico de alterações e metadados das notas indexadas.
+- **Fact / Triple**: Conhecimento estruturado extraído via IA (S-P-O).
+
+---
+
+## 🛠️ Detalhes de Implementação
+
+- **Engine**: GORM (Object-Relational Mapping) em Go.
+- **Identificadores**: Uso mandatório de **UUID** para todas as entidades, garantindo integridade em operações distribuídas e sync entre instâncias.
+- **JSON Binding**: Wrappers customizados para tipos `Time`, garantindo compatibilidade com o Wails v2.
+
+---
+
+## 🔗 Documentos Relacionados
+
+- [[DUCKDB_ENGINE]] — Mergulho profundo no motor analítico.
+- [[LUMAESTRO_CORE]] — Como o backend gerencia as conexões de DB.
+- [[SWARM_ORCHESTRATION]] — Como os agentes utilizam estas tabelas para colaboração.
+- [[DOCS_INDEX]] — Índice central de documentação.
+
+---
+**Lumaestro: Dados estruturados para uma inteligência fluida. 🗄️📊✨**

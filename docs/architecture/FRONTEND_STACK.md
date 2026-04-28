@@ -1,4 +1,4 @@
-﻿---
+---
 tags: [frontend, vue, vite, wails, ui]
 type: technical-spec
 status: active
@@ -49,17 +49,37 @@ async function handleSend() {
 
 O Lumaestro utiliza um padrão de eventos para atualizar a interface em tempo real sem a necessidade de polling.
 
-`mermaid
-sequenceDiagram
-    participant B as Backend (Go)
-    participant E as Wails Events
-    participant F as Frontend (Vue)
+```mermaid
+flowchart LR
+    %% Estilos
+    classDef be fill:#2d333b,stroke:#6d5dfc,color:#fff
+    classDef bridge fill:#455a64,stroke:#fff,stroke-dasharray: 5 5,color:#fff
+    classDef fe fill:#9c27b0,stroke:#6d5dfc,color:#fff
 
-    B->>E: EventsEmit("agent_thought", chunk)
-    E->>F: On("agent_thought")
-    F->>F: Atualiza Store do Chat
-    F->>F: Renderiza nova linha na UI
-`
+    subgraph Backend [Go Core]
+        B[fa:fa-server Go Backend]
+    end
+
+    subgraph Runtime [Wails Runtime]
+        E{fa:fa-broadcast-tower EventsEmit}
+    end
+
+    subgraph Frontend [Vue 3 UI]
+        F[fa:fa-desktop Vue Component]
+        S[(fa:fa-database Pinia Store)]
+    end
+
+    %% Fluxo de Reatividade
+    B -->|1. Emite Thought/Log| E
+    E -->|2. Notifica| F
+    F -->|3. Commita| S
+    S -->|4. Re-render Reativo| F
+
+    %% Estilos
+    class B be
+    class E bridge
+    class F,S fe
+```
 
 ---
 

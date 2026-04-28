@@ -38,18 +38,38 @@ Responsável por manter o mapa global de habilidades em memória e fornecer mét
 Utiliza o padrão `init()` do Go para registrar habilidades sem necessidade de configuração manual extensiva.
 
 ```mermaid
-sequenceDiagram
-    participant App as Main Application
-    participant Loader as loader/loader.go
-    participant All as category/all.go
-    participant Skill as specific_skill/skill.go
-    participant Registry as manager.go
+flowchart TD
+    %% Estilos
+    classDef trigger fill:#1e1e1e,stroke:#888,stroke-width:2px,stroke-dasharray: 5 5,color:#fff
+    classDef action fill:#2d333b,stroke:#455a64,stroke-width:1px,color:#fff
+    classDef core fill:#2d333b,stroke:#6d5dfc,stroke-width:2px,color:#fff
 
-    App->>Loader: Import loader
-    Loader->>All: Blank Import (_)
-    All->>Skill: Blank Import (_)
-    Skill->>Registry: Register(Skill{...})
-    Note over Registry: Skill disponível no mapa global
+    subgraph Boot [Ciclo de Inicialização]
+        App([fa:fa-play Main Application])
+        Loader[loader/loader.go]
+    end
+
+    subgraph Scan [Auto-Descoberta Go]
+        All[category/all.go]
+        Skill[specific_skill/skill.go]
+    end
+
+    subgraph Registry [Cérebro de Habilidades]
+        Mgr{fa:fa-server manager.go}
+        Map[(Registry Map)]
+    end
+
+    %% Fluxo
+    App -->|1. Import| Loader
+    Loader -->|2. Blank Import| All
+    All -->|3. Blank Import| Skill
+    Skill -->|4. Register| Mgr
+    Mgr -->|5. Store| Map
+
+    %% Estilos
+    class App trigger
+    class Loader,All,Skill action
+    class Mgr,Map core
 ```
 
 ### 3. Estrutura de Pastas
@@ -72,26 +92,40 @@ internal/agents/skills/
 O diagrama abaixo ilustra como as categorias se conectam ao sistema central.
 
 ```mermaid
-graph TD
-    subgraph "Core System"
-        M[manager.go] -- gerencia --> R[(Registry Map)]
+flowchart TD
+    %% Estilos
+    classDef core fill:#2d333b,stroke:#6d5dfc,stroke-width:2px,color:#fff
+    classDef ia fill:#6d5dfc,stroke:#fff,stroke-width:2px,color:#fff
+    classDef db fill:#2e7d32,stroke:#6d5dfc,stroke-width:2px,color:#fff
+
+    subgraph CoreSys [Cérebro Central]
+        M{fa:fa-cog manager.go}
+        R[(fa:fa-list Registry Map)]
     end
 
-    subgraph "Categorias de Expertise"
-        D[Development] -->|import| M
-        I[Infrastructure] -->|import| M
-        S[Security] -->|import| M
-        A[Architecture] -->|import| M
+    subgraph Expertise [Categorias de Domínio]
+        D[fa:fa-code Development]
+        I[fa:fa-server Infrastructure]
+        S[fa:fa-shield-alt Security]
+        A[fa:fa-drafting-compass Architecture]
     end
     
-    subgraph "Exemplo de Skill: golang_pro"
-        SK[skill.go] -->|init| D
-        C[Content Markdown] --> SK
+    subgraph Instances [Implementação Real]
+        SK[fa:fa-file-code skill.go]
+        C[fa:fa-file-alt Content Markdown]
     end
 
-    style M fill:#2d333b,stroke:#6d5dfc,stroke-width:2px,color:#e6edf3
-    style R fill:#2d333b,stroke:#6d5dfc,stroke-width:2px,color:#e6edf3
-    style SK fill:#2d333b,stroke:#6d5dfc,stroke-width:1px,color:#e6edf3
+    %% Conexões
+    D & I & S & A -->|Self Register| M
+    M -->|Manage| R
+    
+    C -->|Static Load| SK
+    SK -->|init| D
+
+    %% Estilos
+    class M,R core
+    class D,I,S,A ia
+    class SK,C db
 ```
 
 ---

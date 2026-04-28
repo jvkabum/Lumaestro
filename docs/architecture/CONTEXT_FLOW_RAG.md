@@ -1,57 +1,90 @@
-﻿# 🌌 Fluxo de Contexto RAG (Cognitive Cosmos) 🧠🚀
+---
+title: "Fluxo de Contexto RAG (Cognitive Cosmos)"
+type: "architecture"
+status: "active"
+tags: ["rag", "cosmos", "knowledge-graph", "ingestion"]
+---
 
-O motor RAG do Lumaestro utiliza uma arquitetura de **Duas Fases** baseada em uma metáfora celestial para organizar e recuperar conhecimento.
+# 🌌 Fluxo de Contexto RAG: O Cosmos Cognitivo
+
+> [!ABSTRACT]
+> O motor RAG do Lumaestro utiliza uma metáfora espacial (Cosmos Model) para organizar o conhecimento. Ele transcende a busca vetorial simples ao integrar uma arquitetura de grafos N-Hop, permitindo que a IA navegue por conexões semânticas e estruturais como um explorador intergalático.
 
 ## 🛰️ Arquitetura Celestial (The Cosmos Model)
 
-O Crawler organiza o vault do Obsidian e repositórios de código em uma hierarquia visual:
+O conhecimento é organizado em camadas de densidade e relevância, representadas visualmente no Grafo 3D.
 
-| Nível | Entidade | Representação no Grafo |
-|-------|----------|------------------------|
-| **1** | Galáxia | Raiz do Vault ou Repositório Satélite. |
-| **2** | Planeta | Pastas e subpastas (Agrupadores). |
-| **3** | Lua | Notas (.md), código e mídias (Arquivos). |
-| **4** | Estrela | Links semânticos e Triplas extraídas via IA. |
+```mermaid
+flowchart TD
+    %% Estilos
+    classDef galaxy fill:#ffcc00,stroke:#333,stroke-width:4px,color:#000
+    classDef planet fill:#2d333b,stroke:#6d5dfc,stroke-width:2px,color:#fff
+    classDef moon fill:#455a64,stroke:#fff,stroke-width:1px,color:#fff
+    classDef ia fill:#6d5dfc,stroke:#fff,stroke-width:2px,color:#fff
 
-`mermaid
-graph TD
-    %% Estilo Dark Mode
-    classDef sun fill:#f9d71c,stroke:#6d5dfc,color:#2d333b;
-    classDef planet fill:#2d333b,stroke:#6d5dfc,color:#e6edf3;
-    classDef moon fill:#2d333b,stroke:#4a4a4a,color:#e6edf3;
+    subgraph Cosmos [Níveis de Conhecimento]
+        G((fa:fa-sun Galáxia: Vault/Root))
+        P1(fa:fa-folder Planeta: Pasta/Módulo)
+        P2(fa:fa-folder Planeta: Pasta/Módulo)
+        M1[fa:fa-file-alt Lua: Nota/Arquivo]
+        M2[fa:fa-file-code Lua: Código]
+        S{fa:fa-star Estrela: Tripla Semântica}
+    end
 
-    Sun((Galáxia Core)):::sun --> Planet1(Pasta: Backend):::planet
-    Sun --> Planet2(Pasta: Docs):::planet
-    Planet1 --> Moon1[auth.go]:::moon
-    Planet1 --> Moon2[db.go]:::moon
-    Planet2 --> Moon3[RAG.md]:::moon
-    
-    Moon1 -.->|Link Semântico| Moon3
-`
+    subgraph Pipeline [Ciclo de Ingestão]
+        direction LR
+        F1[Fase 1: Sync Estrutural]
+        F2[Fase 2: Enriquecimento IA]
+    end
 
-## ⚡ O Ciclo de Indexação
+    %% Conexões
+    G --> P1 & P2
+    P1 --> M1
+    P2 --> M2
+    M1 & M2 --> S
 
-### Fase 1: Sincronização de Estrutura (Zero-Cost)
-O crawler percorre o sistema de arquivos e emite eventos graph:node e graph:edge para o frontend.
-- **Hash SHA-256:** Detecta mudanças reais de conteúdo.
-- **Resumo Estático:** Extrai automaticamente títulos e exportações (Go/JS/Py) sem usar LLM.
+    F1 -->|Hash & Resume| G
+    F2 -->|Embeddings & Triplas| S
 
-### Fase 2: Enriquecimento Cognitivo (IA)
-Para arquivos novos ou modificados, o enxame realiza:
-1.  **Extração de Triplas:** Converte texto em conhecimento estruturado (Sujeito -> Predicado -> Objeto).
-2.  **Multimodalidade:** Processa imagens e PDFs via visão computacional.
-3.  **Vetorização:** Salva embeddings de 3072 dimensões no **Qdrant**.
-
-## 🔍 Motor de Busca N-Hop
-
-Diferente de um RAG tradicional que busca apenas por similaridade, o Lumaestro faz:
-1.  **Busca Vetorial:** Encontra as notas mais próximas semanticamente.
-2.  **Exploração de Adjacência:** Puxa notas vizinhas no grafo (links [[ ]]) mesmo que não sejam similares por texto.
-3.  **Re-Ranking:** O Agente Reflector valida se o contexto é útil para a tarefa atual.
-
-## 🛠️ Configurações Críticas
-- workerCount: Limitado a 2 por padrão para evitar estouro de cota (Rate Limit).
-- cachePath: .context/index_cache.json armazena o estado da última indexação.
+    %% Estilos
+    class G galaxy
+    class P1,P2 planet
+    class M1,M2 moon
+    class S,F2 ia
+```
 
 ---
-[[INDEX|⬅️ Voltar ao Índice]] | [[DATABASE_SCHEMA|Anterior: Banco de Dados ⬅️]]
+
+## ⚡ O Ciclo de Ingestão de Matéria
+
+### Fase 1: Sincronização Estrutural (Zero-Cost)
+O Crawler monitora o sistema de arquivos em tempo real, emitindo eventos de topologia sem custo de IA.
+- **Deduplicação SHA-256**: Garante que apenas alterações reais disparem re-indexação.
+- **Resumo Estático**: Extração rápida de metadados, títulos e assinaturas de código (Go/JS/Python).
+
+### Fase 2: Enriquecimento Cognitivo (IA)
+Para elementos novos ou modificados, o enxame realiza o processamento profundo:
+- **Extração de Triplas**: Conversão de texto bruto em conhecimento estruturado (Sujeito → Predicado → Objeto).
+- **Processamento Multimodal**: OCR e análise visual de imagens e PDFs.
+- **Vetorização**: Geração de embeddings de alta dimensionalidade (3072D) no **Qdrant**.
+
+---
+
+## 🔍 Motor de Busca N-Hop (Deep Retrieval)
+
+Diferente de RAGs tradicionais, o Lumaestro utiliza uma abordagem tridimensional:
+1.  **Busca Vetorial**: Recuperação por similaridade semântica pura.
+2.  **Exploração de Adjacência**: Puxa nós vizinhos via links estruturais (`[[ ]]`), enriquecendo o contexto com informações relacionadas mas não necessariamente similares em texto.
+3.  **Neural Re-Ranking**: O Agente Reflector valida e filtra o contexto final para eliminar ruído antes da injeção no Prompt.
+
+---
+
+## 🔗 Documentos Relacionados
+
+- [[NEURAL_BRAIN]] — Visualização imersiva do Cosmos Cognitivo.
+- [[DATABASE_SCHEMA]] — Como os metadados são persistidos.
+- [[SEMANTIC_NAVIGATOR]] — O GPS que opera este motor.
+- [[DOCS_INDEX]] — Índice central de documentação.
+
+---
+**Lumaestro: Explore sua própria galáxia de conhecimento. 🌌🧠✨**

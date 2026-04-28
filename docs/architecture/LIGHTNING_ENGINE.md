@@ -22,29 +22,47 @@ O Lumaestro utiliza uma infraestrutura de dados híbrida para garantir integrida
 ### 📊 Fluxo de Dados e Telemetria
 
 ```mermaid
-graph TD
-    subgraph "Camada de Agentes"
-        A[Agente / Executor] -->|Request| B[Lightning Proxy]
+flowchart TD
+    %% Estilos
+    classDef trigger fill:#1e1e1e,stroke:#888,stroke-width:2px,stroke-dasharray: 5 5,color:#fff
+    classDef action fill:#2d333b,stroke:#455a64,stroke-width:1px,color:#fff
+    classDef core fill:#2d333b,stroke:#6d5dfc,stroke-width:2px,color:#fff
+    classDef db fill:#2e7d32,stroke:#6d5dfc,stroke-width:2px,color:#fff
+
+    subgraph AgentsLayer [Camada de Execução]
+        A[fa:fa-robot Agente / Executor]
+        B{fa:fa-shield-alt Lightning Proxy}
     end
 
-    subgraph "Motor Lightning"
-        B -->|Capture| C{Interceptor}
-        C -->|Raw JSON| D[(DuckDB: Telemetry)]
-        C -->|Metadata| E[(SQLite: State)]
-        B -->|Forward| F[LLM Provider]
-        F -->|Usage Data| C
+    subgraph DataEngine [Motor de Pulmão Duplo]
+        direction TB
+        C{fa:fa-filter Interceptor}
+        D[(fa:fa-database DuckDB: Analytics)]
+        E[(fa:fa-database SQLite: State)]
     end
 
-    subgraph "Ciclo de Inteligência"
-        D -->|Analytics| G[Dashboard / UI]
-        G -->|Feedback| H[Reward Engine]
-        H -->|Dopamina| D
+    subgraph Intelligence [Ciclo de Inteligência]
+        G[fa:fa-chart-line Dashboard / UI]
+        H[fa:fa-brain Reward Engine]
     end
 
-    %% Estilização Dark
-    style B fill:#2d333b,stroke:#6d5dfc,color:#e6edf3
-    style D fill:#2d333b,stroke:#6d5dfc,color:#e6edf3
-    style H fill:#2d333b,stroke:#6d5dfc,color:#e6edf3
+    %% Fluxo
+    A -->|Request| B
+    B -->|Capture| C
+    C -->|Spans/Tokens| D
+    C -->|Metadados| E
+    B -->|Forward| F[fa:fa-cloud LLM Provider]
+    F -->|Usage| C
+
+    D -->|Telemetry| G
+    G -->|Human Feedback| H
+    H -->|Dopamina Digital| D
+
+    %% Estilos
+    class A trigger
+    class B,C,H action
+    class D,E db
+    class G core
 ```
 
 ---
@@ -77,22 +95,38 @@ O sistema monitora o investimento em inteligência em tempo real:
 ### 🔄 Ciclo de Reforço (Digital Dopamine)
 
 ```mermaid
-sequenceDiagram
-    autonumber
-    participant A as Agente
-    participant P as Proxy
-    participant D as DuckDB
-    participant H as Humano (Comandante)
-    participant O as APO Optimizer
+flowchart TD
+    %% Estilos
+    classDef core fill:#2d333b,stroke:#6d5dfc,stroke-width:2px,color:#fff
+    classDef ia fill:#6d5dfc,stroke:#fff,stroke-width:2px,color:#fff
+    classDef action fill:#455a64,stroke:#fff,stroke-width:1px,color:#fff
 
-    A->>P: Executa Tarefa (Prompt)
-    P->>D: Registra Trajetória (Spans)
-    H->>D: Avalia Resultado (Reward +1.0/-1.0)
-    D-->>O: Acumula Lições (Dataset)
-    O->>A: Refina System Prompt (Auto-Tune)
-    
-    %% Configuração de Cores Mermaid
-    Note over A,O: O ciclo garante que o erro de hoje seja a sabedoria de amanhã.
+    subgraph Loop [Ciclo de Reforço]
+        direction TB
+        A[fa:fa-robot Agente]
+        P{fa:fa-shield-alt Proxy}
+        D[(fa:fa-database DuckDB)]
+        H[fa:fa-user-check Comandante]
+        O[fa:fa-magic APO Optimizer]
+    end
+
+    %% Fluxo Circular
+    A -->|1. Executa Prompt| P
+    P -->|2. Registra Spans| D
+    D -->|3. Apresenta Dados| H
+    H -->|4. Atribui Recompensa| D
+    D -->|5. Treina Dataset| O
+    O -->|6. Refina Prompt| A
+
+    %% Nota Estilizada
+    Note[O erro de hoje é a sabedoria de amanhã]
+    O -.-> Note
+    Note -.-> A
+
+    %% Estilos
+    class A,O ia
+    class P,H action
+    class D core
 ```
 
 ---

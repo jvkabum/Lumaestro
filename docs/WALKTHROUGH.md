@@ -1,23 +1,83 @@
-# Walkthrough: Revitalização Estratégica do README.md 🧬✨
+---
+title: "Guia de Experiência do Comandante (Walkthrough)"
+type: "guide"
+status: "active"
+tags: ["walkthrough", "onboarding", "usage", "guide"]
+---
 
-Transformei o seu `README.md` em um documento de elite, digno de um projeto de alta engenharia cognitiva. O novo conteúdo destaca a robustez do sistema e facilita a vida de quem quer rodar ou buildar o projeto.
+# 🚶‍♂️ Guia de Experiência do Comandante (Walkthrough)
 
-## O que foi feito?
+> [!ABSTRACT]
+> Este guia detalha a jornada desde o primeiro contato com o binário do Lumaestro até a orquestração completa de enxames de agentes. Siga estes passos para dominar seu novo Córtex Cognitivo.
 
-1.  **Posicionamento de Marca**: Rebranding do Lumaestro de um simples chatbot para um **Cognitive Engine & Graph-RAG Orchestrator**.
-2.  **Destaque tecnológico**: Adicionei seções dedicadas ao **Lightning Engine (DuckDB)** e ao **Knowledge Weaving (3D Graph)**.
-3.  **Onboarding Simplificado**: Documentei os novos atalhos que criamos:
-    - `.\dev`: Para desenvolvimento com tags automáticas.
-    - `.\build`: Para gerar o executável final com a DLL inclusa.
-4.  **Estética Premium**: Mantive o uso de badges e ícones que transmitem a sensação de um software industrial estável.
+## 🗺️ Jornada de Iniciação e Maestria
 
-## Arquivos Atualizados
+Abaixo, os marcos fundamentais para configurar e operar o sistema com máxima eficiência.
 
-- **[README.md](file:///c:/git/IA/Lumaestro/README.md)**: Versão v15.0 Quantum Elite.
+```mermaid
+flowchart LR
+    %% Estilos
+    classDef start fill:#ffcc00,stroke:#333,stroke-width:4px,color:#000
+    classDef step fill:#2d333b,stroke:#6d5dfc,stroke-width:2px,color:#fff
+    classDef finish fill:#2e7d32,stroke:#fff,stroke-width:2px,color:#fff
 
-## Como Visualizar
+    BEGIN([fa:fa-play Início])
+    
+    subgraph Onboarding [Jornada de Iniciação]
+        direction LR
+        S1[fa:fa-download Clone & Setup]
+        S2[fa:fa-cogs Config chaves API]
+        S3[fa:fa-spider Scan de Workspace]
+    end
 
-Você pode ver a nova cara do seu projeto abrindo o [README.md](file:///c:/git/IA/Lumaestro/README.md) no seu editor ou diretamente no GitHub após o próximo push!
+    subgraph Operation [Operação de Elite]
+        direction LR
+        O1[fa:fa-comment Neural Chat]
+        O2[fa:fa-project-diagram Graph Navigation]
+        O3[fa:fa-terminal Agent Handoff]
+    end
+
+    END([fa:fa-check-double Maestria Alcançada])
+
+    %% Fluxo
+    BEGIN --> S1 --> S2 --> S3
+    S3 --> O1 --> O2 --> O3
+    O3 --> END
+
+    %% Estilos
+    class BEGIN start
+    class S1,S2,S3,O1,O2,O3 step
+    class END finish
+```
 
 ---
-**Lumaestro: Evoluindo a autonomia, um rastro de cada vez.** 🐹🚀🧬🏆🦾
+
+## 🛠️ Passo 1: Preparação do Terreno (Onboarding)
+
+1.  **Clone e Dependências**: Baixe o repositório e execute `npm install` na pasta frontend.
+2.  **Configuração de API**: No painel de `Settings`, insira suas chaves do Gemini, Anthropic ou OpenAI.
+3.  **Ancoragem de Workspace**: Aponte para sua pasta de notas (Obsidian) ou código-fonte. O Crawler iniciará a indexação vetorial instantaneamente.
+
+## 📡 Passo 2: Operação de Elite (Cores)
+
+1.  **Neural Chat**: Interaja com seu conhecimento. O sistema recuperará o contexto automaticamente (Graph-RAG).
+2.  **Navegação Orbital**: Use o Grafo 3D para visualizar conexões que você nunca percebeu. Clique em nós para focar a câmera e extrair insights.
+3.  **Handoff de Agentes**: Delegue tarefas complexas para o enxame. Monitore a execução via terminal interativo.
+
+---
+
+## 💎 Dicas para o Maestro
+
+- **Modo X-Ray**: No visualizador de grafos, aumente o threshold de relevância para limpar o ruído e focar apenas no "ouro semântico".
+- **Hard Stop**: Mantenha sempre um olho no dashboard financeiro para garantir que a orquestração de sub-agentes esteja dentro do orçamento de tokens.
+
+---
+
+## 🔗 Documentos Relacionados
+
+- [[DOCUMENTATION]] — A visão técnica completa.
+- [[AGENTS_GUIDE]] — Como extrair o máximo de cada agente.
+- [[DOCS_INDEX]] — Índice central de documentação.
+
+---
+**Lumaestro: Evoluindo a autonomia, um rastro de cada vez. 🐹🚀💎**

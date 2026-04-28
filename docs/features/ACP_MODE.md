@@ -1,4 +1,4 @@
-﻿---
+---
 tags:
   - security
   - agents
@@ -26,24 +26,50 @@ O ACP não é apenas um "sim ou não", mas uma sincronização de estado entre o
 5.  **Decisão Humana:** O usuário revisa o payload da ação e clica em **Aprovar** ou **Rejeitar**.
 6.  **Liberação:** O backend processa a decisão, altera o status do agente para idle (ou executa o comando) e registra o log de auditoria.
 
-`mermaid
-sequenceDiagram
-    participant A as Agente (Gemini/Claude)
-    participant B as Backend (Go)
-    participant D as DB (SQLite/DuckDB)
-    participant F as Frontend (Vue 3)
+```mermaid
+flowchart TD
+    %% Estilos
+    classDef trigger fill:#1e1e1e,stroke:#888,stroke-width:2px,stroke-dasharray: 5 5,color:#fff
+    classDef core fill:#2d333b,stroke:#6d5dfc,stroke-width:2px,color:#fff
+    classDef action fill:#455a64,stroke:#fff,stroke-width:1px,color:#fff
+    classDef warning fill:#ff9900,stroke:#333,stroke-width:2px,color:#000
+    classDef db fill:#2e7d32,stroke:#6d5dfc,stroke-width:2px,color:#fff
 
-    A->>B: Solicita Comando Sensível
-    B->>D: Cria Registro 'pending'
-    B->>D: Altera Agente para 'paused'
-    B->>F: Emite Evento 'approval:needed'
-    F->>F: Exibe ReviewBlock.vue
-    Note over F: Usuário revisa e aprova
-    F->>B: Envia ProcessApproval(id, true)
-    B->>D: Salva 'approved' + Log
-    B->>D: Altera Agente para 'idle'
-    B->>A: Libera execução do comando
-`
+    subgraph AgentSpace [Execução de IA]
+        A[fa:fa-robot Agente Gemini/Claude]
+    end
+
+    subgraph GateKeeper [Portão de Segurança Go]
+        B{fa:fa-shield-alt ACP Engine}
+        D[(fa:fa-database DB: State)]
+    end
+
+    subgraph UserSpace [Soberania Humana]
+        F[fa:fa-desktop Frontend ReviewBlock]
+        U((fa:fa-user-check DECISÃO))
+    end
+
+    %% Fluxo de Interceptação
+    A -->|1. Solicita Ação| B
+    B -->|2. Status = 'pending'| D
+    B -->|3. Agent = 'paused'| D
+    B -->|4. approval:needed| F
+    
+    F -->|5. Análise| U
+    U -- "APROVAR" --> B
+    U -- "REJEITAR" --> B
+    
+    B -->|6. Status = 'approved'| D
+    B -->|7. Agent = 'idle'| D
+    B -->|8. Release Action| A
+
+    %% Estilos
+    class A trigger
+    class B core
+    class D db
+    class F action
+    class U warning
+```
 
 ---
 
@@ -85,20 +111,35 @@ O Lumaestro suporta dois modos de aprovação, configuráveis via internal/agent
 
 ## 🕵️ Auditoria e Proveniência
 
-Todas as decisões do ACP são gravadas na tabela ctivity_logs. Isso permite que você rastreie:
+Todas as decisões do ACP são gravadas na tabela  ctivity_logs. Isso permite que você rastreie:
 - Quem pediu (Agente).
 - Quem aprovou (Usuário).
 - Quando aconteceu.
 - Qual foi a nota/justificativa da decisão.
 
-`mermaid
-graph LR
-    Log[Activity Log] --> Agent[Agente ID]
-    Log --> User[User Decision]
-    Log --> Payload[Comando Executado]
-    
-    style Log fill:#2d333b,stroke:#6d5dfc,stroke-width:2px,color:#e6edf3
-`
+```mermaid
+flowchart LR
+    %% Estilos
+    classDef core fill:#2d333b,stroke:#6d5dfc,stroke-width:2px,color:#fff
+    classDef action fill:#455a64,stroke:#fff,stroke-width:1px,color:#fff
+
+    subgraph Audit [Trilha de Proveniência]
+        direction LR
+        Log[fa:fa-history Activity Log]
+        Agent[fa:fa-fingerprint Agente ID]
+        User[fa:fa-user-check Decisão Humana]
+        Payload[fa:fa-code Comando/Código]
+    end
+
+    %% Conexões
+    Log --> Agent
+    Log --> User
+    Log --> Payload
+
+    %% Estilos
+    class Log core
+    class Agent,User,Payload action
+```
 
 ---
 

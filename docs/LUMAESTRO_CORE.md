@@ -1,4 +1,4 @@
-﻿---
+---
 tags:
   - backend
   - core
@@ -18,37 +18,45 @@ tags:
 
 O Core do Lumaestro utiliza um design onde a instância App centraliza as referências de todos os sub-sistemas, garantindo que a comunicação entre eles seja fluida e segura.
 
-`mermaid
-graph TD
-    App[App.go - Hub Soberano]
-    
-    subgraph "Lóbulos Cerebrais (Bindings)"
-        Chat[app_chat.go - Diálogo & RAG]
-        Graph[app_graph.go - Conhecimento 3D]
-        Sync[app_sync.go - Crawler & Sync]
-        Agents[app_agents.go - ACP & Sessões]
-    end
-    
-    subgraph "Motores Especialistas"
-        ACP[ACP Executor]
-        Qdrant[Qdrant Client]
-        DuckDB[Lightning Store]
-        Crawler[Obsidian Crawler]
+```mermaid
+flowchart TD
+    %% Estilos
+    classDef trigger fill:#1e1e1e,stroke:#888,stroke-width:2px,stroke-dasharray: 5 5,color:#fff
+    classDef core fill:#2d333b,stroke:#6d5dfc,stroke-width:2px,color:#fff
+    classDef action fill:#455a64,stroke:#fff,stroke-width:1px,color:#fff
+    classDef ia fill:#6d5dfc,stroke:#fff,stroke-width:2px,color:#fff
+
+    subgraph Hub [O Orquestrador Soberano]
+        App{fa:fa-crown App.go}
     end
 
-    App --> Chat
-    App --> Graph
-    App --> Sync
-    App --> Agents
+    subgraph Lobulos [Lóbulos Cerebrais: Bindings]
+        Chat[fa:fa-comment app_chat.go]
+        Graph[fa:fa-project-diagram app_graph.go]
+        Sync[fa:fa-sync app_sync.go]
+        Agents[fa:fa-users-cog app_agents.go]
+    end
+
+    subgraph Engines [Motores Especialistas]
+        ACP[fa:fa-terminal ACP Executor]
+        Qdrant[fa:fa-brain Qdrant Client]
+        DuckDB[fa:fa-database DuckDB Store]
+        Crawler[fa:fa-spider Obsidian Crawler]
+    end
+
+    %% Conexões
+    App --> Chat & Graph & Sync & Agents
     
     Chat --> ACP
     Chat --> Qdrant
     Graph --> DuckDB
     Sync --> Crawler
-    
-    style App fill:#2d333b,stroke:#6d5dfc,stroke-width:2px,color:#e6edf3
-    style ACP fill:#1c1c1c,stroke:#4facfe,stroke-width:2px,color:#e6edf3
-`
+
+    %% Estilos
+    class App core
+    class Chat,Graph,Sync,Agents action
+    class ACP,Qdrant,DuckDB,Crawler ia
+```
 
 ---
 
@@ -76,19 +84,39 @@ Responsável pela inteligência conversacional e integração com a base de conh
 
 O Core utiliza extensivamente o barramento de eventos do Wails para comunicação assíncrona (não-bloqueante).
 
-`mermaid
-sequenceDiagram
-    participant F as Frontend (Vue 3)
-    participant C as Core (Go)
-    participant E as Executor (ACP)
+```mermaid
+flowchart TD
+    %% Estilos
+    classDef trigger fill:#1e1e1e,stroke:#888,stroke-width:2px,stroke-dasharray: 5 5,color:#fff
+    classDef core fill:#2d333b,stroke:#6d5dfc,stroke-width:2px,color:#fff
+    classDef action fill:#455a64,stroke:#fff,stroke-width:1px,color:#fff
 
-    F->>C: App.SendAgentInput(msg)
-    C->>C: RAG: Busca Contexto no Grafo
-    C->>E: executor.SendInput(prompt)
-    E-->>C: Canal de Logs (LogChan)
-    C->>F: EventsEmit("agent:log", data)
-    Note over F: ChatLog atualiza em tempo real
-`
+    subgraph Front [Client Side]
+        F[fa:fa-desktop Frontend Vue 3]
+        Log[fa:fa-list-ul ChatLog Realtime]
+    end
+
+    subgraph Core [Backend Core]
+        C{fa:fa-server Go Core}
+        RAG[Navegação de Sinapses]
+    end
+
+    subgraph Executor [Deep Processing]
+        E[fa:fa-terminal ACP Executor]
+    end
+
+    %% Fluxo de Eventos
+    F -->|1. SendAgentInput| C
+    C -->|2. RAG Search| RAG
+    C -->|3. Route Prompt| E
+    E -->|4. LogChan| C
+    C -.->|5. EventsEmit 'agent:log'| Log
+
+    %% Estilos
+    class F,Log trigger
+    class C,RAG core
+    class E action
+```
 
 ---
 

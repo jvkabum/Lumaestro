@@ -1,48 +1,95 @@
-﻿# 🛠️ Guia do Desenvolvedor Lumaestro 🐹💻
+---
+title: "Guia do Desenvolvedor (Developer Guide)"
+type: "guide"
+status: "active"
+tags: ["development", "setup", "wails", "go", "vue"]
+---
 
-Este guia contém as instruções para configurar, desenvolver e manter o ecossistema Lumaestro.
+# 💻 Guia do Desenvolvedor: Manual de Engenharia de Elite
 
-## 🚀 Setup Rápido
+> [!ABSTRACT]
+> Este guia é o mapa de operações para os engenheiros do enxame. Ele detalha o setup do ambiente, o fluxo de desenvolvimento bi-direcional (Go ↔ Vue) e as diretrizes para manter a soberania técnica do projeto Lumaestro.
 
-### Pré-requisitos
-- **Go 1.21+**
-- **Node.js 20+** (npm ou pnpm)
-- **Wails CLI** (go install github.com/wailsapp/wails/v2/cmd/wails@latest)
-- **DuckDB** (Binário deve estar no PATH ou pasta deps/)
+## 🏗️ Workflow de Desenvolvimento Sincronizado
 
-### Comandos Úteis (PowerShell)
+O Lumaestro utiliza um ciclo de desenvolvimento ágil onde o backend e o frontend co-evoluem em tempo real.
 
-| Comando | Descrição |
-|---------|-----------|
-| ./dev.ps1 | Inicia o modo de desenvolvimento (Hot Reload Go + Vite). |
-| ./build.ps1 | Compila o executável final para Windows. |
-| go run scripts/setup_build_env.ps1 | Configura o ambiente de compilação. |
+```mermaid
+flowchart TD
+    %% Estilos
+    classDef step fill:#2d333b,stroke:#6d5dfc,stroke-width:2px,color:#fff
+    classDef tool fill:#455a64,stroke:#fff,stroke-width:1px,color:#fff
+    classDef finish fill:#2e7d32,stroke:#fff,stroke-width:2px,color:#fff
 
-## 📁 Estrutura do Projeto
+    subgraph Dev_Cycle [Ciclo de Desenvolvimento]
+        direction TB
+        G1[fa:fa-file-code Edit Go: internal/]
+        G2[fa:fa-terminal wails dev]
+        G3[fa:fa-magic Auto-Bindings JS]
+        G4[fa:fa-code Edit Vue: frontend/]
+    end
 
-- /internal/core: O coração da aplicação (App struct e binding Wails).
-- /internal/lightning: Motor de otimização de prompts e telemetria.
-- /internal/orchestration: Lógica de enxame, orçamentos e handoff.
-- /frontend/src: Interface Vue 3 com Tailwind e Glassmorphism.
-- /docs: Base de conhecimento (Grounding do RAG).
+    subgraph Build_Process [Pipeline de Entrega]
+        direction TB
+        B1[fa:fa-hammer build.ps1]
+        B2[fa:fa-box-open Single Binary EXE]
+    end
 
-## 🛠️ Adicionando Novos Métodos (Go -> Frontend)
+    %% Conexões
+    G1 --> G2
+    G2 --> G3
+    G3 --> G4
+    G4 --> G1
+    
+    G4 --> B1
+    B1 --> B2
 
-1. Adicione o método no arquivo apropriado em internal/core/ (ex: pp_tools.go).
-2. O método deve ser exportado (letra maiúscula) e pertencer à struct App.
-3. Execute wails dev para gerar os bindings automáticos em rontend/wailsjs/go/.
-
-## 🧪 Testes e Validação
-
-Para rodar testes do motor de grafos:
-`powershell
-go test ./internal/rag/graph_engine_test.go
-`
-
-## 📝 Documentação
-Sempre que adicionar uma nova funcionalidade no backend:
-1. Atualize o docs/api/BACKEND_METHODS.md.
-2. Verifique se há necessidade de uma nova página na pasta docs/architecture/.
+    %% Estilos
+    class G1,G2,G3,G4 step
+    class B1 tool
+    class B2 finish
+```
 
 ---
-[[INDEX|⬅️ Voltar ao Índice]]
+
+## 🚀 Setup do Ambiente (Grounding)
+
+### Pré-requisitos Mandatórios
+- **Go 1.21+**: Motor de performance.
+- **Node.js 20+**: Ecossistema de interface.
+- **Wails CLI**: `go install github.com/wailsapp/wails/v2/cmd/wails@latest`.
+- **DuckDB**: O binário analítico deve estar acessível na pasta `deps/` ou no PATH do sistema.
+
+### Comandos de Poder (PowerShell)
+| Comando | Efeito |
+| :--- | :--- |
+| `./dev.ps1` | Inicia o Hot Reload total (Go + Vite). Ideal para iterações rápidas. |
+| `./build.ps1` | Compila a versão de produção, embutindo todos os assets e dependências. |
+| `go run scripts/setup_build_env.ps1` | Prepara o ambiente isolado para compilação limpa. |
+
+---
+
+## 🛠️ Extensibilidade: Criando Novas Conexões
+
+### 1. Adicionando Métodos RPC (Go → JS)
+- Localize o arquivo apropriado em `internal/core/` (ex: `app_tools.go`).
+- Defina o método na struct `App` com a primeira letra maiúscula.
+- O Wails detectará a mudança e gerará automaticamente o binding em `frontend/wailsjs/go/`.
+
+### 2. Ciclo de Testes
+Sempre valide as alterações no motor de grafos e RAG antes de comitar:
+```powershell
+go test ./internal/rag/...
+```
+
+---
+
+## 🔗 Documentos Relacionados
+
+- [[BACKEND_METHODS]] — Lista completa de funções disponíveis para o frontend.
+- [[LUMAESTRO_CORE]] — Entenda a raiz do orquestrador.
+- [[FRONTEND_GUIDE]] — Convenções de UI e State Management (Pinia).
+- [[DOCS_INDEX]] — Índice central de documentação.
+
+---
+**Lumaestro: Código que constrói o futuro da inteligência. 💻⚙️💎**

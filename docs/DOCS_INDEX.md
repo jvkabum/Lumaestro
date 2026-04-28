@@ -1,96 +1,111 @@
 # 📚 Lumaestro: Índice de Documentação 🐹⚙️⚡🕸️🧠🏎️🤖💰🏁🛡️🧪
 
-> Navegue por toda a inteligência documentada do Lumaestro. Cada arquivo abaixo é um nó no grafo de conhecimento do projeto.
+> Navegue por toda a inteligência documentada do Lumaestro. Cada arquivo abaixo é um nó no grafo de conhecimento do projeto, agora organizados por setores de especialização.
 
 ---
 
 ## 🗺️ Mapa de Documentos
 
-```
-                    ┌─────────────┐
-                    │  README.md  │ ← Porta de Entrada
-                    └──────┬──────┘
-                           │
-                    ┌──────┴──────┐
-                    │ DOCS_INDEX  │ ← Você está aqui
-                    └──────┬──────┘
-           ┌───────────────┼───────────────┐
-           │               │               │
-    ┌──────┴──────┐ ┌──────┴──────┐ ┌──────┴──────┐
-    │  BACKEND    │ │  FRONTEND   │ │ INTELIGÊNCIA│
-    └──────┬──────┘ └──────┬──────┘ └──────┬──────┘
-           │               │               │
-   ┌───────┼────┐      ┌───┘         ┌─────┼─────┐
-   │       │    │      │             │     │     │
-WAILS  AGENTS  RAG  FRONTEND    NEURAL LIGHTNING SINFONIA
-BRIDGE GUIDE  FLOW  STACK       BRAIN  ENGINE
-```
-
----
-
-## 📖 Backend & Infraestrutura
-
-| Documento | Descrição | Links Relacionados |
-|---|---|---|
-| [DOCUMENTATION.md](./DOCUMENTATION.md) | Visão geral da arquitetura, instalação e setup | [WAILS_BRIDGE](./WAILS_BRIDGE.md), [FRONTEND_STACK](./FRONTEND_STACK.md) |
-| [LUMAESTRO_CORE.md](./LUMAESTRO_CORE.md) | Fundamentos técnicos do orquestrador | [DOCUMENTATION](./DOCUMENTATION.md), [RAG_FLOW](./RAG_FLOW.md) |
-| [WAILS_BRIDGE.md](./WAILS_BRIDGE.md) | Ponte Go ↔ Vue.js (Bindings & Eventos) | [DOCUMENTATION](./DOCUMENTATION.md), [FRONTEND_STACK](./FRONTEND_STACK.md) |
-| [AGENTS_GUIDE.md](./AGENTS_GUIDE.md) | Arquitetura ACP e controle de agentes | [LIGHTNING_ENGINE](./LIGHTNING_ENGINE.md), [WAILS_BRIDGE](./WAILS_BRIDGE.md) |
-| [MULTI_AGENT_SYSTEM.md](./MULTI_AGENT_SYSTEM.md) | Sistema de Enxame (Swarm), Handoff e Budget | [AGENTS_GUIDE](./AGENTS_GUIDE.md), [LIGHTNING_ENGINE](./LIGHTNING_ENGINE.md) |
-
-## 🎨 Frontend & Visualização
-
-| Documento | Descrição | Links Relacionados |
-|---|---|---|
-| [FRONTEND_GUIDE.md](./FRONTEND_GUIDE.md) | **Guia Mestre de UI, Componentes e Wails Bridge** | [WAILS_BRIDGE](./WAILS_BRIDGE.md), [FRONTEND_STACK](./FRONTEND_STACK.md) |
-| [FRONTEND_STACK.md](./FRONTEND_STACK.md) | Vue 3, D3.js, Xterm.js, Vite | [WAILS_BRIDGE](./WAILS_BRIDGE.md), [NEURAL_BRAIN](./NEURAL_BRAIN.md) |
-| [RENDER_ENGINE_3D.md](./RENDER_ENGINE_3D.md) | Motor Deck.gl, Shaders GLSL, Física e Zoom Cinematográfico | [NEURAL_BRAIN](./NEURAL_BRAIN.md), [FRONTEND_STACK](./FRONTEND_STACK.md) |
-| [NEURAL_BRAIN.md](./NEURAL_BRAIN.md) | Dashboard 3D, PageRank, X-Ray, Recon | [RAG_FLOW](./RAG_FLOW.md), [LIGHTNING_ENGINE](./LIGHTNING_ENGINE.md) |
-
-## 🧠 Inteligência & Aprendizado
-
-| Documento | Descrição | Links Relacionados |
-|---|---|---|
-| [RAG_FLOW.md](./RAG_FLOW.md) | Crawler → Embeddings → Qdrant → Chat | [NEURAL_BRAIN](./NEURAL_BRAIN.md), [DOCUMENTATION](./DOCUMENTATION.md) |
-| [MODEL_PROVIDER_MATRIX.md](./MODEL_PROVIDER_MATRIX.md) | Matriz de dependências Gemini e plano de troca por Claude/LM Studio | [RAG_FLOW](./RAG_FLOW.md), [LIGHTNING_ENGINE](./LIGHTNING_ENGINE.md) |
-| [LIGHTNING_ENGINE.md](./LIGHTNING_ENGINE.md) | DuckDB, APO Beam Search, RLHF, Custos | [RAG_FLOW](./RAG_FLOW.md), [AGENTS_GUIDE](./AGENTS_GUIDE.md) |
-| [DUCKDB_ENGINE.md](./DUCKDB_ENGINE.md) | Schema de grafos, busca textual e persistência 3D | [LIGHTNING_ENGINE](./LIGHTNING_ENGINE.md), [SEMANTIC_NAVIGATOR](./SEMANTIC_NAVIGATOR.md) |
-| [SEMANTIC_NAVIGATOR.md](./SEMANTIC_NAVIGATOR.md) | Navegador de Trajetória Semântica (4 fases) | [RAG_FLOW](./RAG_FLOW.md), [RENDER_ENGINE_3D](./RENDER_ENGINE_3D.md) |
-| [GEMINI.md](./GEMINI.md) | Configuração de comunicação e idioma | [AGENTS_GUIDE](./AGENTS_GUIDE.md) |
-
-## 📜 Histórico
-
-| Documento | Descrição | Links Relacionados |
-|---|---|---|
-| [SINFONIA.md](./SINFONIA.md) | Marcos evolutivos do projeto | [NEURAL_BRAIN](./NEURAL_BRAIN.md), [DOCUMENTATION](./DOCUMENTATION.md) |
-
----
-
-## 🔗 Grafo de Dependências
-
 ```mermaid
-graph LR
-    README --> DOCS_INDEX
-    DOCS_INDEX --> DOCUMENTATION
-    DOCS_INDEX --> NEURAL_BRAIN
-    DOCS_INDEX --> LIGHTNING_ENGINE
-    DOCUMENTATION --> WAILS_BRIDGE
-    DOCUMENTATION --> FRONTEND_GUIDE
-    WAILS_BRIDGE --> FRONTEND_GUIDE
-    FRONTEND_GUIDE --> FRONTEND_STACK
-    AGENTS_GUIDE --> LIGHTNING_ENGINE
-    AGENTS_GUIDE --> WAILS_BRIDGE
-    RAG_FLOW --> NEURAL_BRAIN
-    LIGHTNING_ENGINE --> RAG_FLOW
-    NEURAL_BRAIN --> FRONTEND_STACK
-    SINFONIA --> NEURAL_BRAIN
-    SEMANTIC_NAVIGATOR --> RAG_FLOW
-    SEMANTIC_NAVIGATOR --> RENDER_ENGINE_3D
-    RENDER_ENGINE_3D --> NEURAL_BRAIN
-    RENDER_ENGINE_3D --> FRONTEND_STACK
-    DUCKDB_ENGINE --> LIGHTNING_ENGINE
-    DUCKDB_ENGINE --> SEMANTIC_NAVIGATOR
+flowchart TD
+    %% Estilos
+    classDef root fill:#ffcc00,stroke:#333,stroke-width:4px,color:#000
+    classDef category fill:#2d333b,stroke:#6d5dfc,stroke-width:2px,color:#fff
+    classDef doc fill:#1e1e1e,stroke:#888,stroke-width:1px,color:#fff
+
+    R([fa:fa-home INDEX.md]) --> IDX{fa:fa-list DOCS_INDEX}
+
+    IDX --> BE[fa:fa-server Backend & Infra]
+    IDX --> FE[fa:fa-palette Frontend & Visual]
+    IDX --> AI[fa:fa-brain Inteligência]
+
+    BE --> CORE[LUMAESTRO_CORE]
+    BE --> BRIDGE[WAILS_BRIDGE]
+    BE --> AGENTS[SWARM_ORCHESTRATION]
+
+    FE --> GUI[FRONTEND_GUIDE]
+    FE --> STACK[FRONTEND_STACK]
+    FE --> RENDER[RENDER_ENGINE_3D]
+
+    AI --> RAG[CONTEXT_FLOW_RAG]
+    AI --> LIGHT[LIGHTNING_CORE]
+    AI --> ONT[NEURO_SYMBOLIC_ONTOLOGY]
+
+    %% Estilos
+    class R root
+    class IDX,BE,FE,AI category
+    class CORE,BRIDGE,AGENTS,GUI,STACK,RENDER,RAG,LIGHT,ONT doc
 ```
 
 ---
-**Lumaestro: Conhecimento conectado, documentação viva. 🐹⚙️⚡🕸️🧠🏎️🤖💰🏁🛡️🧪**
+
+## 🏛️ 1. Raiz (Portais de Entrada)
+
+| Documento | Descrição |
+| :--- | :--- |
+| [INDEX.md](./INDEX.md) | O Hub de Conhecimento de Elite. |
+| [DOCUMENTATION.md](./DOCUMENTATION.md) | Guia mestre de arquitetura global. |
+| [GAP_ANALYSIS.md](./GAP_ANALYSIS.md) | Matriz de paridade Gemini CLI vs Lumaestro. |
+| [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) | Plano de missões e metas ativas. |
+| [walkthrough.md](./walkthrough.md) | Jornada de iniciação do Comandante. |
+| [tasks.md](./tasks.md) | Painel de controle de missões (Mission Control). |
+| [SINFONIA.md](./SINFONIA.md) | Crônicas e marcos evolutivos do projeto. |
+
+---
+
+## 🏗️ 2. Arquitetura (`/architecture`)
+
+| Documento | Descrição |
+| :--- | :--- |
+| [LUMAESTRO_CORE.md](./architecture/LUMAESTRO_CORE.md) | O Córtex Central e orquestrador Go. |
+| [LIGHTNING_CORE.md](./architecture/LIGHTNING_CORE.md) | Motor de auto-evolução (APO & Regression). |
+| [CONTEXT_FLOW_RAG.md](./architecture/CONTEXT_FLOW_RAG.md) | Fluxo celestial de RAG e Contexto. |
+| [DATABASE_SCHEMA.md](./architecture/DATABASE_SCHEMA.md) | Pulmão Duplo (SQLite/DuckDB). |
+| [SWARM_ORCHESTRATION.md](./architecture/SWARM_ORCHESTRATION.md) | Governança de Enxame e Protocolos de Handoff. |
+| [DUCKDB_ENGINE.md](./architecture/DUCKDB_ENGINE.md) | Motor de análise colunar e telemetria. |
+| [FRONTEND_STACK.md](./architecture/FRONTEND_STACK.md) | Tecnologias e padrões de UI. |
+| [RENDER_ENGINE_3D.md](./architecture/RENDER_ENGINE_3D.md) | Motor Deck.gl e visualização de grafos. |
+| [WAILS_BRIDGE.md](./architecture/WAILS_BRIDGE.md) | Ponte RPC entre Go e Frontend. |
+| [SKILLS_SYSTEM.md](./architecture/SKILLS_SYSTEM.md) | Arquitetura do motor de habilidades. |
+
+---
+
+## 🧠 3. Funcionalidades (`/features`)
+
+| Documento | Descrição |
+| :--- | :--- |
+| [ACP_MODE.md](./features/ACP_MODE.md) | Protocolo de Comunicação de Agente (Identity). |
+| [PROVENANCE_AND_AUDIT.md](./features/PROVENANCE_AND_AUDIT.md) | Linhagem de dados e soberania. |
+| [NEURO_SYMBOLIC_ONTOLOGY.md](./features/NEURO_SYMBOLIC_ONTOLOGY.md) | O Truth Engine e extração de triplas. |
+| [SEMANTIC_NAVIGATOR.md](./features/SEMANTIC_NAVIGATOR.md) | Trajetórias de navegação no grafo. |
+
+---
+
+## 📖 4. Guias e Manuais (`/guide`)
+
+| Documento | Descrição |
+| :--- | :--- |
+| [DEVELOPER_GUIDE.md](./guide/DEVELOPER_GUIDE.md) | Manual de engenharia e setup. |
+| [FINE_TUNING_RLHF.md](./guide/FINE_TUNING_RLHF.md) | Curadoria de inteligência e treino. |
+| [SKILLS_DEVELOPMENT.md](./guide/SKILLS_DEVELOPMENT.md) | Como criar e injetar novas habilidades. |
+| [CONFLICT_RESOLUTION.md](./guide/CONFLICT_RESOLUTION.md) | Resolução de conflitos semânticos. |
+| [AGENTS_GUIDE.md](./guide/AGENTS_GUIDE.md) | Manual de uso do enxame de agentes. |
+| [FRONTEND_GUIDE.md](./guide/FRONTEND_GUIDE.md) | Padrões de design e componentes Vue. |
+| [GEMINI.md](./guide/GEMINI.md) | Guia de identidade e configuração de IA. |
+| [NODE_GENESIS.md](./guide/NODE_GENESIS.md) | Manual de criação e evolução de nós. |
+
+---
+
+## 📊 5. Relatórios (`/reports`)
+
+| Documento | Descrição |
+| :--- | :--- |
+| [BUG_REPORT_EXECUTIVE_SUMMARY.md](./reports/BUG_REPORT_EXECUTIVE_SUMMARY.md) | Análise de falhas críticas passadas. |
+| [README_PLAN_LEGACY.md](./reports/README_PLAN_LEGACY.md) | Histórico de planos de implementação antigos. |
+
+---
+
+[[INDEX|⬅️ Voltar ao Hub Central]]
+
+---
+**Lumaestro: Conhecimento conectado, documentação viva. 🐹⚙️💎**

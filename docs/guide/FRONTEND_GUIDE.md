@@ -1,4 +1,4 @@
-﻿---
+---
 tags:
   - frontend
   - vue3
@@ -19,39 +19,48 @@ tags:
 
 A interface é dividida em três áreas principais: a **Sidebar** (Navegação), a **Graph Area** (Visualização Espacial) e a **Chat Area** (Interação Cognitiva).
 
-`mermaid
-graph TD
-    subgraph "Interface Lumaestro (Vue 3)"
-        App[App.vue - Orquestrador Raiz]
-        
-        subgraph "Navegação"
-            Sidebar[HistorySidebar.vue]
-            Nav[Sidebar.vue]
-        end
-        
-        subgraph "Visualização Espacial"
-            Graph[GraphVisualizer.vue]
-            XRay[X-Ray Controls]
-            Health[Graph Health HUD]
-        end
-        
-        subgraph "Interação Cognitiva"
-            Chat[ChatPanel.vue]
-            Terminal[TerminalView.vue - Xterm.js]
-            Review[ReviewBlock.vue - ACP]
-        end
+```mermaid
+flowchart TD
+    %% Estilos
+    classDef core fill:#2d333b,stroke:#6d5dfc,stroke-width:2px,color:#fff
+    classDef vis fill:#9c27b0,stroke:#6d5dfc,stroke-width:2px,color:#fff
+    classDef chat fill:#2e7d32,stroke:#6d5dfc,stroke-width:2px,color:#fff
+    classDef nav fill:#455a64,stroke:#6d5dfc,stroke-width:1px,color:#fff
+
+    subgraph AppRoot [Orquestrador Raiz]
+        App([fa:fa-home App.vue])
     end
 
-    App --> Nav
-    App --> Graph
-    App --> Chat
-    Chat --> Terminal
-    Chat --> Review
+    subgraph NavArea [Navegação e Histórico]
+        Nav[fa:fa-bars Sidebar.vue]
+        Hist[fa:fa-history HistorySidebar.vue]
+    end
+
+    subgraph VisualArea [Visualização Espacial]
+        Graph[fa:fa-project-diagram GraphVisualizer.vue]
+        XRay[fa:fa-x-ray X-Ray Controls]
+        Health[fa:fa-heartbeat Graph Health HUD]
+    end
+
+    subgraph InterationArea [Interação Cognitiva]
+        Chat[fa:fa-comment-dots ChatPanel.vue]
+        Term[fa:fa-terminal TerminalView.vue]
+        Review[fa:fa-shield-alt ReviewBlock.vue]
+    end
+
+    %% Conexões
+    App --> NavArea
+    App --> VisualArea
+    App --> InterationArea
     
-    style App fill:#2d333b,stroke:#6d5dfc,stroke-width:2px,color:#e6edf3
-    style Graph fill:#1c1c1c,stroke:#4facfe,stroke-width:2px,color:#e6edf3
-    style Chat fill:#1c1c1c,stroke:#00e676,stroke-width:2px,color:#e6edf3
-`
+    Chat --> Term & Review
+
+    %% Estilos
+    class App core
+    class Nav,Hist nav
+    class Graph,XRay,Health vis
+    class Chat,Term,Review chat
+```
 
 ---
 
@@ -71,25 +80,41 @@ graph TD
 
 O Lumaestro utiliza eventos assíncronos para manter a interface sincronizada com o "pensamento" da IA no backend.
 
-`mermaid
-sequenceDiagram
-    participant B as Backend (Go)
-    participant W as Wails Runtime (IPC)
-    participant F as Frontend (Vue/Pinia)
+```mermaid
+flowchart LR
+    %% Estilos
+    classDef be fill:#2d333b,stroke:#6d5dfc,color:#fff
+    classDef bridge fill:#455a64,stroke:#fff,stroke-dasharray: 5 5,color:#fff
+    classDef fe fill:#9c27b0,stroke:#6d5dfc,color:#fff
 
-    Note over B,F: Ciclo de Vida de um Log de Agente
-    B->>W: EventsEmit("agent:log", data)
-    W->>F: onMounted: EventsOn("agent:log")
-    F->>F: Pinia Store Update
-    F->>F: ChatLog.vue Re-render
-    
-    Note over F,B: Comando de Usuário
-    F->>W: orchestrator.sendInput(agent, text)
-    W->>B: Call Go Method (App.SendInput)
-    B-->>F: Resposta Assíncrona via Eventos
-    
-    linkStyle 0,1 stroke:#6d5dfc,stroke-width:2px;
-`
+    subgraph Backend [Go Core]
+        B[fa:fa-server Go Backend]
+    end
+
+    subgraph Bridge [Wails IPC]
+        W{fa:fa-bridge EventBridge}
+    end
+
+    subgraph Frontend [Vue 3 / Pinia]
+        F[fa:fa-desktop Frontend UI]
+        P[(Pinia Store)]
+    end
+
+    %% Ciclo de Vida: Log do Agente
+    B -->|1. EventsEmit 'agent:log'| W
+    W -->|2. EventsOn| F
+    F -->|3. Update| P
+    P -->|4. Re-render| F
+
+    %% Ciclo de Vida: Comando
+    F -->|5. Call Method| W
+    W -->|6. Go Binding| B
+
+    %% Estilos
+    class B be
+    class W bridge
+    class F,P fe
+```
 
 ---
 

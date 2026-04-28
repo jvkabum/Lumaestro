@@ -1,96 +1,87 @@
-﻿---
-tags: [ai, fine-tuning, rlhf, lightning, training]
-type: guide
-status: active
+---
+title: "Manual de Fine-Tuning & RLHF (Lightning Engine)"
+type: "guide"
+status: "active"
+tags: ["ai", "fine-tuning", "rlhf", "lightning", "training", "dataset"]
 ---
 
-# 🧠 Manual de Elite: Fine-Tuning & RLHF (Lightning Engine)
+# 🧪 Lightning: Manual de Curadoria de Inteligência (RLHF)
 
-O sistema de **Fine-Tuning** do Lumaestro não é apenas uma exportação de dados; é um processo de **Curadoria de Inteligência** baseado em **RLHF (Reinforcement Learning from Human Feedback)**. Este documento detalha o fluxo técnico desde a interação do usuário até a geração do dataset de treino.
+> [!ABSTRACT]
+> O sistema de **Fine-Tuning** do Lumaestro não é uma simples exportação de logs. É um processo de **Curadoria de Inteligência** baseado em **RLHF (Reinforcement Learning from Human Feedback)**. Transformamos suas interações diárias em "Amostras de Ouro" (Gold Samples) para treinar modelos locais especializados e soberanos.
 
-## 🏗️ 1. O Ciclo de Vida do Dado de Treino
+## 🔄 O Ciclo da Dopamina Digital (Feedback Loop)
 
-No Lumaestro, os dados para ajuste fino são gerados organicamente através do uso do sistema. Cada interação passa por um filtro de qualidade antes de ser considerada uma "Amostra de Ouro" (Gold Sample).
+Abaixo, o fluxo técnico que converte a aprovação do Comandante em dados de treinamento de alta fidelidade.
 
-`mermaid
-sequenceDiagram
-    participant U as Usuário
-    participant A as Agente
-    participant ACP as Portão ACP
-    participant DB as DuckDB (Lightning)
-    participant EXP as Exportador Dataset
+```mermaid
+flowchart TD
+    %% Estilos
+    classDef trigger fill:#1e1e1e,stroke:#888,stroke-width:2px,stroke-dasharray: 5 5,color:#fff
+    classDef core fill:#2d333b,stroke:#6d5dfc,stroke-width:2px,color:#fff
+    classDef ia fill:#6d5dfc,stroke:#fff,stroke-width:2px,color:#fff
+    classDef gold fill:#ffcc00,stroke:#333,stroke-width:2px,color:#000
 
-    U->>A: Solicita Tarefa Complexa
-    A->>ACP: Propõe Ação (Tool Call)
-    ACP->>U: Solicita Aprovação
-    U->>ACP: Aprova Ação
-    ACP->>DB: Registra Reward (+1.0) & Gold Sample
-    Note over DB: O dado é marcado como 'Curado'
-    EXP->>DB: Filtra Amostras com Reward > 0.8
-    EXP->>U: Gera dataset_lumaestro_rlhf.jsonl
-`
+    subgraph Operation [Operação Orgânica]
+        U[fa:fa-user-check Feedback Humano]
+        ACP{fa:fa-shield-alt Portão ACP}
+    end
 
----
+    subgraph Curation [Curadoria de Elite]
+        RE[fa:fa-award Reward Engine]
+        DB[(fa:fa-database DuckDB: Gold Samples)]
+    end
 
-## 🛠️ 2. Arquitetura Interna (Lightning Core)
+    subgraph Distillation [Destilação e Treino]
+        EXP[fa:fa-file-export Exportador JSONL]
+        FT[fa:fa-brain Fine-Tuning SLMs]
+    end
 
-O motor que sustenta o Fine-Tuning reside em internal/lightning/.
+    %% Fluxo de Inteligência
+    U -->|Aprovação| ACP
+    ACP -->|Reward +1.0| RE
+    RE -->|Score > 0.8| DB
+    DB --> EXP
+    EXP --> FT
 
-### Recompensas de Treinamento (eward_engine.go)
-Diferente de logs comuns, o sistema utiliza o RewardEngine para atribuir "Dopamina Digital". Somente interações com alta recompensa são elegíveis para o Fine-Tuning.
-
-> [!TIP]
-> O threshold padrão para elegibilidade de treino é **0.8**. Interações abaixo disso são consideradas "em aprendizado" e não devem poluir o dataset de ajuste fino.
-
-### Otimização de Prompts (optimization.go)
-Antes de um treino de pesos (SFT), o sistema realiza um **"Fine-Tuning de Instruções"**. O otimizador busca falhas no DuckDB e refina os prompts dos agentes para evitar reincidência de erros.
-
----
-
-## 📦 3. Geração e Exportação do Dataset
-
-Ao utilizar o comando de exportação no Dashboard, o Lumaestro executa uma query OLAP no DuckDB para consolidar as conversas aprovadas.
-
-### Formato Conversacional (SFT):
-O arquivo dataset_lumaestro_rlhf.jsonl segue o padrão messages da OpenAI/Google:
-
-`json
-{
-  "messages": [
-    {"role": "system", "content": "Você é o Maestro Coder..."},
-    {"role": "user", "content": "Corrija o bug no main.go"},
-    {"role": "assistant", "content": "Entendido. Analisando o código...", "weight": 1},
-    {"role": "assistant", "content": "<thought>...</thought>Arquivo corrigido.", "weight": 1}
-  ]
-}
-`
+    %% Estilos
+    class U trigger
+    class ACP,RE ia
+    class DB gold
+    class EXP,FT core
+```
 
 ---
 
-## 🚀 4. Treinando Modelos Externos
+## 🏗️ Arquitetura de Curadoria (Lightning Core)
 
-Com o dataset em mãos, você pode herdar a inteligência do Lumaestro em modelos menores (SLMs) ou modelos de fronteira:
+O motor de treinamento reside em `internal/lightning/` e opera sob regras de qualidade estritas:
 
-1.  **Unsloth/Axolotl**: Ideal para modelos como **Llama-3-8B** ou **Mistral**.
-2.  **Google Vertex AI**: Utilize para fazer o fine-tuning do **Gemini 1.5 Flash**, tornando-o um especialista no seu codebase.
-3.  **OpenAI Fine-Tuning**: Compatível com o formato .jsonl gerado.
+### 1. Reward Engine (`reward_engine.go`)
+Diferente de logs tradicionais, o sistema atribui uma pontuação de recompensa a cada interação. Somente interações com **Recompensa > 0.8** são elegíveis para o dataset de ouro. Isso evita "alucinações" ou caminhos ineficientes no treino.
 
-`mermaid
-graph LR
-    L[Lumaestro Data] -->|Export| DS[Dataset .jsonl]
-    DS -->|SFT Training| M1[Llama-3 Fine-tuned]
-    DS -->|Distillation| M2[Gemini 1.5 Flash FT]
-    
-    style L fill:#2d333b,stroke:#6d5dfc,color:#e6edf3
-    style DS fill:#1e1e2e,stroke:#313244,color:#cdd6f4
-`
+### 2. Otimização de Prompts (`optimization.go`)
+Antes de exportar para treino de pesos (SFT), o Lumaestro realiza um fine-tuning de instruções. O otimizador analisa falhas passadas no DuckDB e refina os prompts dos agentes para garantir que o dataset gerado reflita a melhor versão do raciocínio sistêmico.
 
 ---
 
-## 🔗 Veja Também
-- [[LIGHTNING_REINFORCEMENT_LEARNING]]: Detalhes sobre o motor de recompensas.
-- [[ACP_MODE]]: Como o feedback humano é coletado.
-- [[DATABASE_SCHEMA]]: Estrutura das tabelas de telemetria no DuckDB.
+## 📦 Geração e Destilação do Dataset
 
-> [!IMPORTANT]
-> O Fine-tuning é a fase final da evolução do seu sistema. Use-o para reduzir custos e latência, transferindo o conhecimento dos modelos maiores para modelos locais especializados.
+O exportador executa queries analíticas no DuckDB para consolidar as conversas curadas no padrão conversacional (`JSONL`).
+
+### Destilação para Modelos Locais (SLMs)
+Com o dataset `dataset_lumaestro_rlhf.jsonl`, você pode treinar modelos menores e mais rápidos:
+- **Unsloth / Axolotl**: Ideal para **Llama-3-8B** ou **Mistral**, criando especialistas locais no seu codebase.
+- **Google Vertex AI**: Fine-tuning do **Gemini 1.5 Flash** para que ele se torne um maestro da sua arquitetura específica.
+
+---
+
+## 🔗 Documentos Relacionados
+
+- [[LIGHTNING_REINFORCEMENT_LEARNING]] — A teoria por trás do motor de recompensas.
+- [[DATABASE_SCHEMA]] — Como as Gold Samples são persistidas.
+- [[ACP_MODE]] — O papel da soberania humana na coleta de feedback.
+- [[DOCS_INDEX]] — Índice central de documentação.
+
+---
+**Lumaestro: Transformando experiência em inteligência soberana. 🧪🧪💎**

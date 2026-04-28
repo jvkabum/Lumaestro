@@ -1,78 +1,88 @@
-﻿# 🐝 Orquestração do Enxame (Swarm Orchestration) 🏗️⚙️
+---
+title: "Orquestração do Enxame (Swarm Orchestration)"
+type: "architecture"
+status: "active"
+tags: ["swarm", "orchestration", "budget", "handoff", "governance"]
+---
 
-A orquestração no Lumaestro não é apenas uma fila de mensagens; é um sistema de **governança corporativa para agentes**. O enxame opera sob um modelo de delegação de tarefas baseado em tickets, inspirado em metodologias como Agile/Linear.
+# 🐝 Orquestração do Enxame: Governança Corporativa de IA
 
-## 🔄 Fluxo de Trabalho do Agente
+> [!ABSTRACT]
+> A orquestração no Lumaestro transcende filas de mensagens simples; ela implementa um modelo de **Governança Corporativa para Agentes**. Baseado em delegação por tickets (Agile/Linear), o enxame opera com responsabilidade financeira e trilhas de auditoria imutáveis.
 
-O ciclo de vida de uma tarefa no enxame segue um caminho rigoroso de auditoria e responsabilidade.
+## 🔄 Fluxo de Trabalho e Delegação (Handoff)
 
-`mermaid
-graph TD
-    %% Estilo Dark Mode
-    classDef default fill:#2d333b,stroke:#6d5dfc,color:#e6edf3;
-    
-    A[Usuário/Sistema] -->|Cria Issue| B(Backlog/Todo)
-    B -->|Assignee Assigned| C{Agente Disponível?}
-    C -->|Sim| D[Agente Inicia Execução]
-    C -->|Não| E[Fila de Espera]
-    D -->|Precisa de Ajuda| F[DelegateTask]
-    F -->|Cria Sub-Issue| B
-    D -->|Finaliza| G[Status: DONE]
-    G -->|Trigger| H[Notifica Criador/Pai]
-    
-    subgraph Auditoria
-        I[ActivityLog]
-        J[CostEvent]
-        K[IssueComment]
+O ciclo de vida de uma tarefa no enxame é gerido por um motor de estado que garante que nenhuma instrução seja perdida.
+
+```mermaid
+flowchart TD
+    %% Estilos
+    classDef agent fill:#2d333b,stroke:#6d5dfc,stroke-width:2px,color:#fff
+    classDef budget fill:#c62828,stroke:#fff,stroke-width:2px,color:#fff
+    classDef flow fill:#455a64,stroke:#fff,stroke-width:1px,color:#fff
+    classDef trigger fill:#ffcc00,stroke:#333,stroke-width:2px,color:#000
+
+    subgraph Task_Flow [Ciclo de Vida da Tarefa]
+        direction TB
+        T1([fa:fa-plus-circle Nova Issue])
+        Q{fa:fa-users Agente Disponível?}
+        E[fa:fa-running Execução do Enxame]
+        D{fa:fa-exchange-alt DelegateTask?}
+        DONE([fa:fa-check-double Status: DONE])
     end
-    
-    D -.-> I
-    D -.-> J
-    D -.-> K
-`
 
-## 🤝 O Mecanismo de Handoff
-
-O arquivo internal/orchestration/handoff.go implementa a função DelegateTask, que permite que um agente "passe o bastão".
-
-> [!TIP]
-> **Handoff Assíncrono:** No Lumaestro, quando o Agente A delega para o Agente B, o Agente A pode entrar em estado paused ou continuar outras tarefas, enquanto o Agente B recebe uma nova Issue em sua fila.
-
-### Componentes Chave:
-- **DelegateTask**: Cria uma nova tarefa vinculada à tarefa pai (ParentID).
-- **Timeline de Auditoria**: Cada delegação gera automaticamente um IssueComment e um ActivityLog.
-- **Status Heartbeat**: O sistema monitora a saúde do agente durante a execução através de HeartbeatRun.
-
-## 💰 Governança de Custo e Orçamento (Hard Stop)
-
-Diferente de sistemas de chat simples, o Lumaestro impõe limites financeiros aos agentes através do RegistrarCusto.
-
-| Campo | Descrição |
-|-------|-----------|
-| BudgetMonthlyCents | O limite máximo que o agente pode gastar por mês (em centavos). |
-| SpentMonthlyCents | O total acumulado de gastos via CostEvent. |
-| Status: PAUSED | Estado automático ("Hard Stop") se o orçamento for excedido. |
-
-`mermaid
-sequenceDiagram
-    participant A as Agente
-    participant O as Orchestrator
-    participant DB as DuckDB
-    
-    A->>O: Executa Chamada LLM
-    O->>A: Retorna Resposta + Tokens
-    O->>O: RegistrarCusto()
-    O->>DB: Update SpentMonthlyCents
-    alt Gasto >= Limite
-        O->>DB: Status = 'paused'
-        O->>DB: Log Activity: out_of_budget
+    subgraph Safety_Gate [Governança Financeira]
+        direction TB
+        C[fa:fa-coins RegistrarCusto]
+        LIMIT{fa:fa-hand-paper Budget Limit?}
+        STOP[fa:fa-stop-circle Hard Stop: PAUSED]
     end
-`
 
-## 📂 Arquivos Relacionados
-- internal/orchestration/handoff.go: Lógica de delegação.
-- internal/orchestration/budget.go: Controle financeiro e Hard Stop.
-- internal/db/schema.go: Estrutura de dados das Issues e Agentes.
+    %% Conexões
+    T1 --> Q
+    Q -- "Sim" --> E
+    E --> D
+    D -- "Sim" --> T1
+    D -- "Não" --> DONE
+    
+    E -.->|Telemetria| C
+    C --> LIMIT
+    LIMIT -- "Excedido" --> STOP
+    STOP -.->|Bloqueio| E
+
+    %% Estilos
+    class T1,DONE trigger
+    class Q,E,D agent
+    class C,LIMIT flow
+    class STOP budget
+```
 
 ---
-[[INDEX|⬅️ Voltar ao Índice]] | [[DATABASE_SCHEMA|Próximo: Esquema de Dados ➡️]]
+
+## 🤝 O Mecanismo de Handoff Assíncrono
+
+Implementado no `internal/orchestration/handoff.go`, o mecanismo de `DelegateTask` permite que um agente "passe o bastão" sem bloquear o enxame.
+- **Hierarquia de Tickets**: Quando o Agente A delega para o Agente B, o sistema cria uma sub-tarefa vinculada ao `ParentID`.
+- **Trilha de Auditoria**: Cada delegação gera automaticamente registros em `ActivityLog`, `CostEvent` e `IssueComment`.
+- **Heartbeat Monitoring**: O sistema monitora a saúde e a atividade real-time dos agentes ativos para detectar travamentos ou loops infinitos.
+
+---
+
+## 💰 Governança de Custo (Hard Stop Protocol)
+
+Diferente de chatbots tradicionais, o Lumaestro impõe limites financeiros rígidos. O protocolo **Hard Stop** protege o Comandante contra custos inesperados:
+- **Budget Control**: Cada agente possui um `BudgetMonthlyCents` definido.
+- **Materialização de Custo**: Após cada chamada LLM, o `RegistrarCusto` atualiza o gasto acumulado no DuckDB.
+- **Auto-Suspensão**: Se o limite for atingido, o agente é imediatamente alterado para `Status: PAUSED`, bloqueando novas execuções até autorização manual.
+
+---
+
+## 🔗 Documentos Relacionados
+
+- [[DATABASE_SCHEMA]] — Estrutura das tabelas de Issues e Agentes.
+- [[AGENTS_GUIDE]] — Manual de operação individual dos agentes.
+- [[LIGHTNING_ELITE]] — Como monitorar o orçamento no dashboard industrial.
+- [[DOCS_INDEX]] — Índice central de documentação.
+
+---
+**Lumaestro Swarm: Inteligência orquestrada. Custos sob controle. 🐝💰🛡️**

@@ -21,19 +21,35 @@ O Lumaestro não utiliza um RAG (Retrieval-Augmented Generation) convencional. E
 A arquitetura de busca do Lumaestro (localizada em `internal/rag/search.go`) unifica três motores distintos para calcular a relevância final de um trecho de código ou nota.
 
 ```mermaid
-graph TD
-    %% Estilo Dark Mode Lumaestro
-    classDef default fill:#2d333b,stroke:#6d5dfc,stroke-width:2px,color:#e6edf3;
-    
-    Q[Qdrant: Busca Vetorial] --> |Score Base| H[Motor Híbrido]
-    G[GraphEngine: Topologia] --> |Centrality Bias| H
-    N[Ranker: Córtex Neural] --> |Reforço Sináptico| H
-    
-    H --> |Re-Ranking| F[Contexto Final para LLM]
-    
-    subgraph "Cálculo de Score"
-        H
+flowchart TD
+    %% Estilos
+    classDef core fill:#2d333b,stroke:#6d5dfc,stroke-width:2px,color:#fff
+    classDef ia fill:#6d5dfc,stroke:#fff,stroke-width:2px,color:#fff
+    classDef db fill:#2e7d32,stroke:#6d5dfc,stroke-width:2px,color:#fff
+    classDef action fill:#455a64,stroke:#fff,stroke-width:1px,color:#fff
+
+    subgraph Trinity [A Trindade de Recuperação]
+        direction TB
+        Q[(fa:fa-brain Qdrant: Vetores)]
+        G{fa:fa-project-diagram Graph: Topologia}
+        N{fa:fa-microchip Neural: Reforço}
     end
+
+    subgraph Fusion [Motor Híbrido de Re-Ranking]
+        H[fa:fa-filter Cálculo de Score Consolidado]
+    end
+
+    %% Fluxo
+    Q -->|1. Score Base| H
+    G -->|2. Centrality Bias| H
+    N -->|3. Sinaptic Weight| H
+    
+    H -->|4. Contexto Final| LLM[fa:fa-robot LLM Context]
+
+    %% Estilos
+    class Q db
+    class G,N ia
+    class H core
 ```
 
 ### 1. Camada Vetorial (Qdrant)
@@ -81,23 +97,31 @@ O fluxo de execução no `SearchService.SearchNote` segue estes passos técnicos
 O Lumaestro agrupa seu código automaticamente em **Comunidades Semânticas** usando o algoritmo de **Louvain**. Isso permite que, ao encontrar uma nota, o sistema saiba quais outras pertencem ao mesmo "cluster" mental.
 
 ```mermaid
-graph LR
-    %% Estilo Dark Mode Lumaestro
-    classDef default fill:#2d333b,stroke:#6d5dfc,stroke-width:2px,color:#e6edf3;
-    classDef focus fill:#6d5dfc,stroke:#e6edf3,color:#ffffff;
+flowchart LR
+    %% Estilos
+    classDef cluster fill:#1e1e1e,stroke:#455a64,stroke-width:1px,color:#fff
+    classDef bridge fill:#6d5dfc,stroke:#fff,stroke-width:3px,color:#fff
+    classDef node fill:#2d333b,stroke:#6d5dfc,color:#fff
 
-    subgraph "Cluster: Backend Go"
-        B1[[internal/rag]] --- B2[[internal/db]]
-        B2 --- B3[[internal/provider]]
+    subgraph C1 [Cluster: Backend Go]
+        B1[internal/rag]
+        B2[internal/db]
+        B1 --- B2
     end
 
-    subgraph "Cluster: Frontend Vue"
-        F1[[src/components]] --- F2[[src/stores]]
+    subgraph C2 [Cluster: Frontend Vue]
+        F1[src/components]
+        F2[src/stores]
+        F1 --- F2
     end
 
-    B1 -.- Bridge:::focus -.- F1
-    
-    note right of Bridge: Betweenness Centrality identifica\nesta nota como a ponte vital.
+    %% A Ponte
+    B1 -.- BR{fa:fa-link Wails Bridge} -.- F1
+
+    %% Estilos
+    class C1,C2 cluster
+    class BR bridge
+    class B1,B2,F1,F2 node
 ```
 
 ---
