@@ -29,7 +29,7 @@ type Ranker struct {
 // NewRanker inicializa o motor neural com persistência em disco.
 func NewRanker() *Ranker {
 	r := &Ranker{
-		filePath:  ".context/neural_weights.json",
+		filePath:  ".lumaestro/cache/neural_weights.json",
 		maxWeight: 10.0,
 		minWeight: 0.1,
 		registry: &WeightRegistry{

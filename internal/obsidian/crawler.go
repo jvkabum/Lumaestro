@@ -65,7 +65,7 @@ func NewCrawler(vaultPath string, embedder provider.Embedder, qdrant *provider.Q
 		Qdrant:      qdrant,
 		Ontology:    ontology,
 		LStore:      lStore,
-		cachePath:   ".context/index_cache.json",
+		cachePath:   ".lumaestro/cache/index_cache.json",
 		cache:       make(IndexCache),
 		workerCount: 2, // ⚙️ Reduzido para 2 — evita burst de cota em chaves gratuitas
 		nodeNames:   make(map[string]string),

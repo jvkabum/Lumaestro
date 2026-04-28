@@ -8,7 +8,7 @@ import { useGraphStore } from '../../../stores/graph'
  */
 export function useInputDriver() {
   const store = useGraphStore()
-  
+
   const keys = { w: false, a: false, s: false, d: false, q: false, e: false }
   let moveInterval = null
   let fpsRafId = null
@@ -22,7 +22,7 @@ export function useInputDriver() {
     const move = () => {
       const vs = currentViewState.value
       if (!vs) return
-      
+
       let dx = 0, dy = 0, dz = 0
       const speed = 25 * Math.max(0.2, (5 - vs.zoom) / 5)
 
@@ -35,7 +35,7 @@ export function useInputDriver() {
       if (keys.e) dy += speed
 
       if (dx !== 0 || dy !== 0 || dz !== 0) {
-          panTarget(dx, dy, dz) // Delega o cálculo trigonométrico para o Pilot
+        panTarget(dx, dy, dz) // Delega o cálculo trigonométrico para o Pilot
       }
 
       moveInterval = requestAnimationFrame(move)
@@ -61,34 +61,62 @@ export function useInputDriver() {
     fpsRafId = requestAnimationFrame(measure)
   }
 
-  const registerKeyboardControls = (currentViewState, panTarget) => {
-    const onKeyDown = (e) => {
-        if (e.key === 'F1') {
-            e.preventDefault()
-            store.showFps = !store.showFps
-            if (store.showFps) startFpsLoop()
-            return
-        }
+  const registerKeyboardControls = (currentViewState, panTarget, updateForce) => {
+    let layoutMode = 0; // 0 = Bolha (Atual), 1 = Orgânico (Árvore), 2 = Denso (Galáxia)
 
-        if (isInputFocused()) return
-        const k = e.key.toLowerCase()
-        if (k in keys) {
-            keys[k] = true
-            if (!moveInterval) startMoving(currentViewState, panTarget)
+    const onKeyDown = (e) => {
+      if (e.key === 'F1') {
+        e.preventDefault()
+        store.showFps = !store.showFps
+        if (store.showFps) startFpsLoop()
+        return
+      }
+
+      // 🌟 Alternador Cibernético de Layouts (F6)
+      if (e.key === 'F6' && updateForce) {
+        e.preventDefault()
+        layoutMode = (layoutMode + 1) % 3
+
+        if (layoutMode === 0) {
+          // 0: Modo Supernova (Bolha Gigante Expandida)
+          updateForce('charge', { strength: () => -4200, distanceMax: () => 10000 })
+          updateForce('center', { strength: () => 0.01 })
+          console.log("🌌 [Layout] Modo Supernova (Bolha) ativado")
         }
+        else if (layoutMode === 1) {
+          // 1: Modo Orgânico (Dente-de-Leão / Árvore Natural)
+          updateForce('charge', { strength: () => -400, distanceMax: () => 2000 })
+          updateForce('center', { strength: () => 0.08 }) // Mais gravidade para unir
+          console.log("🌼 [Layout] Modo Orgânico (Dente-de-Leão) ativado")
+        }
+        else if (layoutMode === 2) {
+          // 2: Modo Denso (Galáxia Compacta para X-Ray)
+          updateForce('charge', { strength: () => -100, distanceMax: () => 500 })
+          updateForce('center', { strength: () => 0.15 }) // Muita gravidade
+          console.log("🪐 [Layout] Modo Galáxia (Denso) ativado")
+        }
+        return
+      }
+
+      if (isInputFocused()) return
+      const k = e.key.toLowerCase()
+      if (k in keys) {
+        keys[k] = true
+        if (!moveInterval) startMoving(currentViewState, panTarget)
+      }
     }
 
     const onKeyUp = (e) => {
-        const k = e.key.toLowerCase()
-        if (k in keys) keys[k] = false
-        if (!Object.values(keys).some(v => v)) {
-            if (moveInterval) {
-                cancelAnimationFrame(moveInterval)
-                moveInterval = null
-            }
+      const k = e.key.toLowerCase()
+      if (k in keys) keys[k] = false
+      if (!Object.values(keys).some(v => v)) {
+        if (moveInterval) {
+          cancelAnimationFrame(moveInterval)
+          moveInterval = null
         }
+      }
     }
-    
+
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('keyup', onKeyUp)
 

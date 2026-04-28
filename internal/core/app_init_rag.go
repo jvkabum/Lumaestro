@@ -36,15 +36,16 @@ func (a *App) initRAGInfrastructure(cfg *config.Config) {
 	}
 
 	// 🏗️ [CRÍTICO] Garante que as coleções existem no banco vetorial de forma assíncrona
-	go func(ctx context.Context) {
-		if a.crawler != nil && ctx != nil {
-			if err := a.crawler.EnsureCollections(ctx); err != nil {
+	c, cx := a.crawler, a.ctx
+	if c != nil && cx != nil {
+		go func(cr *obsidian.Crawler, ct context.Context) {
+			if err := cr.EnsureCollections(ct); err != nil {
 				fmt.Printf("[RAG-INIT] ❌ Erro crítico ao preparar coleções Qdrant: %v\n", err)
 			} else {
 				fmt.Println("[RAG-INIT] ✅ Coleções vetoriais prontas.")
 			}
-		}
-	}(a.ctx)
+		}(c, cx)
+	}
 
 	// Sincronização do Grafo a partir do LStore (DuckDB)
 	if a.LStore != nil {

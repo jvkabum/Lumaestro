@@ -59,7 +59,7 @@ export function useGraphOrchestrator(props) {
     })
     cleanupKeyboard = registerKeyboardControls(currentViewState, (dx, dy, dz) => {
         store.graphInstance?.panTarget(dx, dy, dz)
-    })
+    }, updateForce)
   })
 
   onUnmounted(() => {

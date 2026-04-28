@@ -3,6 +3,8 @@ package core
 import (
 	"Lumaestro/internal/config"
 	"Lumaestro/internal/provider"
+	"Lumaestro/internal/obsidian"
+	"context"
 	"fmt"
 	"time"
 )
@@ -24,10 +26,11 @@ func (a *App) bootSequence() {
 		return
 	}
 
-	if a.crawler != nil && a.ctx != nil {
-		go func() {
-			_ = a.crawler.EnsureCollections(a.ctx)
-		}()
+	c, cx := a.crawler, a.ctx
+	if c != nil && cx != nil {
+		go func(cr *obsidian.Crawler, ct context.Context) {
+			_ = cr.EnsureCollections(ct)
+		}(c, cx)
 	}
 
 	if a.config != nil {
