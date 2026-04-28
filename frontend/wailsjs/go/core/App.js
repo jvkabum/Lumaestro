@@ -378,6 +378,10 @@ export function TriggerZoom(arg1) {
   return window['go']['core']['App']['TriggerZoom'](arg1);
 }
 
+export function UnlinkProject(arg1) {
+  return window['go']['core']['App']['UnlinkProject'](arg1);
+}
+
 export function UpdateAgentSecret(arg1, arg2, arg3) {
   return window['go']['core']['App']['UpdateAgentSecret'](arg1, arg2, arg3);
 }

@@ -10,6 +10,7 @@ import DocViewer from './components/DocViewer.vue'
 import SwarmDashboard from './components/SwarmDashboard.vue'
 import AgentTerminal from './components/AgentTerminal.vue'
 import ReposManager from './components/ReposManager.vue'
+import MaestroConfirm from './components/MaestroConfirm.vue'
 import { useOrchestratorStore } from './stores/orchestrator'
 import { useSettingsStore } from './stores/settings'
 const CACHE_BUST = "2026-04-21T17:44:00" // 🚀 Bypass de Cache
@@ -379,6 +380,44 @@ onMounted(async () => {
       :content="state.docViewer.content" 
       @close="state.docViewer.isOpen = false"
     />
+
+    <!-- 🛡️ GLOBAL MAESTRO CONFIRM MODAL -->
+    <MaestroConfirm 
+      :isOpen="orchestrator.confirmModal.show"
+      :title="orchestrator.confirmModal.title"
+      :message="orchestrator.confirmModal.message"
+      :type="orchestrator.confirmModal.type"
+      :confirmText="orchestrator.confirmModal.confirmText"
+      :cancelText="orchestrator.confirmModal.cancelText"
+      @confirm="orchestrator.confirmModal.onConfirm"
+      @cancel="orchestrator.confirmModal.onCancel"
+    />
+
+    <!-- 🌌 PREMIUM COSMOS TOAST NOTIFICATION -->
+    <transition name="maestro-toast">
+      <div v-if="settingsStore.toast.show" 
+           class="premium-toast" 
+           :class="'toast-' + settingsStore.toast.type"
+           @click="settingsStore.toast.show = false">
+        <div class="toast-glow"></div>
+        <div class="toast-icon-wrapper">
+           <div class="icon-pulse"></div>
+           <span class="icon-glyph" v-if="settingsStore.toast.type === 'success'">💎</span>
+           <span class="icon-glyph" v-else-if="settingsStore.toast.type === 'error'">⚠️</span>
+           <span class="icon-glyph" v-else>💠</span>
+        </div>
+        <div class="toast-body">
+          <div class="toast-header">
+            <span class="toast-label">{{ settingsStore.toast.type === 'success' ? 'Sincronia Completa' : settingsStore.toast.type === 'error' ? 'Alerta de Célula' : 'Pulso de Dados' }}</span>
+            <span class="toast-system-tag">COSMOS CORE</span>
+          </div>
+          <div class="toast-text">{{ settingsStore.toast.message }}</div>
+        </div>
+        <div class="toast-progress-container">
+           <div class="toast-progress-bar" :style="{ animationDuration: (settingsStore.toast.duration || 4000) + 'ms' }"></div>
+        </div>
+      </div>
+    </transition>
   </div>
 </template>
 
@@ -781,4 +820,161 @@ nav button.active {
 
 .stage-list-enter-active { transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
 .stage-list-enter-from { opacity: 0; transform: translateY(10px); }
+
+/* ═══════════════════════════════════════════ */
+/*   🌌 PREMIUM COSMOS TOAST — Visual DNA    */
+/* ═══════════════════════════════════════════ */
+.premium-toast {
+  position: fixed;
+  top: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  min-width: 380px;
+  max-width: 500px;
+  background: rgba(13, 17, 23, 0.8);
+  backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  cursor: pointer;
+  box-shadow: 
+    0 20px 40px rgba(0, 0, 0, 0.4),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.premium-toast:hover {
+  transform: translateX(-50%) translateY(-2px);
+  background: rgba(13, 17, 23, 0.9);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.toast-glow {
+  position: absolute;
+  top: -50%;
+  left: -20%;
+  width: 100px;
+  height: 200px;
+  background: radial-gradient(circle, var(--toast-color, #3b82f6) 0%, transparent 70%);
+  opacity: 0.15;
+  filter: blur(30px);
+  pointer-events: none;
+}
+
+.toast-success { --toast-color: #3b82f6; border-color: rgba(59, 130, 246, 0.3); }
+.toast-error { --toast-color: #ef4444; border-color: rgba(239, 68, 68, 0.3); }
+.toast-info { --toast-color: #8b5cf6; border-color: rgba(139, 92, 246, 0.3); }
+
+.toast-icon-wrapper {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.icon-pulse {
+  position: absolute;
+  inset: -4px;
+  border: 2px solid var(--toast-color);
+  border-radius: 16px;
+  opacity: 0;
+  animation: icon-pulse-anim 2s infinite;
+}
+
+@keyframes icon-pulse-anim {
+  0% { transform: scale(0.9); opacity: 0.5; }
+  100% { transform: scale(1.3); opacity: 0; }
+}
+
+.icon-glyph {
+  font-size: 1.4rem;
+  filter: drop-shadow(0 0 8px var(--toast-color));
+}
+
+.toast-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.toast-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.toast-label {
+  font-size: 0.65rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--toast-color);
+}
+
+.toast-system-tag {
+  font-size: 0.55rem;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.2);
+  letter-spacing: 1px;
+}
+
+.toast-text {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #fff;
+  line-height: 1.4;
+}
+
+.toast-progress-container {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.toast-progress-bar {
+  height: 100%;
+  background: linear-gradient(to right, transparent, var(--toast-color));
+  box-shadow: 0 0 10px var(--toast-color);
+  width: 100%;
+  animation: toast-progress linear forwards;
+}
+
+@keyframes toast-progress {
+  from { width: 100%; }
+  to { width: 0%; }
+}
+
+/* 🌀 Animação de Entrada Cinematográfica */
+.maestro-toast-enter-active {
+  animation: toast-orbit-in 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.maestro-toast-leave-active {
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.maestro-toast-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-20px) scale(0.9);
+}
+
+@keyframes toast-orbit-in {
+  0% { opacity: 0; transform: translateX(-50%) translateY(-100px) scale(0.8); }
+  100% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+}
 </style>

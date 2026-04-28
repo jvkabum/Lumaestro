@@ -5,7 +5,7 @@
  * Gerencia nascimento esférico, detecção de hubs e mapeamento celestial.
  */
 
-const HUB_PHYS_LIMIT = 40;
+const HUB_PHYS_LIMIT = 250; // Expansão para Galáxias Densas (v18.16)
 
 export function bootstrapNodes(nodes, oldMap) {
     return nodes.map(n => {
@@ -139,6 +139,14 @@ export function convertToBFSTree(nodesData, validLinks, nodeDegrees) {
             const current = queue.shift();
             const neighbors = adj.get(current) || [];
             
+            // 🌟 PRIORIDADE ORBITAL: Ordena vizinhos para que links 'orbital' sejam processados primeiro
+            // Isso garante que a estrutura de árvore de arquivos domine o visual 'Dente-de-Leão'
+            neighbors.sort((a, b) => {
+                const typeA = a.original['edge-type'] === 'orbital' ? 0 : 1;
+                const typeB = b.original['edge-type'] === 'orbital' ? 0 : 1;
+                return typeA - typeB;
+            });
+
             for(let edge of neighbors) {
                 if(!visited.has(edge.target)) {
                     visited.add(edge.target);

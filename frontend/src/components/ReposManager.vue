@@ -3,7 +3,7 @@ import { onMounted, ref } from 'vue'
 import { useSettingsStore } from '../stores/settings'
 import { useOrchestratorStore } from '../stores/orchestrator'
 import { useSettingsProjects } from '../composables/useSettingsProjects'
-import { GetConfig, ToggleProjectCodeRAG, SetWorkspace, GetWorkspace } from '../../wailsjs/go/core/App'
+import { GetConfig, ToggleProjectCodeRAG, SetWorkspace, GetWorkspace, UnlinkProject } from '../../wailsjs/go/core/App'
 
 const store = useSettingsStore()
 const orchestrator = useOrchestratorStore()
@@ -36,6 +36,27 @@ const handleToggleCode = async (proj) => {
     const cfg = await GetConfig()
     if (cfg) store.config = cfg
     store.notify(`⚡ Modo de análise atualizado: ${proj.core_node}`, "success")
+  }
+}
+
+const handleUnlinkProject = async (proj) => {
+  const confirmed = await orchestrator.confirm({
+    title: 'DISSOLVER VÍNCULO',
+    message: `Deseja remover o vínculo de "${proj.core_node}" do Nexus?\n\nA matéria física (arquivos) permanecerá intacta no seu disco, mas a galáxia não orbitará mais o Lumaestro.`,
+    type: 'warning',
+    confirmText: 'DISSOLVER AGORA',
+    cancelText: 'ABORTAR'
+  })
+
+  if (confirmed) {
+    try {
+      await UnlinkProject(proj.path)
+      const cfg = await GetConfig()
+      if (cfg) store.config = cfg
+      store.notify(`🛰️ Vínculo dissolvido: ${proj.core_node}`, "success")
+    } catch (err) {
+      store.notify(`❌ Falha ao desvincular: ${err}`, "error")
+    }
   }
 }
 
@@ -123,32 +144,45 @@ const validateAndAdd = async () => {
            <div 
              v-for="proj in store.config.external_projects" 
              :key="proj.path" 
-             class="satellite-card"
+             class="satellite-card animate-fade-in"
              :class="{ 'neo-selected': isCurrentWS(proj.path) }"
              @click="handleQuickSelect(proj)"
            >
-             <div class="sat-core">
-               <div class="sat-ring-icon">🪐</div>
-               <h4 class="sat-node-name">{{ proj.core_node }}</h4>
-               <div class="sat-badge" :class="proj.include_code ? 'neo-active' : 'neo-docs'" @click.stop="handleToggleCode(proj)" title="Clique para alternar entre Código e Documentação">
-                 {{ proj.include_code ? '⚡ CODE RAG' : '📄 APENAS DOCS' }}
+             <!-- CARD HEADER: BRAND & DISSOLVE -->
+             <div class="sat-header">
+               <div class="sat-brand">
+                 <span class="sat-icon-float">🪐</span>
+                 <h4 class="sat-node-name">{{ proj.core_node }}</h4>
                </div>
-             </div>
-             
-             <div class="sat-path-box">
-               <span style="opacity: 0.6; margin-right: 8px;">📂</span>
-               <span class="path-text">{{ proj.path }}</span>
+               <button class="btn-dissolve-mini" @click.stop="handleUnlinkProject(proj)" title="Dissolver Vínculo">
+                 <span class="dissolve-icon">🔗</span>
+               </button>
              </div>
 
-             <div class="sat-actions">
-                <button class="btn-select-proj" :disabled="isCurrentWS(proj.path)">
-                   {{ isCurrentWS(proj.path) ? 'ATIVO AGORA' : 'ENTRAR NO PROJETO' }}
+             <!-- CARD BODY: PATH & BADGE -->
+             <div class="sat-body">
+               <div class="sat-path-display">
+                 <span class="folder-icon">📂</span>
+                 <span class="path-text">{{ proj.path }}</span>
+               </div>
+               
+               <div class="sat-badge-container">
+                 <div class="sat-badge-premium" :class="proj.include_code ? 'neo-active' : 'neo-docs'" @click.stop="handleToggleCode(proj)">
+                   <span class="badge-dot"></span>
+                   {{ proj.include_code ? 'LIGHTNING CODE' : 'ARCHIVE DOCS' }}
+                 </div>
+               </div>
+             </div>
+
+             <!-- CARD FOOTER: ACTION -->
+             <div class="sat-footer">
+                <button class="btn-enter-nebula" :disabled="isCurrentWS(proj.path)">
+                   <span v-if="isCurrentWS(proj.path)">TRANSITANDO AGORA...</span>
+                   <span v-else>ENTRAR NA NEBULOSA ⚡</span>
                 </button>
              </div>
              
-             <div v-if="isCurrentWS(proj.path)" class="ws-indicator-pulse">
-                SESSÃO ATIVA
-             </div>
+             <div v-if="isCurrentWS(proj.path)" class="ws-active-aura"></div>
            </div>
         </div>
       </div>
@@ -190,13 +224,6 @@ const validateAndAdd = async () => {
   75% { transform: translateX(5px); }
 }
 
-.fade-enter-active, .fade-leave-active {
-  transition: opacity 0.3s;
-}
-.fade-enter-from, .fade-leave-to {
-  opacity: 0;
-}
-
 .btn-refresh {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -211,81 +238,218 @@ const validateAndAdd = async () => {
   transition: all 0.3s;
 }
 
-.btn-refresh:hover {
-  background: rgba(139, 92, 246, 0.2);
-  border-color: rgba(139, 92, 246, 0.4);
-  transform: rotate(180deg);
+/* 🪐 Satellite Card Premium Redesign */
+.satellites-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 24px;
 }
 
-/* 🪐 Satellite Card Enhancements */
 .satellite-card {
+  background: rgba(15, 12, 28, 0.6);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 24px;
+  padding: 24px;
   cursor: pointer;
   position: relative;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.5s cubic-bezier(0.19, 1, 0.22, 1);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
   overflow: hidden;
+}
+
+.satellite-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at top right, rgba(139, 92, 246, 0.1), transparent);
+  opacity: 0;
+  transition: opacity 0.5s;
 }
 
 .satellite-card:hover {
-  transform: translateY(-5px) scale(1.02);
-  border-color: rgba(139, 92, 246, 0.5);
-  box-shadow: 0 10px 30px rgba(139, 92, 246, 0.2);
+  transform: translateY(-8px);
+  border-color: rgba(139, 92, 246, 0.4);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), 0 0 20px rgba(139, 92, 246, 0.1);
 }
 
-.neo-selected {
-  border-color: #a855f7 !important;
-  background: rgba(168, 85, 247, 0.08) !important;
-  box-shadow: 0 0 20px rgba(168, 85, 247, 0.3) !important;
+.satellite-card:hover::before {
+  opacity: 1;
 }
 
-.ws-indicator-pulse {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  font-size: 8px;
+.sat-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 1;
+}
+
+.sat-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sat-icon-float {
+  font-size: 1.8rem;
+  filter: drop-shadow(0 0 10px rgba(255, 165, 0, 0.3));
+  animation: floatOrbital 3s ease-in-out infinite;
+}
+
+@keyframes floatOrbital {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-5px) rotate(10deg); }
+}
+
+.sat-node-name {
+  font-size: 1.2rem;
   font-weight: 900;
-  color: #a855f7;
-  letter-spacing: 1px;
-  background: rgba(168, 85, 247, 0.1);
-  padding: 4px 8px;
-  border-radius: 4px;
-  animation: pulse-ws 2s infinite;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #fff;
+  margin: 0;
 }
+
+.btn-dissolve-mini {
+  background: rgba(239, 68, 68, 0.05);
+  border: 1px solid rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s;
+  opacity: 0.3;
+}
+
+.satellite-card:hover .btn-dissolve-mini {
+  opacity: 1;
+}
+
+.btn-dissolve-mini:hover {
+  background: #ef4444;
+  color: #fff;
+  transform: scale(1.1) rotate(-15deg);
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.4);
+}
+
+.sat-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  z-index: 1;
+}
+
+.sat-path-display {
+  background: rgba(255, 255, 255, 0.03);
+  padding: 12px 16px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.folder-icon { font-size: 1.1rem; }
 
 .path-text {
+  font-size: 0.75rem;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--p-text-dim);
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.sat-actions {
-  margin-top: 15px;
-  padding-top: 15px;
-  border-top: 1px solid rgba(255,255,255,0.05);
+.sat-badge-premium {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  transition: all 0.3s;
 }
 
-.btn-select-proj {
+.sat-badge-premium.neo-active {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #10b981;
+}
+
+.sat-badge-premium.neo-docs {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: #f59e0b;
+}
+
+.badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+}
+
+.sat-footer {
+  margin-top: auto;
+  z-index: 1;
+}
+
+.btn-enter-nebula {
   width: 100%;
   background: rgba(139, 92, 246, 0.1);
   border: 1px solid rgba(139, 92, 246, 0.3);
   color: #a855f7;
-  padding: 8px;
-  border-radius: 6px;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 1px;
+  padding: 14px;
+  border-radius: 16px;
+  font-size: 0.8rem;
+  font-weight: 900;
+  letter-spacing: 2px;
   cursor: pointer;
-  transition: all 0.3s;
+  transition: all 0.4s;
 }
 
-.btn-select-proj:hover:not(:disabled) {
-  background: #a855f7;
+.btn-enter-nebula:hover:not(:disabled) {
+  background: linear-gradient(135deg, #a855f7, #6366f1);
   color: #fff;
+  transform: scale(1.02);
+  box-shadow: 0 10px 25px rgba(139, 92, 246, 0.3);
 }
 
-.btn-select-proj:disabled {
+.btn-enter-nebula:disabled {
   background: rgba(16, 185, 129, 0.1);
   border-color: rgba(16, 185, 129, 0.3);
-  color: #34d399;
+  color: #10b981;
   cursor: default;
+}
+
+.neo-selected {
+  border-color: rgba(168, 85, 247, 0.6) !important;
+  background: rgba(168, 85, 247, 0.05) !important;
+}
+
+.ws-active-aura {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, transparent, #a855f7, transparent);
+  animation: auraFlow 3s linear infinite;
+}
+
+@keyframes auraFlow {
+  0% { opacity: 0.3; filter: blur(2px); }
+  50% { opacity: 1; filter: blur(5px); }
+  100% { opacity: 0.3; filter: blur(2px); }
 }
 </style>

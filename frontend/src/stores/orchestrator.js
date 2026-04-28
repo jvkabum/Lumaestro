@@ -42,6 +42,39 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   const showPlanOverlay = ref(false); // 🖼️ Overlay dedicado para visualização de planos
   const subagents = ref(new Map()); // 🌳 Árvore de subagentes ativos {sessionId: {agentName, goal, status}}
   const workspace = ref({ path: '', name: 'Lumaestro (Padrão)' }); // 📂 Workspace ativo
+  
+  // 🛡️ Motor de Confirmação Modal Premium
+  const confirmModal = ref({
+    show: false,
+    title: '',
+    message: '',
+    type: 'danger',
+    confirmText: 'CONFIRMAR',
+    cancelText: 'ABORTAR',
+    onConfirm: null,
+    onCancel: null
+  });
+
+  const confirm = (options) => {
+    return new Promise((resolve) => {
+      confirmModal.value = {
+        show: true,
+        title: options.title || 'Confirmação',
+        message: options.message || 'Deseja prosseguir?',
+        type: options.type || 'danger',
+        confirmText: options.confirmText || 'CONFIRMAR',
+        cancelText: options.cancelText || 'ABORTAR',
+        onConfirm: () => {
+          confirmModal.value.show = false;
+          resolve(true);
+        },
+        onCancel: () => {
+          confirmModal.value.show = false;
+          resolve(false);
+        }
+      };
+    });
+  };
 
   const togglePlanMode = async (agent) => {
     isPlanMode.value = !isPlanMode.value;
@@ -635,6 +668,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     isPlanMode, togglePlanMode, subagents, showPlanOverlay, workspace,
     initListeners, ask, startSession, sendInput, submitReview, switchAgent, stopSession, forceUnlock,
     fetchSessions, loadSession, newSession, toggleSidebar, clearStatusTimeline, sendSteeringHint,
-    selectWorkspace, clearWorkspace, loadWorkspace
+    selectWorkspace, clearWorkspace, loadWorkspace,
+    confirm, confirmModal
   };
 });

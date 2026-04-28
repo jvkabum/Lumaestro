@@ -1,4 +1,5 @@
 import { useGraphStore } from '../../../stores/graph'
+import { useOrchestratorStore } from '../../../stores/orchestrator'
 
 /**
  * ⚡ XRayProcessor — O Analista de Infraestrutura
@@ -8,6 +9,7 @@ import { useGraphStore } from '../../../stores/graph'
  */
 export function useXRayProcessor() {
   const store = useGraphStore()
+  const orchestrator = useOrchestratorStore()
 
   /**
    * Executa um escaneamento de reconhecimento no backend
@@ -32,7 +34,15 @@ export function useXRayProcessor() {
    * Poda nós com PageRank abaixo do threshold
    */
   const pruneNodes = async () => {
-    if (confirm(`Deseja remover permanentemente nós com PageRank abaixo de ${store.xRayThreshold}? (Notas de origem são protegidas)`)) {
+    const confirmed = await orchestrator.confirm({
+      title: 'PODA NEURAL (X-RAY)',
+      message: `Deseja remover permanentemente nós com PageRank abaixo de ${store.xRayThreshold}?\n\nIsso limpará a visualização de nós com baixa relevância sistêmica. Notas de origem (Obsidian) são protegidas e não serão deletadas.`,
+      type: 'warning',
+      confirmText: 'EXECUTAR PODA',
+      cancelText: 'ABORTAR'
+    })
+
+    if (confirmed) {
       store.pruneLoading = true
       try {
         const bridge = (window.go && window.go.core && window.go.core.App) || 

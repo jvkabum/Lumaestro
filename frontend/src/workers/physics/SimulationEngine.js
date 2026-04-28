@@ -31,22 +31,38 @@ export function createSimulation({
         // 1. Força de Elástico (Links) - Estilo Dente-de-Leão com Lógica Semântica (Mixer Dev)
         link: d3.forceLink(linksData).id(d => d.id)
             .distance(link => {
+                const getRadius = (n) => {
+                    const c = n['celestial-type'] || 'moon';
+                    if (c === 'galaxy') return 60;
+                    if (c === 'solar-system') return 35;
+                    if (c === 'planet') return 18;
+                    return 5;
+                };
+                
+                const rS = getRadius(link.source);
+                const rT = getRadius(link.target);
+                
+                // 🌌 EXPANSÃO COSMOLÓGICA: Aumentamos o buffer para 80 pixels para dar ar ao dente-de-leão
+                const baseDist = rS + rT + 80;
+
                 const sDeg = nodeDegrees.get(link.source.id) || 0;
                 const tDeg = nodeDegrees.get(link.target.id) || 0;
-                if (sDeg > 3 && tDeg > 3) return 200;
-                return 25;
+                
+                // Hubs ganham uma órbita explosiva (2.5x) para espalhar os milhares de planetas
+                if (sDeg > 5 || tDeg > 5) return baseDist * 2.5;
+                return baseDist;
             })
             .strength(link => {
-                // 🧠 [MAGNETISMO INVISÍVEL] Vínculos semânticos puxam de leve
-                if (link['edge-type'] === 'semantic') return 0.1;
-                return 1.0;
+                if (link['edge-type'] === 'semantic') return 0.05;
+                if (link['edge-type'] === 'orbital') return 0.3; // Mais suave para permitir expansão
+                return 0.6;
             }),
 
         // 2. Força Customizada (Expansão de Clusters e Z-Push) - RESTAURADA
         custom: forceAll(communityCenters, parentMap),
 
-        // 3. Repulsão (ManyBody) - Essencial para o formato visual de exploração (Mixer Dev)
-        charge: d3.forceManyBody().strength(d => -4200).distanceMax(10000),
+        // 3. Repulsão (ManyBody) - Aumentada para -8000 para forçar o distanciamento galáctico
+        charge: d3.forceManyBody().strength(d => -8000).distanceMax(15000),
 
         // 🧲 Força Magnética, Radial e Limit (Restauradas do Main para controle UI, iniciam zeradas/suaves)
         magnetic: d3.forceManyBody().strength(d => (d.weight || 1.0) * -15).distanceMin(20).distanceMax(800),
@@ -58,8 +74,18 @@ export function createSimulation({
 
         // 5. Colisão física (Mixer Dev)
         collide: d3.forceCollide(node => {
+            // 📏 SINCRONIA CELESTIAL: O raio de colisão deve bater com o tamanho visual (NodeLayer.js)
+            const celestial = node['celestial-type'] || 'moon';
+            let baseMass = node.mass || 4.0;
+            if (celestial === 'galaxy') baseMass = 60.0;
+            if (celestial === 'solar-system') baseMass = 35.0;
+            if (celestial === 'planet') baseMass = 18.0;
+            if (celestial === 'asteroid') baseMass = 1.2;
+
             const importance = (node.pagerank && node.pagerank > 0) ? (node.pagerank * 15) : (nodeDegrees.get(node.id) || 0);
-            return (1 + Math.pow(importance, 0.5) * 3.5) + 6;
+            const visualRadius = (baseMass + Math.pow(importance, 0.5) * 1.5);
+            
+            return visualRadius + 4; // Borda de respiro de 4 pixels
         })
     };
 

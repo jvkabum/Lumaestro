@@ -108,3 +108,38 @@ func (a *App) ClearWorkspace() map[string]string {
 	a.SetWorkspace("")
 	return a.GetWorkspace()
 }
+
+// UnlinkProject apenas remove o vínculo do projeto na configuração, sem apagar os arquivos físicos
+func (a *App) UnlinkProject(projectPath string) error {
+	absPath, _ := filepath.Abs(projectPath)
+
+	// 1. Remover da lista de ExternalProjects
+	var newList []config.ProjectScan
+	modified := false
+	for _, p := range a.config.ExternalProjects {
+		pAbs, _ := filepath.Abs(p.Path)
+		if pAbs != absPath {
+			newList = append(newList, p)
+		} else {
+			modified = true
+		}
+	}
+	
+	if modified {
+		a.config.ExternalProjects = newList
+		config.Save(*a.config)
+		fmt.Println("[Config] 🧹 Vínculo removido da lista de projetos externos.")
+	}
+
+	// 2. Se era o workspace ativo, volta para o ponto zero
+	currActive, _ := filepath.Abs(a.config.ActiveWorkspace)
+	if currActive == absPath {
+		a.SetWorkspace("")
+	}
+
+	a.emitEvent("project:unlinked", map[string]string{
+		"path": absPath,
+	})
+
+	return nil
+}
