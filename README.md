@@ -18,13 +18,6 @@ O sistema opera em três camadas de consciência digital integradas:
 2.  **Lightning Engine (Powered by DuckDB)**: Análise reflexiva e analítica de alto desempenho. O uso do **DuckDB v1.1.3** permite que o enxame processe trilhas de pensamento e métricas de grafo em milissegundos, agindo como a memória de curto prazo ultrarrápida da IA.
 3.  **Córtex Autônomo ACP**: Orquestração via protocolo **JSON-RPC 2.0**. Os agentes operam em um ambiente seguro (Subagents), podendo executar ferramentas, ler arquivos e evoluir prompts através de **Beam Search** metacognitivo.
 
-- `docs/` — Documentação técnica, guias de sistema e o índice global.
-- `scripts/` — Automação de desenvolvimento (`dev.ps1`) e build (`build.ps1`).
-- `bin/` — Binários e dependências nativas (ex: `duckdb.dll`).
-- `infra/` — Orquestração de containers e infraestrutura de rede.
-- `internal/` — Lógica de negócio, agentes e motores analíticos.
-- `frontend/` — Interface do usuário Vue.js 3 e motor gráfico Deck.gl.
-
 ---
 
 ## 🚀 Funcionalidades de Elite
@@ -101,12 +94,18 @@ Para gerar o executável final (`Lumaestro.exe`) com todas as DLLs empacotadas:
 ---
 
 ## 📚 Documentação e Governança
-Acesse o nosso [Índice de Documentação](./docs/DOCS_INDEX.md) ou explore as seções críticas:
-- [Checklist de Tarefas (Lumaestro Sync)](./docs/tasks.md)
-- [Plano de Implementação](./docs/implementation.md)
-- [Guia de Uso (Manual)](./docs/walkthrough.md)
-- [Sinfonia e Agentes ACP](./docs/AGENTS_GUIDE.md)
-- [Arquitetura Neural](./docs/NEURAL_BRAIN.md)
+Acesse o nosso **[Elite Knowledge Hub](./docs/INDEX.md)** ou explore o **[Índice de Arquivos](./docs/DOCS_INDEX.md)**:
+
+### 🏁 Iniciação Rápida
+- [Guia de Uso (Manual de Bordo)](./docs/walkthrough.md)
+- [Checklist de Tarefas (Missões Ativas)](./docs/tasks.md)
+- [Plano de Implementação (Roadmap)](./docs/IMPLEMENTATION_PLAN.md)
+
+### 🏛️ Deep Dive (Arquitetura e Agentes)
+- [Arquitetura Neural (3D Graph)](./docs/architecture/NEURAL_BRAIN.md)
+- [Sinfonia de Agentes (Manual ACP)](./docs/guide/AGENTS_GUIDE.md)
+- [Córtex Central (Lumaestro Core)](./docs/architecture/LUMAESTRO_CORE.md)
+- [Matriz de Soberania (Gap Analysis)](./docs/GAP_ANALYSIS.md)
 
 ---
 **Lumaestro: Evoluindo a autonomia, um rastro de cada vez.** 🐹⚙️⚡🤖🧬🏆🦾📂🧪
