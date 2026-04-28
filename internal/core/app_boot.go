@@ -118,7 +118,7 @@ func (a *App) initServices() error {
 	// 6. Injeção Final de Contexto (Garante que todos os novos serviços tenham o "telefone" do Wails)
 	a.injectContexts()
 
-	a.emitBoot("ready", "✅", "Maestro pronto.")
+	a.emitBoot("ready", "🏛️", "Orquestrador Soberano online. Observando o Universo.")
 	a.isBooted = true
 	a.NLPReady = true
 	return nil

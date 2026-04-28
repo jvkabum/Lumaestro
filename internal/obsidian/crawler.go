@@ -123,7 +123,7 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 	// ══════════════════════════════════════════════════════════
 	// FASE 1: GRAFO VISUAL HIERÁRQUICO (Cosmos Cognitivo)
 	// ══════════════════════════════════════════════════════════
-	fmt.Println("[Crawler] ⚡ FASE 1: Montando Cosmos Cognitivo (Galáxia, Planetas e Luas)...")
+	fmt.Println("[Cosmos] ⚡ FASE 1: Montando Cosmos Cognitivo (Galáxia, Planetas e Luas)...")
 	var pendingFiles []crawlTask 
 	var totalCached int32 = 0
 	processedFolders := make(map[string]bool)
@@ -141,14 +141,14 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 		"id":            galaxyID,
 		"name":          galaxyName,
 		"document-type": "galaxy-core",
-		"celestial-type": "sun",
+		"celestial-type": "galaxy", // Mudança: sun -> galaxy
 		"mass":          100.0,
-		"summary":       "Nó central do vault; organiza pastas e documentos orbitais.",
-		"what-it-does":  "Funciona como raiz estrutural da base de conhecimento no grafo 3D.",
+		"summary":       "Núcleo da Galáxia; organiza sistemas solares e planetas orbitais.",
+		"what-it-does":  "Funciona como raiz estrutural suprema da base de conhecimento.",
 	})
 	if c.LStore != nil {
 		c.LStore.UpsertGraphNode(folderPath, galaxyID, galaxyName, "galaxy-core", "", map[string]interface{}{
-			"celestial-type": "sun",
+			"celestial-type": "galaxy",
 			"mass":          100.0,
 		})
 	}
@@ -172,7 +172,7 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 
 			if parentDir == "." {
 				parentID = galaxyID
-				celestialType = "solar-system-core" // Pastas raiz do vault são sistemas solares
+				celestialType = "solar-system" // Mudança: solar-system-core -> solar-system
 				mass = 50.0
 			} else {
 				parentID = "planet:" + pathHash + ":" + strings.ToLower(parentDir)
@@ -343,7 +343,7 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 		return nil
 	})
 
-	fmt.Printf("[Crawler] ⚡ Cosmos montado: %d objetos celestiais. %d arquivos pendentes para IA.\n", totalCached+int32(len(pendingFiles)), len(pendingFiles))
+	fmt.Printf("[Cosmos] 🌌 Universo estabilizado: %d objetos celestiais. %d arquivos aguardando mineração.\n", totalCached+int32(len(pendingFiles)), len(pendingFiles))
 
 	// ══════════════════════════════════════════════════════════
 	// FASE 2: PROCESSAMENTO SEMÂNTICO (API — Workers Limitados)
@@ -406,13 +406,13 @@ func (c *Crawler) IndexSystemDocs(ctx context.Context, rootPath string) error {
 		"id":            galaxyID,
 		"name":          "System Docs",
 		"document-type": "galaxy-core",
-		"celestial-type": "sun",
+		"celestial-type": "galaxy",
 		"mass":          60.0,
 		"summary":       "Núcleo de documentação técnica interna do projeto.",
 	})
 	if c.LStore != nil {
 		c.LStore.UpsertGraphNode(rootPath, galaxyID, "System Docs", "galaxy-core", "", map[string]interface{}{
-			"celestial-type": "sun",
+			"celestial-type": "galaxy",
 			"mass":           60.0,
 		})
 	}
@@ -493,13 +493,16 @@ func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.P
 			"id":            galaxyID,
 			"name":          repo.CoreNode,
 			"document-type": "galaxy-core",
-			"celestial-type": "sun",
+			"celestial-type": "galaxy",
 			"mass":          80.0,
 			"summary":       fmt.Sprintf("Núcleo do repositório satélite '%s'.", repo.CoreNode),
 			"what-it-does":  "Conecta código/projetos externos ao RAG radial sem misturar domínios.",
 		})
 		if c.LStore != nil {
-			c.LStore.UpsertGraphNode(repo.Path, galaxyID, repo.CoreNode, "galaxy-core", "", nil)
+			c.LStore.UpsertGraphNode(repo.Path, galaxyID, repo.CoreNode, "galaxy-core", "", map[string]interface{}{
+				"celestial-type": "galaxy",
+				"mass":           80.0,
+			})
 		}
 
 		fmt.Printf("[Crawler] 🪐 Expandindo Galáxia Radial: %s\n", repo.CoreNode)
@@ -543,7 +546,7 @@ func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.P
 
 				if parentDir == "." {
 					parentID = galaxyID
-					celestialType = "solar-system-core"
+					celestialType = "solar-system"
 					mass = 40.0
 				} else {
 					parentID = "planet:" + pathHash + ":" + strings.ToLower(parentDir)

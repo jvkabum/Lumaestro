@@ -24,11 +24,10 @@ func (a *App) SetWorkspace(path string) error {
 			a.config.ActiveWorkspace = ""
 			config.Save(*a.config)
 		}
-		fmt.Println("[Workspace] 📂 Workspace limpo. IA voltou ao diretório raiz do Lumaestro.")
-
+		fmt.Println("[Cosmos] 🏛️ Retornando ao ponto zero do Universo.")
 		a.emitEvent("workspace:changed", map[string]string{
 			"path": "",
-			"name": "Lumaestro",
+			"name": "Universo Lumaestro",
 		})
 		return nil
 	}
@@ -51,7 +50,7 @@ func (a *App) SetWorkspace(path string) error {
 	}
 
 	projectName := filepath.Base(absPath)
-	fmt.Printf("[Workspace] 📂 Workspace alterado para: %s (%s)\n", projectName, absPath)
+	fmt.Printf("[Cosmos] 🌌 Galáxia detectada: %s (%s)\n", projectName, absPath)
 
 	// 🕸️ Atualiza o Crawler para apontar para o novo projeto (sinapse Workspace→Crawler)
 	if a.crawler != nil {

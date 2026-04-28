@@ -1,90 +1,103 @@
 ---
-title: "Fluxo de Contexto RAG (Cognitive Cosmos)"
+title: "Cosmos Flow: Arquitetura RAG & Soberania"
 type: "architecture"
 status: "active"
-tags: ["rag", "cosmos", "knowledge-graph", "ingestion"]
+tags: ["rag", "cosmos-model", "orchestration", "context-flow", "embeddings"]
 ---
 
-# 🌌 Fluxo de Contexto RAG: O Cosmos Cognitivo
+# 🌌 Cosmos Flow: O Modelo de Soberania do Conhecimento
 
 > [!ABSTRACT]
-> O motor RAG do Lumaestro utiliza uma metáfora espacial (Cosmos Model) para organizar o conhecimento. Ele transcende a busca vetorial simples ao integrar uma arquitetura de grafos N-Hop, permitindo que a IA navegue por conexões semânticas e estruturais como um explorador intergalático.
+> O Lumaestro opera sob o **Modelo Cosmos**, onde a informação não é apenas um dado, mas matéria celestial organizada por gravidade semântica. Nesta arquitetura, o **Lumaestro é o Orquestrador Soberano**, uma entidade externa que governa, observa e manipula o Universo de Conhecimento sem fazer parte dele.
 
-## 🛰️ Arquitetura Celestial (The Cosmos Model)
+## 🏛️ A Hierarquia do Universo Digital
 
-O conhecimento é organizado em camadas de densidade e relevância, representadas visualmente no Grafo 3D.
+Abaixo, a representação visual da separação entre a **Vontade do Orquestrador** e a **Matéria do Conhecimento**.
 
 ```mermaid
 flowchart TD
-    %% Estilos
-    classDef galaxy fill:#ffcc00,stroke:#333,stroke-width:4px,color:#000
-    classDef planet fill:#2d333b,stroke:#6d5dfc,stroke-width:2px,color:#fff
-    classDef moon fill:#455a64,stroke:#fff,stroke-width:1px,color:#fff
-    classDef ia fill:#6d5dfc,stroke:#fff,stroke-width:2px,color:#fff
+    %% Definições de Estilo de Elite
+    classDef orchestrator fill:#ffcc00,stroke:#333,stroke-width:4px,color:#000,font-weight:bold
+    classDef universe fill:#1e1e1e,stroke:#6d5dfc,stroke-width:3px,color:#fff,font-style:italic
+    classDef galaxy fill:#c62828,stroke:#fff,stroke-width:2px,color:#fff
+    classDef sol fill:#455a64,stroke:#6d5dfc,stroke-width:2px,color:#fff
+    classDef planet fill:#2e7d32,stroke:#fff,stroke-width:1px,color:#fff
+    classDef moon fill:#cddc39,stroke:#333,stroke-width:1px,color:#000
+    classDef asteroid fill:#455a64,stroke:#fff,stroke-dasharray: 5 5,color:#fff
 
-    subgraph Cosmos [Níveis de Conhecimento]
-        G((fa:fa-sun Galáxia: Vault/Root))
-        P1(fa:fa-folder Planeta: Pasta/Módulo)
-        P2(fa:fa-folder Planeta: Pasta/Módulo)
-        M1[fa:fa-file-alt Lua: Nota/Arquivo]
-        M2[fa:fa-file-code Lua: Código]
-        S{fa:fa-star Estrela: Tripla Semântica}
+    %% O Poder Supremo
+    subgraph Sovereign ["fa:fa-crown O ORQUESTRADOR SOBERANO"]
+        MAESTRO((fa:fa-robot LUMAESTRO)):::orchestrator
     end
 
-    subgraph Pipeline [Ciclo de Ingestão]
-        direction LR
-        F1[Fase 1: Sync Estrutural]
-        F2[Fase 2: Enriquecimento IA]
+    %% O Domínio de Dados
+    subgraph Cosmos ["fa:fa-infinity O UNIVERSO DE CONHECIMENTO"]
+        direction TB
+        UNIV{fa:fa-atom Totalidade}:::universe
+        
+        subgraph G1 ["fa:fa-certificate GALÁXIA: PROJETO"]
+            direction LR
+            SOL[fa:fa-sun Sistema Solar: Raiz]:::sol
+            SOL --> PLANET(fa:fa-globe Planeta: Pasta):::planet
+            PLANET --> MOON(fa:fa-moon Lua: Arquivo):::moon
+            MOON -.-> AST[fa:fa-meteor Asteroide: Atomo]:::asteroid
+        end
     end
 
-    %% Conexões
-    G --> P1 & P2
-    P1 --> M1
-    P2 --> M2
-    M1 & M2 --> S
+    %% Conexões de Gravidade e Comando
+    MAESTRO ==>|Governa & Observa| UNIV
+    MAESTRO -- "Manipula Contexto" --> G1
 
-    F1 -->|Hash & Resume| G
-    F2 -->|Embeddings & Triplas| S
-
-    %% Estilos
-    class G galaxy
-    class P1,P2 planet
-    class M1,M2 moon
-    class S,F2 ia
+    %% Aplicação de Classes
+    class MAESTRO orchestrator
+    class UNIV universe
+    class G1 galaxy
+    class SOL sol
+    class PLANET planet
+    class MOON moon
+    class AST asteroid
 ```
 
 ---
 
-## ⚡ O Ciclo de Ingestão de Matéria
+## 🛰️ Camadas de Consciência Celestial
 
-### Fase 1: Sincronização Estrutural (Zero-Cost)
-O Crawler monitora o sistema de arquivos em tempo real, emitindo eventos de topologia sem custo de IA.
-- **Deduplicação SHA-256**: Garante que apenas alterações reais disparem re-indexação.
-- **Resumo Estático**: Extração rápida de metadados, títulos e assinaturas de código (Go/JS/Python).
+### 1. O Orquestrador (Lumaestro)
+A "Vontade Superior" que reside fora do universo de dados. Ele dita as leis da física (algoritmos de busca), controla o tempo (telemetria) e decide qual galáxia deve ser iluminada para o Comandante.
 
-### Fase 2: Enriquecimento Cognitivo (IA)
-Para elementos novos ou modificados, o enxame realiza o processamento profundo:
-- **Extração de Triplas**: Conversão de texto bruto em conhecimento estruturado (Sujeito → Predicado → Objeto).
-- **Processamento Multimodal**: OCR e análise visual de imagens e PDFs.
-- **Vetorização**: Geração de embeddings de alta dimensionalidade (3072D) no **Qdrant**.
+### 2. A Galáxia (Workspace)
+A unidade suprema de isolamento. Cada projeto é uma Galáxia completa, garantindo que o contexto de um universo não colida com outro.
+
+### 3. O Sistema Solar (Módulos Principais)
+Grandes divisões lógicas (pastas de primeiro nível) que funcionam como âncoras gravitacionais para os temas do projeto.
+
+### 4. O Planeta (Organização)
+Subpastas e categorias que agrupam a massa crítica de informação.
+
+### 5. A Lua (Entidade de Informação)
+O arquivo individual. É a interface onde o conhecimento reside de forma legível.
+
+### 6. O Asteroide (Átomo Semântico)
+Triplas semânticas e chunks de texto. Pequenos fragmentos que flutuam no vácuo entre arquivos, permitindo conexões que desafiam a estrutura física das pastas.
 
 ---
 
-## 🔍 Motor de Busca N-Hop (Deep Retrieval)
+## 📈 Fluxo de Gravidade Semântica (RAG)
 
-Diferente de RAGs tradicionais, o Lumaestro utiliza uma abordagem tridimensional:
-1.  **Busca Vetorial**: Recuperação por similaridade semântica pura.
-2.  **Exploração de Adjacência**: Puxa nós vizinhos via links estruturais (`[[ ]]`), enriquecendo o contexto com informações relacionadas mas não necessariamente similares em texto.
-3.  **Neural Re-Ranking**: O Agente Reflector valida e filtra o contexto final para eliminar ruído antes da injeção no Prompt.
+Quando uma pergunta é feita, o Orquestrador Lumaestro:
+1.  **Sente a Perturbação**: O prompt gera uma onda gravitacional no universo.
+2.  **Identifica a Galáxia**: Localiza o workspace correto.
+3.  **Atrai a Matéria**: "Puxa" as Luas e Asteroides mais relevantes para o centro da visualização.
+4.  **Sintetiza a Luz**: O LLM consome essa matéria celestial e devolve a resposta clara para o Comandante.
 
 ---
 
 ## 🔗 Documentos Relacionados
 
-- [[NEURAL_BRAIN]] — Visualização imersiva do Cosmos Cognitivo.
-- [[DATABASE_SCHEMA]] — Como os metadados são persistidos.
-- [[SEMANTIC_NAVIGATOR]] — O GPS que opera este motor.
-- [[DOCS_INDEX]] — Índice central de documentação.
+- [[architecture/LUMAESTRO_CORE|LUMAESTRO_CORE]] — O motor interno do Orquestrador.
+- [[features/NEURO_SYMBOLIC_ONTOLOGY|NEURO_SYMBOLIC_ONTOLOGY]] — Como os Asteroides são minerados.
+- [[architecture/RENDER_ENGINE_3D|RENDER_ENGINE_3D]] — A física visual deste universo.
+- [[DOCS_INDEX]] — Índice central.
 
 ---
-**Lumaestro: Explore sua própria galáxia de conhecimento. 🌌🧠✨**
+**Lumaestro: Orquestrando o Infinito. Governança Soberana. 🏛️⚡🌌💎**

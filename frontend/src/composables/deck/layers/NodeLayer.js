@@ -93,10 +93,10 @@ export function createNodeLayer({
                 return colors.semantic;
             }
 
-            // 🪐 ESTÉTICA CELESTIAL (Main Gain): Cores por hierarquia
+            // 🪐 ESTÉTICA CELESTIAL (Main Gain): Cores por hierarquia cósmica
             const celestial = node['celestial-type'] || 'moon';
-            if (celestial === 'galaxy-core') return [...colors.galaxyCore, 255]; // Ouro para núcleos de Galáxia
-            if (celestial === 'solar-system-core') return [...colors.solarCore, 255]; // Laranja para Planetas Raíz
+            if (celestial === 'galaxy') return [...colors.galaxyCore, 255]; // Ouro para núcleos de Galáxia
+            if (celestial === 'solar-system') return [...colors.solarCore, 255]; // Laranja para Sistemas Solares
             if (celestial === 'planet') return [...colors.planet, 230]; // Azul claro para pastas
             if (celestial === 'asteroid') return [...colors.asteroid, 180]; // Cinza translúcido para memórias
 
@@ -114,15 +114,15 @@ export function createNodeLayer({
             return colors[type] ? [...colors[type], 220] : [155, 155, 155, 220];
         },
         getRadius: node => {
-            // 📏 HIERARQUIA CELESTIAL (Main Gain: Escalonamento por Massa)
+            // 📏 HIERARQUIA CELESTIAL (Escalonamento por Massa Gravitacional)
             const celestial = node['celestial-type'] || 'moon';
 
-            // 1. Massa Base por Tipo
+            // 1. Massa Base por Tipo de Corpo Celeste
             let baseMass = node.mass || 4.0;
-            if (celestial === 'galaxy-core') baseMass = 60.0;
-            if (celestial === 'solar-system-core') baseMass = 30.0;
-            if (celestial === 'planet') baseMass = 15.0;
-            if (celestial === 'asteroid') baseMass = 1.5;
+            if (celestial === 'galaxy') baseMass = 60.0;
+            if (celestial === 'solar-system') baseMass = 35.0;
+            if (celestial === 'planet') baseMass = 18.0;
+            if (celestial === 'asteroid') baseMass = 1.2;
 
             // 2. Bônus de Importância (Conexões)
             const deg = degreeCounts.get(String(node.id)) || node.degree || 0;
