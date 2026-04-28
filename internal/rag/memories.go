@@ -34,9 +34,19 @@ func NewKnowledgeWeaver(ontology *provider.OntologyService, qdrant *provider.Qdr
 
 // WeaveChatKnowledge analisa o texto do chat, extrai fatos e os integra ao grafo com consciência de sessão.
 func (w *KnowledgeWeaver) WeaveChatKnowledge(ctx context.Context, sessionID string, chatText string) error {
+	// 🛡️ Usa o contexto mais confiável (parâmetro > campo interno)
+	emitCtx := ctx
+	if emitCtx == nil {
+		emitCtx = w.ctx
+	}
+	if emitCtx == nil {
+		fmt.Println("[Weaver] ⚠️ Contexto indisponível. Tecelagem adiada.")
+		return nil
+	}
+
 	// 📡 Sinalização de Início: Avisa o Frontend que a WEAVER começou a tecer
-	utils.SafeEmit(w.ctx, "weaver:started", nil)
-	defer utils.SafeEmit(w.ctx, "weaver:finished", nil)
+	utils.SafeEmit(emitCtx, "weaver:started", nil)
+	defer utils.SafeEmit(emitCtx, "weaver:finished", nil)
 
 	// 1. Extração de Triplas (Sinapses)
 	contextHint := fmt.Sprintf("Memória de Chat - Sessão: %s", sessionID)
@@ -67,13 +77,13 @@ func (w *KnowledgeWeaver) WeaveChatKnowledge(ctx context.Context, sessionID stri
 					"status": "legacy",
 					"archived_at": time.Now().Format(time.RFC3339),
 				})
-				utils.SafeEmit(w.ctx, "agent:log", map[string]string{
+				utils.SafeEmit(emitCtx, "agent:log", map[string]string{
 					"source":  "WEAVER",
 					"content": fmt.Sprintf("📜 Conhecimento Legado: '%s' foi superado por '%s'.", existing["object"], t.Object),
 				})
 			} else {
 				// CONFLITO TOTAL: Emite Alerta Vermelho para o Frontend com os dados completos para resolução
-				utils.SafeEmit(w.ctx, "graph:conflict", map[string]interface{}{
+				utils.SafeEmit(emitCtx, "graph:conflict", map[string]interface{}{
 					"subject":    t.Subject,
 					"predicate":  t.Predicate,
 					"old":        existing["object"],
@@ -108,21 +118,21 @@ func (w *KnowledgeWeaver) WeaveChatKnowledge(ctx context.Context, sessionID stri
 		subjectID := "asteroid:" + utils.CleanNodeID(t.Subject)
 		objectID := "asteroid:" + utils.CleanNodeID(t.Object)
 
-		utils.SafeEmit(w.ctx, "graph:node", map[string]interface{}{
+		utils.SafeEmit(emitCtx, "graph:node", map[string]interface{}{
 			"id":             subjectID,
 			"name":           t.Subject,
 			"document-type":  "memory",
 			"celestial-type": "asteroid",
 			"session-id":     sessionID,
 		})
-		utils.SafeEmit(w.ctx, "graph:node", map[string]interface{}{
+		utils.SafeEmit(emitCtx, "graph:node", map[string]interface{}{
 			"id":             objectID,
 			"name":           t.Object,
 			"document-type":  "memory",
 			"celestial-type": "asteroid",
 			"session-id":     sessionID,
 		})
-		utils.SafeEmit(w.ctx, "graph:edge", map[string]interface{}{
+		utils.SafeEmit(emitCtx, "graph:edge", map[string]interface{}{
 			"source":    subjectID,
 			"target":    objectID,
 			"weight":    0.5,

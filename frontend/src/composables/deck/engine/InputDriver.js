@@ -79,20 +79,20 @@ export function useInputDriver() {
 
         if (layoutMode === 0) {
           // 0: Modo Supernova (Bolha Gigante Expandida)
-          updateForce('charge', { strength: () => -4200, distanceMax: () => 10000 })
-          updateForce('center', { strength: () => 0.01 })
+          updateForce('charge', { strength: -4200, distanceMax: 10000 })
+          updateForce('center', { strength: 0.01 })
           console.log("🌌 [Layout] Modo Supernova (Bolha) ativado")
         }
         else if (layoutMode === 1) {
           // 1: Modo Orgânico (Dente-de-Leão / Árvore Natural)
-          updateForce('charge', { strength: () => -400, distanceMax: () => 2000 })
-          updateForce('center', { strength: () => 0.08 }) // Mais gravidade para unir
+          updateForce('charge', { strength: -400, distanceMax: 2000 })
+          updateForce('center', { strength: 0.08 }) // Mais gravidade para unir
           console.log("🌼 [Layout] Modo Orgânico (Dente-de-Leão) ativado")
         }
         else if (layoutMode === 2) {
           // 2: Modo Denso (Galáxia Compacta para X-Ray)
-          updateForce('charge', { strength: () => -100, distanceMax: () => 500 })
-          updateForce('center', { strength: () => 0.15 }) // Muita gravidade
+          updateForce('charge', { strength: -100, distanceMax: 500 })
+          updateForce('center', { strength: 0.15 }) // Muita gravidade
           console.log("🪐 [Layout] Modo Galáxia (Denso) ativado")
         }
         return

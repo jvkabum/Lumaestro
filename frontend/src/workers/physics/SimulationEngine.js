@@ -103,12 +103,14 @@ export function createSimulation({
 
             Object.keys(params).forEach(key => {
                 if (typeof force[key] === 'function') {
-                    force[key](params[key]);
+                    // Se o valor é primitivo (número), converte para função constante para o D3
+                    const val = params[key];
+                    force[key](typeof val === 'function' ? val : val);
                 }
             });
 
             // "Acorda" a simulação para aplicar a mudança
-            simulation.alpha(0.3).restart();
+            simulation.alpha(0.5).restart();
         }
     };
 }

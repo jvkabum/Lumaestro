@@ -53,6 +53,12 @@ func (a *App) SetWorkspace(path string) error {
 	projectName := filepath.Base(absPath)
 	fmt.Printf("[Workspace] 📂 Workspace alterado para: %s (%s)\n", projectName, absPath)
 
+	// 🕸️ Atualiza o Crawler para apontar para o novo projeto (sinapse Workspace→Crawler)
+	if a.crawler != nil {
+		a.crawler.VaultPath = absPath
+		fmt.Printf("[Workspace] 🕸️ Crawler reconfigurado para: %s\n", absPath)
+	}
+
 	a.emitEvent("workspace:changed", map[string]string{
 		"path": absPath,
 		"name": projectName,

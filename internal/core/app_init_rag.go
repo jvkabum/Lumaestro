@@ -28,8 +28,12 @@ func (a *App) initRAGInfrastructure(cfg *config.Config) {
 	a.Validator = rag.NewAgentValidator(a.LStore, a.GEngine)
 	a.Recon = rag.NewAgentRecon(a.LStore, a.GEngine, a.qdrant)
 
-	// 🕸️ Inicializa o Crawler (Pode rodar em modo degradado sem IA para Fase 1)
-	a.crawler = obsidian.NewCrawler(cfg.ObsidianVaultPath, a.embedder, a.qdrant, a.ontology, a.LStore)
+	// 🕸️ Inicializa o Crawler usando o Workspace ativo ou Vault legado
+	targetRoot := cfg.ActiveWorkspace
+	if targetRoot == "" {
+		targetRoot = cfg.ObsidianVaultPath
+	}
+	a.crawler = obsidian.NewCrawler(targetRoot, a.embedder, a.qdrant, a.ontology, a.LStore)
 	
 	if a.embedder == nil || a.ontology == nil {
 		a.emitBoot("crawler", "⚠️", "Crawler em modo degradado: Somente estrutura de arquivos (IA offline).")

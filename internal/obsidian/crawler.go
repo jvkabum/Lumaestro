@@ -111,6 +111,11 @@ func (c *Crawler) PurgeCache() error {
 // IndexVault percorre e indexa notas do Obsidian em DUAS FASES para máxima eficiência.
 // FASA 1 (Offline): Extrai links e monta o grafo visual hierárquico (0 chamadas de API).
 func (c *Crawler) IndexVault(ctx context.Context) error {
+	if c.VaultPath == "" {
+		fmt.Println("[Crawler] 🛑 Scan ignorado: Nenhum Workspace ou Vault configurado. O Lumaestro está em Modo IDE aguardando um projeto.")
+		return nil
+	}
+
 	if err := c.EnsureCollections(ctx); err != nil {
 		return err
 	}
@@ -969,11 +974,18 @@ func (c *Crawler) EnsureCollections(ctx context.Context) error {
 
 		if !exists {
 			fmt.Printf("[Crawler] 🏗️ Criando coleção inexistente: %s (Dim: %d)\n", name, dimension)
-			utils.SafeEmit(c.ctx, "agent:log", map[string]string{
-				"source":  "CRAWLER",
-				"content": fmt.Sprintf("🏗️ Preparando infraestrutura: Criando coleção '%s' (%d dim)...", name, dimension),
-			})
+			if ctx != nil {
+				utils.SafeEmit(ctx, "agent:log", map[string]string{
+					"source":  "CRAWLER",
+					"content": fmt.Sprintf("🏗️ Preparando infraestrutura: Criando coleção '%s' (%d dim)...", name, dimension),
+				})
+			}
 			if err := c.Qdrant.CreateCollection(name, dimension); err != nil {
+				// 🛡️ Idempotência: Se outra goroutine já criou a coleção (409), ignorar
+				if strings.Contains(err.Error(), "already exists") {
+					fmt.Printf("[Crawler] ✅ Coleção '%s' já foi criada por outro processo. Seguindo.\n", name)
+					continue
+				}
 				return fmt.Errorf("falha ao criar coleção %s: %w", name, err)
 			}
 		}

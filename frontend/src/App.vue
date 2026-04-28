@@ -135,11 +135,28 @@ onMounted(async () => {
     state.edges.push(...batchEdges)
   })
 
+  // 🚀 [Mixer v3] Buffer de Acumulação para Nós e Arestas individuais (anti-flood)
+  let nodeBuffer = []
+  let edgeBuffer = []
+  const nodeIdSet = new Set(state.nodes.map(n => n.id))
+
+  const flushGraph = () => {
+    if (nodeBuffer.length > 0) {
+      const fresh = nodeBuffer.filter(n => !nodeIdSet.has(n.id))
+      for (const n of fresh) nodeIdSet.add(n.id)
+      if (fresh.length > 0) state.nodes.push(...fresh)
+      nodeBuffer = []
+    }
+    if (edgeBuffer.length > 0) {
+      state.edges.push(...edgeBuffer)
+      edgeBuffer = []
+    }
+  }
+  setInterval(flushGraph, 200)
+
   EventsOn('graph:node', (node) => {
     if (!node) return
-    if (!state.nodes.find(n => n.id === node.id)) {
-      state.nodes.push(node)
-    }
+    nodeBuffer.push(node)
   })
 
   EventsOn('graph:edge', (edge) => {
@@ -147,14 +164,7 @@ onMounted(async () => {
     const s = edge.source?.id || edge.source
     const t = edge.target?.id || edge.target
     if (!s || !t) return
-
-    if (!state.edges.find(e => {
-      const es = e.source?.id || e.source
-      const et = e.target?.id || e.target
-      return (es === s && et === t) || (es === t && et === s)
-    })) {
-      state.edges.push(edge)
-    }
+    edgeBuffer.push(edge)
   })
 
   EventsOn('graph:log', (glog) => {
