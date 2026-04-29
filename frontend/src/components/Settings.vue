@@ -19,6 +19,21 @@ const {
 const { install, setup } = useSettingsTools()
 const { addMCPServer, listMCPServers } = useSettingsMCP()
 const { handleAddAccount, handleLoginAccount, handleSwitchAccount, handleRemoveAccount } = useSettingsAccounts()
+const isMigrating = ref(false)
+
+const handleSyncHistory = async () => {
+  if (isMigrating.value) return
+  isMigrating.value = true
+  store.notify('Iniciando Sincronização Neural com a pasta global...', 'info')
+  try {
+    await window.go.core.App.ForceSyncGlobalHistory()
+    store.notify('Sincronização da Mothership concluída com sucesso! Verifique sua barra lateral.', 'success')
+  } catch (e) {
+    store.notify('Erro na sincronização: ' + e, 'error')
+  } finally {
+    isMigrating.value = false
+  }
+}
 
 // ── IDENTIDADE MULTI-PROVEDOR ──
 const selectedAccountProvider = ref('google')
@@ -448,6 +463,29 @@ runtime.EventsOn("native:progress", (data) => {
            <h3 style="color: #ef4444; font-size: 0.7rem; letter-spacing: 2px; margin-bottom: 0.6rem;">CUIDADO: ZONA DE PERIGO</h3>
            <p style="color: var(--p-text-dim); font-size: 0.7rem; margin-bottom: 0.8rem;">Deseja apagar todos os vetores e memórias do banco de dados?</p>
            <button @click="store.showResetModal = true" class="btn-reset-db">EXPURGAR BANCO VETORIAL (RESET)</button>
+        </div>
+
+        <!-- SEÇÃO MOTHERSHIP (SOBERANIA DE DADOS) INTEGRADA -->
+        <div style="margin-top: 3rem; border-top: 1px solid rgba(139, 92, 246, 0.2); padding-top: 2rem;">
+            <h2 class="section-title" style="color: #a78bfa; font-size: 1.1rem;">Soberania Mothership 🛸</h2>
+            <div class="mothership-card" style="background: rgba(139, 92, 246, 0.03); border: 1px solid rgba(139, 92, 246, 0.1); border-radius: 20px; padding: 1.5rem; position: relative; overflow: hidden;">
+              <div style="position: relative; z-index: 2;">
+                  <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+                    <div class="avatar-glow" style="background: linear-gradient(135deg, #8b5cf6, #ec4899); width: 45px; height: 45px; font-size: 1.3rem; display: flex; align-items: center; justify-content: center; border-radius: 12px;">🛸</div>
+                    <div>
+                        <h3 style="margin: 0; font-size: 1rem; font-weight: 900; color: #fff;">Sincronização Neural</h3>
+                        <p style="margin: 2px 0 0; font-size: 0.7rem; color: var(--p-text-dim);">Importar histórico legado (~/.gemini)</p>
+                    </div>
+                  </div>
+                  <button @click="handleSyncHistory" 
+                          :disabled="isMigrating" 
+                          class="btn-glow-blue" 
+                          style="width: 100%; height: 45px; font-size: 0.8rem; letter-spacing: 1px; filter: hue-rotate(280deg); display: flex; align-items: center; justify-content: center; gap: 10px;">
+                    <span v-if="isMigrating" class="spinner-small"></span>
+                    {{ isMigrating ? 'SINCRONIZANDO...' : 'RESCATAR HISTÓRICO GLOBAL' }}
+                  </button>
+              </div>
+            </div>
         </div>
       </section>
 

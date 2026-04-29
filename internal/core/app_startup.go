@@ -93,3 +93,11 @@ func (a *App) DeleteSession(filePath string) error {
 	}
 	return a.executor.DeleteSession(filePath)
 }
+
+// ForceSyncGlobalHistory remove o marcador de migração e força uma nova varredura na pasta global.
+func (a *App) ForceSyncGlobalHistory() error {
+	if a.executor == nil {
+		return fmt.Errorf("executor não disponível")
+	}
+	return a.executor.ForceSyncGlobalHistory()
+}

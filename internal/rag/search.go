@@ -3,6 +3,7 @@ package rag
 import (
 	"context"
 	"sort"
+	"strings"
 
 	"Lumaestro/internal/provider"
 	"Lumaestro/internal/rag/neural"
@@ -22,13 +23,13 @@ func NewSearchService(qdrant *provider.QdrantClient, ranker *neural.Ranker) *Sea
 	}
 }
 
-// SearchNote realiza uma busca híbrida em múltiplas coleções (Arquivos + Memórias) e aplica Re-Ranking.
-func (s *SearchService) SearchNote(ctx context.Context, vector []float32, limit int) ([]map[string]interface{}, error) {
+// SearchNote realiza uma busca híbrida em múltiplas coleções (Arquivos + Memórias) e aplica Re-Ranking, restrita às órbitas autorizadas.
+func (s *SearchService) SearchNote(ctx context.Context, vector []float32, allowedPaths []string, limit int) ([]map[string]interface{}, error) {
 	// 1. Busca Paralela em Coleções Distintas (Arquivos vs Memórias)
-	const oversampleFactor = 3
+	const oversampleFactor = 4 // Aumentado para compensar filtros de órbita
 	searchLimit := limit * oversampleFactor
 
-	// Busca 1: Obsidian Vault
+	// Busca 1: Obsidian Vault (Código/Notas)
 	obsidianResults, _ := s.Qdrant.SearchWithScores("obsidian_knowledge", vector, searchLimit)
 	
 	// Busca 2: Memórias de Chat (Sinapses)
@@ -44,6 +45,36 @@ func (s *SearchService) SearchNote(ctx context.Context, vector []float32, limit 
 	processResults := func(results []map[string]interface{}, isMemory bool) {
 		for _, res := range results {
 			vecScore, _ := res["_score"].(float64)
+
+			// FILTRO DE SOBERANIA MULTI-ÓRBITA (Arquivos E Memórias)
+			if len(allowedPaths) > 0 {
+				nodePath, _ := res["path"].(string)      // Para arquivos
+				wsPath, _ := res["workspace_path"].(string) // Para memórias/sinapses
+				
+				targetPath := nodePath
+				if isMemory && wsPath != "" {
+					targetPath = wsPath
+				}
+
+				if targetPath != "" {
+					found := false
+					for _, p := range allowedPaths {
+						if strings.HasPrefix(targetPath, p) {
+							found = true
+							break
+						}
+					}
+					if !found {
+						continue
+					}
+				} else if isMemory {
+					// Se a memória não tem workspace_path, tratamos como global (opcional)
+					// Por segurança estrita, poderíamos dar 'continue' aqui também.
+				}
+			} else {
+				// MODO CEGO: Bloqueia TUDO se não houver órbitas autorizadas
+				continue
+			}
 			
 			// Normalização de campos para o Grafo (Memórias usam Subject, Notas usam Name)
 			if isMemory {

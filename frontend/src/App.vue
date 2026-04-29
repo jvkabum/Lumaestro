@@ -178,6 +178,15 @@ onMounted(async () => {
     state.activeNode = nodeId
   })
 
+  EventsOn('graph:clear', () => {
+    console.log("[App] ☢️ Reset Total: Limpando estado local...")
+    state.nodes = []
+    state.edges = []
+    state.graphLogs = []
+    state.activeNode = null
+    nodeIdSet.clear()
+  })
+
   EventsOn('boot:stage', (data) => {
     if (data.stage === 'error') {
       bootError.value = data.message

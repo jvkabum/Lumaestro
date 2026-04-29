@@ -32,8 +32,8 @@ func NewKnowledgeWeaver(ontology *provider.OntologyService, qdrant *provider.Qdr
 	}
 }
 
-// WeaveChatKnowledge analisa o texto do chat, extrai fatos e os integra ao grafo com consciência de sessão.
-func (w *KnowledgeWeaver) WeaveChatKnowledge(ctx context.Context, sessionID string, chatText string) error {
+// WeaveChatKnowledge analisa o texto do chat, extrai fatos e os integra ao grafo com consciência de órbita e sessão.
+func (w *KnowledgeWeaver) WeaveChatKnowledge(ctx context.Context, sessionID string, chatText string, workspacePath string) error {
 	// 🛡️ Usa o contexto mais confiável (parâmetro > campo interno)
 	emitCtx := ctx
 	if emitCtx == nil {
@@ -101,15 +101,16 @@ func (w *KnowledgeWeaver) WeaveChatKnowledge(ctx context.Context, sessionID stri
 		id := h.Sum64()
 
 		payload := map[string]interface{}{
-			"id":         id,
-			"session_id": sessionID,
-			"subject":    t.Subject,
-			"predicate":  t.Predicate,
-			"object":     t.Object,
-			"source":     "chat_memory",
-			"status":     "active",
-			"timestamp":  time.Now().Format(time.RFC3339),
-			"content":    factText,
+			"id":             id,
+			"session_id":     sessionID,
+			"workspace_path": workspacePath, // Etiqueta de Soberania
+			"subject":        t.Subject,
+			"predicate":      t.Predicate,
+			"object":         t.Object,
+			"source":         "chat_memory",
+			"status":         "active",
+			"timestamp":      time.Now().Format(time.RFC3339),
+			"content":        factText,
 		}
 
 		w.Qdrant.UpsertPoint("knowledge_graph", id, vector, payload)

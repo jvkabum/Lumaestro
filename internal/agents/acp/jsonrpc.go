@@ -34,7 +34,7 @@ func StartJSONRPCListener(r io.Reader, handler JSONRPCHandler) {
 			continue
 		}
 
-		// Log bruto para diagnóstico (Original DNA)
+		// Log bruto para diagnóstico (Desativado - Handshake Estabilizado)
 		// fmt.Printf("<< [STDOUT RAW] %s\n", string(line))
 
 		var msg JSONRPCMessage

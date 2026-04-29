@@ -285,8 +285,11 @@ func (s *DuckDBStore) Close() error {
 	return s.db.Close()
 }
 
-// FindNodeInText busca o nó mais relevante cujo nome está contido no texto fornecido.
-func (s *DuckDBStore) FindNodeInText(text string) (string, error) {
+// FindNodeInText busca o nó mais relevante cujo nome está contido no texto fornecido, restrito aos workspaces autorizados.
+func (s *DuckDBStore) FindNodeInText(text string, allowedPaths []string) (string, error) {
+	if len(allowedPaths) == 0 {
+		return "", nil
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -296,36 +299,54 @@ func (s *DuckDBStore) FindNodeInText(text string) (string, error) {
 	cleaner := strings.NewReplacer("\"", "", "'", "", "(", "", ")", "", "[", "", "]", "", "?", "", "!", "", ".", "", ",", "")
 	cleanText := cleaner.Replace(strings.TrimSpace(text))
 
-	// Busca Strict: Tenta encontrar o nome da nota como uma palavra isolada no texto
-	queryStrict := `
+	// Prepara placeholders para a cláusula IN
+	placeholders := make([]string, len(allowedPaths))
+	argsStrict := make([]interface{}, len(allowedPaths)+3)
+	for i, path := range allowedPaths {
+		placeholders[i] = "?"
+		argsStrict[i] = path
+	}
+	argsStrict[len(allowedPaths)] = cleanText
+	argsStrict[len(allowedPaths)+1] = cleanText
+	argsStrict[len(allowedPaths)+2] = cleanText
+
+	queryStrict := fmt.Sprintf(`
 		SELECT id
 		FROM graph_nodes
-		WHERE length(name) > 2
+		WHERE workspace_path IN (%s)
+		  AND length(name) > 2
 		  AND (
-		    ' ' || ? || ' ' ILIKE '% ' || name || ' %' OR
-		    ? ILIKE name || ' %' OR
-		    ? ILIKE '% ' || name
+		    ' ' || ? || ' ' ILIKE '%% ' || name || ' %%' OR
+		    ? ILIKE name || ' %%' OR
+		    ? ILIKE '%% ' || name
 		  )
 		ORDER BY length(name) DESC
 		LIMIT 1
-	`
+	`, strings.Join(placeholders, ","))
 
-	err := s.db.QueryRow(queryStrict, cleanText, cleanText, cleanText).Scan(&id)
+	err := s.db.QueryRow(queryStrict, argsStrict...).Scan(&id)
 	if err == nil {
 		return id, nil
 	}
 
 	// Fallback loose: ILIKE normal
-	queryLoose := `
+	argsLoose := make([]interface{}, len(allowedPaths)+1)
+	for i, path := range allowedPaths {
+		argsLoose[i] = path
+	}
+	argsLoose[len(allowedPaths)] = cleanText
+
+	queryLoose := fmt.Sprintf(`
 		SELECT id
 		FROM graph_nodes
-		WHERE length(name) > 3
-		  AND ? ILIKE '%' || name || '%'
+		WHERE workspace_path IN (%s)
+		  AND length(name) > 3
+		  AND ? ILIKE '%%' || name || '%%'
 		ORDER BY length(name) DESC
 		LIMIT 1
-	`
+	`, strings.Join(placeholders, ","))
 
-	err = s.db.QueryRow(queryLoose, cleanText).Scan(&id)
+	err = s.db.QueryRow(queryLoose, argsLoose...).Scan(&id)
 	return id, err
 }
 
@@ -481,9 +502,11 @@ func (s *DuckDBStore) GetFullGraph(workspacePath string) ([]map[string]interface
 	return nodes, edges, nil
 }
 
-// SearchNodesByKeyword realiza uma busca textual rápida (Radar) no DuckDB.
-// Prioriza o nome e depois o conteúdo, com suporte a múltiplas palavras.
-func (s *DuckDBStore) SearchNodesByKeyword(keyword string, limit int) ([]map[string]interface{}, error) {
+// SearchNodesByKeyword realiza uma busca textual rápida (Radar) no DuckDB, restrita aos workspaces autorizados.
+func (s *DuckDBStore) SearchNodesByKeyword(keyword string, allowedPaths []string, limit int) ([]map[string]interface{}, error) {
+	if len(allowedPaths) == 0 {
+		return nil, nil
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -492,18 +515,23 @@ func (s *DuckDBStore) SearchNodesByKeyword(keyword string, limit int) ([]map[str
 		return nil, nil
 	}
 
-	// 🛑 STOP WORDS (Português/Inglês) expandidas para evitar ruído na busca SQL
+	// 🛑 STOP WORDS (Português/Inglês)
 	stopWords := map[string]bool{
 		"oque": true, "que": true, "é": true, "o": true, "a": true, "os": true, "as": true,
 		"de": true, "do": true, "da": true, "um": true, "uma": true, "sobre": true, "como": true,
 		"fale": true, "quem": true, "onde": true, "qual": true, "quais": true, "para": true, "pelo": true,
 		"pela": true, "com": true, "num": true, "numa": true, "está": true, "tem": true,
-		"what": true, "is": true, "how": true, "the": true, "in": true, "on": true, "at": true, "to": true,
-		"for": true, "of": true, "and": true, "or": true, "with": true, "about": true,
 	}
 
 	var scoreExprs []string
 	var args []interface{}
+	
+	// Adiciona allowedPaths para a cláusula IN
+	placeholders := make([]string, len(allowedPaths))
+	for i, path := range allowedPaths {
+		placeholders[i] = "?"
+		args = append(args, path)
+	}
 
 	for _, word := range words {
 		if len(word) < 2 || stopWords[word] {
@@ -511,15 +539,12 @@ func (s *DuckDBStore) SearchNodesByKeyword(keyword string, limit int) ([]map[str
 		}
 
 		pattern := "%" + word + "%"
-		// 1. Match no Nome (Peso 15 - Aumentado)
 		scoreExprs = append(scoreExprs, "(CASE WHEN name ILIKE ? THEN 15 ELSE 0 END)")
 		args = append(args, pattern)
 
-		// 2. Match no Conteúdo (Peso 2 - Dobrado)
 		scoreExprs = append(scoreExprs, "(CASE WHEN content ILIKE ? THEN 2 ELSE 0 END)")
 		args = append(args, pattern)
 
-		// 3. Match Exato no Nome (Peso 30 - Bônus Premium)
 		scoreExprs = append(scoreExprs, "(CASE WHEN name ILIKE ? THEN 30 ELSE 0 END)")
 		args = append(args, word)
 	}
@@ -529,12 +554,12 @@ func (s *DuckDBStore) SearchNodesByKeyword(keyword string, limit int) ([]map[str
 	}
 
 	query := fmt.Sprintf(`
-		SELECT id, name, type, (%s) as relevance
+		SELECT id, name, type, workspace_path, (%s) as relevance
 		FROM graph_nodes
-		WHERE relevance > 0
+		WHERE workspace_path IN (%s) AND relevance > 0
 		ORDER BY relevance DESC, created_at DESC
 		LIMIT ?
-	`, strings.Join(scoreExprs, " + "))
+	`, strings.Join(scoreExprs, " + "), strings.Join(placeholders, ","))
 
 	args = append(args, limit)
 
@@ -546,35 +571,51 @@ func (s *DuckDBStore) SearchNodesByKeyword(keyword string, limit int) ([]map[str
 
 	var results []map[string]interface{}
 	for rows.Next() {
-		var id, name, nodeType string
+		var id, name, nodeType, path string
 		var relevance int
-		if err := rows.Scan(&id, &name, &nodeType, &relevance); err == nil {
+		if err := rows.Scan(&id, &name, &nodeType, &path, &relevance); err == nil {
 			results = append(results, map[string]interface{}{
-				"id":        id,
-				"name":      name,
-				"type":      nodeType,
-				"relevance": relevance,
+				"id":             id,
+				"name":           name,
+				"type":           nodeType,
+				"workspace_path": path,
+				"relevance":      relevance,
 			})
 		}
 	}
 	return results, nil
 }
 
-// GetNeighbors recupera nós vizinhos baseados em conexões explícitas ou semânticas (ID Vinculador).
-func (s *DuckDBStore) GetNeighbors(nodeID string) ([]map[string]interface{}, error) {
+// GetNeighbors recupera nós vizinhos baseados em conexões explícitas ou semânticas, restrito aos workspaces autorizados.
+func (s *DuckDBStore) GetNeighbors(nodeID string, allowedPaths []string) ([]map[string]interface{}, error) {
+	if len(allowedPaths) == 0 {
+		return nil, nil
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	query := `
-		SELECT n.id, n.name, n.type, n.content
+	placeholders := make([]string, len(allowedPaths))
+	args := make([]interface{}, len(allowedPaths)+2)
+	args[0] = nodeID
+	args[1] = nodeID
+	for i, path := range allowedPaths {
+		placeholders[i] = "?"
+		args[i+2] = path
+	}
+
+	query := fmt.Sprintf(`
+		SELECT n.id, n.name, n.type, n.content, n.workspace_path
 		FROM graph_nodes n
 		JOIN graph_edges e ON (e.source_id = ? AND e.target_id = n.id) 
 		                   OR (e.target_id = ? AND e.source_id = n.id)
-		WHERE n.id != ?
+		WHERE n.workspace_path IN (%s) AND n.id != ?
 		LIMIT 10
-	`
+	`, strings.Join(placeholders, ","))
 
-	rows, err := s.db.Query(query, nodeID, nodeID, nodeID)
+	// Adiciona o nodeID final para o AND n.id != ?
+	args = append(args, nodeID)
+
+	rows, err := s.db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -582,13 +623,14 @@ func (s *DuckDBStore) GetNeighbors(nodeID string) ([]map[string]interface{}, err
 
 	var results []map[string]interface{}
 	for rows.Next() {
-		var id, name, nodeType, content string
-		if err := rows.Scan(&id, &name, &nodeType, &content); err == nil {
+		var id, name, nodeType, content, path string
+		if err := rows.Scan(&id, &name, &nodeType, &content, &path); err == nil {
 			results = append(results, map[string]interface{}{
-				"id":      id,
-				"name":    name,
-				"type":    nodeType,
-				"content": content,
+				"id":             id,
+				"name":           name,
+				"type":           nodeType,
+				"content":        content,
+				"workspace_path": path,
 			})
 		}
 	}

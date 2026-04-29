@@ -53,8 +53,35 @@ func (a *App) AskAgent(agentName string, prompt string) string {
 			return
 		}
 
-		// Usamos "default" como sessionID para manter o histórico em memória nesta sessão do app.
-		response, err := a.chat.Ask(ctx, agentName, "default", prompt)
+		// 🧠 [SOBERANIA] Obtém o workspace ativo e as referências para isolamento inteligente
+		activeWorkspace := a.executor.Workspace
+		allowedPaths := []string{}
+		agentCWD := ""
+
+		if activeWorkspace != "" {
+			allowedPaths = append(allowedPaths, activeWorkspace)
+			agentCWD = activeWorkspace // No projeto atual, ele nasce na raiz do projeto
+		} else {
+			// 🕶️ MODO CEGO: Cria uma câmara de vácuo (pasta temporária vazia)
+			tempDir, err := os.MkdirTemp("", "lumaestro_vacuum_*")
+			if err == nil {
+				agentCWD = tempDir
+				fmt.Printf("[SOBERANIA] 🕶️ Câmara de Vácuo criada em: %s\n", agentCWD)
+			}
+		}
+		
+		// 📡 Adiciona projetos externos como Órbitas de Referência
+		if a.config != nil {
+			for _, p := range a.config.ExternalProjects {
+				pAbs, _ := filepath.Abs(p.Path)
+				if pAbs != "" && pAbs != activeWorkspace {
+					allowedPaths = append(allowedPaths, pAbs)
+				}
+			}
+		}
+
+		// Usamos "default" como sessionID para manter o histórico em memória
+		response, err := a.chat.Ask(ctx, agentName, "default", prompt, allowedPaths)
 		if err != nil {
 			fmt.Printf("[BACKEND] ERRO no Chat: %v\n", err)
 			a.emitEvent("agent:log", map[string]string{
@@ -67,8 +94,8 @@ func (a *App) AskAgent(agentName string, prompt string) string {
 		fmt.Printf("[BACKEND] Resposta da Orquestração recebida. Injetando na sessão ACP...\n")
 		a.emitAgentStatus(agentName, "Encaminhando plano para o agente ativo", "status")
 
-		// Injeta a pergunta (prompt completo com RAG e histórico) na sessão ACP ativa
-		err = a.executor.SendInput(agentName, response, nil)
+		// Injeta a pergunta na sessão ACP ativa, garantindo o CWD isolado se necessário
+		err = a.executor.SendInput(agentName, response, nil, agentCWD)
 		if err != nil {
 			fmt.Printf("[BACKEND] ERRO ao enviar para o agente: %v\n", err)
 			a.emitEvent("agent:log", map[string]string{
@@ -90,7 +117,7 @@ func (a *App) SendAgentInput(agent string, input string, images []map[string]str
 		a.emitAgentStatus(agent, "Direcionando motor em tempo real (Steering Hint)", "status")
 
 		// Envia diretamente sem passar por RAG/Orquestrador para garantir latência zero na dica
-		return a.executor.SendInput(agent, "[DIRECIONAMENTO DO USUÁRIO]: "+input, images)
+		return a.executor.SendInput(agent, "[DIRECIONAMENTO DO USUÁRIO]: "+input, images, "")
 	}
 
 	// ⚡ Log Premium e Limpo
@@ -149,7 +176,7 @@ func (a *App) SendAgentInput(agent string, input string, images []map[string]str
 	}
 
 	a.emitAgentStatus(agentName, "Enviando instruções para o agente", "status")
-	err = a.executor.SendInput(agentName, finalPrompt, images)
+	err = a.executor.SendInput(agentName, finalPrompt, images, "")
 	if err != nil {
 		fmt.Printf("[App] ERRO no SendAgentInput: %v\n", err)
 		return fmt.Errorf("erro ao enviar input para ACP: %v", err)
@@ -170,39 +197,83 @@ func (a *App) SendAgentInput(agent string, input string, images []map[string]str
 // buildHybridContext constrói o contexto de inteligência mesclando Busca Lexical, Semântica e Memórias em um pipeline unificado.
 func (a *App) buildHybridContext(agent string, input string, previewInput string) string {
 	contextInfo := ""
+	cfg := a.GetConfig()
+	activeWorkspace := cfg.ActiveWorkspace
 
-	// 🔒 Validação de Resiliência: Só executa o RAG se o Vault estiver mapeado e os motores estiverem online.
-	if a.embedder == nil || a.navigator == nil || a.GetConfig().ObsidianVaultPath == "" {
+	// 🔒 [SOBERANIA DO COMANDANTE] Strict Context Isolation
+	// Se nenhuma órbita ativa estiver selecionada, a IA deve ser cega para o sistema de arquivos.
+	if activeWorkspace == "" {
+		fmt.Println("[RAG] 🕶️ MODO CEGO: Nenhuma órbita ativa selecionada. IA operando sem contexto de arquivos.")
 		return contextInfo
 	}
 
-	a.emitAgentStatus(agent, "Consultando memória e contexto do projeto", "memory")
-	fmt.Println("[RAG] Explorando ligações nervosas no Grafo de Conhecimento...")
+	// 📡 Monta a lista de Órbitas Autorizadas (Ativa + Referências)
+	allowedPaths := []string{activeWorkspace}
+	if a.config != nil {
+		for _, p := range a.config.ExternalProjects {
+			pAbs, _ := filepath.Abs(p.Path)
+			if pAbs != activeWorkspace && pAbs != "" {
+				allowedPaths = append(allowedPaths, pAbs)
+			}
+		}
+	}
 
-	// 📡 1. ENGINE LEXICAL: Radar de Palavra-Chave (Prioridade Máxima de UX e Relevância Exata)
-	nodes := a.navigator.SearchByKeyword(a.ctx, input)
+	// 🔒 Validação de Resiliência: Só executa o RAG se o Vault estiver mapeado e os motores estiverem online.
+	if a.embedder == nil || a.navigator == nil {
+		return contextInfo
+	}
+
+	a.emitAgentStatus(agent, "Consultando memória e contexto da órbita ativa", "memory")
+	fmt.Printf("[RAG] 🌌 Explorando órbita ativa: %s\n", activeWorkspace)
+
+	// 📡 1. ENGINE LEXICAL: Radar de Palavra-Chave (Prioridade Máxima)
+	// Agora passamos as órbitas autorizadas para filtrar internamente via DuckDB (Ativa + Referências)
+	rawNodes := a.navigator.SearchByKeyword(a.ctx, input, allowedPaths)
+	
+	// Filtro de Segurança: Garante que apenas nós das órbitas autorizadas cheguem à IA
+	var nodes []map[string]interface{}
+	for _, n := range rawNodes {
+		nodePath, _ := n["workspace_path"].(string)
+		
+		found := false
+		if nodePath == "" { // Memórias/Sinapses são globais por enquanto
+			found = true
+		} else {
+			for _, p := range allowedPaths {
+				if strings.HasPrefix(nodePath, p) {
+					found = true
+					break
+				}
+			}
+		}
+
+		if !found {
+			continue
+		}
+		nodes = append(nodes, n)
+	}
+
 	foundByRadar := len(nodes) > 0
 	discoveryEmitted := ""
 
-	// 🎬 FAST-TRACK ZOOM
+	// 🎬 FAST-TRACK ZOOM (Apenas se o alvo for legítimo da órbita)
 	if foundByRadar {
 		if id, ok := nodes[0]["id"].(string); ok {
 			discoveryEmitted = id
-			fmt.Printf("[RAG] 🎬 [FAST-TRACK] Radar identificou alvo: \"%s\". Disparando Zoom!\n", id)
-			a.emitAgentStatus(agent, "Alvo identificado pelo Radar Neural! Iniciando Voo...", "memory")
+			fmt.Printf("[RAG] 🎬 [FAST-TRACK] Radar identificou alvo na órbita: \"%s\".\n", id)
+			a.emitAgentStatus(agent, "Alvo identificado na órbita ativa! Focando...", "memory")
 			utils.SafeEmit(a.ctx, "node:active", discoveryEmitted)
 		}
-	} else {
-		fmt.Printf("[RAG] 🔍 Radar Neural não encontrou correspondências diretas para: \"%s\"\n", previewInput)
 	}
 
 	// 🧠 2. ENGINE SEMÂNTICO (IA): Enriquecimento Vectorial e Memórias
 	vector, err := a.embedder.GenerateEmbedding(a.ctx, input, true)
 	if err == nil {
-		a.emitAgentStatus(agent, "Buscando referências semânticas relevantes", "memory")
+		a.emitAgentStatus(agent, "Buscando referências semânticas na órbita", "memory")
 
-		semanticNotes, _ := a.qdrant.Search("obsidian_knowledge", vector, 5) // Busca expandida (Top 5)
-		semanticMems, _ := a.qdrant.Search("knowledge_graph", vector, 3)     // Memórias recentes (Top 3)
+		// Busca expandida no Qdrant (Top 10 para ter margem de filtro)
+		semanticNotes, _ := a.qdrant.Search("obsidian_knowledge", vector, 10)
+		semanticMems, _ := a.qdrant.Search("knowledge_graph", vector, 3)
 
 		seen := make(map[string]bool)
 		for _, n := range nodes {
@@ -211,19 +282,36 @@ func (a *App) buildHybridContext(agent string, input string, previewInput string
 			}
 		}
 
-		// 🛡️ RANKING DE MERGE E LIMITE DE NÓS (Prevenção de Context Overflow)
-		const MAX_NODES = 12 // Teto absoluto de nós injetados no prompt
+		// 🛡️ RANKING DE MERGE E FILTRO DE ÓRBITA
+		const MAX_NODES = 12
 
 		for _, sn := range semanticNotes {
 			if len(nodes) >= MAX_NODES {
 				break
 			}
+			nodePath, _ := sn["path"].(string)
+			
+			// FILTRO DE SOBERANIA MULTI-ÓRBITA
+			found := false
+			for _, p := range allowedPaths {
+				if nodePath != "" && strings.HasPrefix(nodePath, p) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+
 			if name, ok := sn["name"].(string); ok && !seen[name] {
 				nodes = append(nodes, sn)
 				seen[name] = true
 			}
 		}
 
+		// Memórias (Sinapses) — O Comandante quer limitar ao que está na órbita.
+		// Atualmente as memórias não guardam o path do projeto. 
+		// [TODO] Vincular memórias ao workspace_id no futuro.
 		for _, sm := range semanticMems {
 			if len(nodes) >= MAX_NODES {
 				break
@@ -235,42 +323,38 @@ func (a *App) buildHybridContext(agent string, input string, previewInput string
 				seen[subj] = true
 			}
 		}
-	} else {
-		fmt.Printf("[RAG] ⚠️ Falha na API de Vetores (%v). Operando apenas no modo Degredado (Radar).\n", err)
 	}
 
 	// 🎬 3. MONTAGEM FINAL DO CONTEXTO
 	if len(nodes) > 0 {
-		statusMsg := "Expandindo contexto com memória conectada"
+		statusMsg := "Expandindo contexto da órbita selecionada"
 		if foundByRadar {
 			statusMsg = "Alvo identificado pelo Radar Neural!"
 		}
 
-		// Fallback semântico para zoom (se o radar falhou, voamos para o Top-1 semântico)
+		// Fallback semântico para zoom
 		if discoveryEmitted == "" {
 			if topID, ok := nodes[0]["id"].(string); ok {
-				fmt.Printf("[RAG] 🎬 Zoom semântico (fallback): %s\n", topID)
 				utils.SafeEmit(a.ctx, "node:active", topID)
 			}
 		}
 
 		a.emitAgentStatus(agent, statusMsg, "memory")
 
-		// O navigator expande a estrutura com sinapses conectadas
-		fullContext := a.navigator.ExpandContext(a.ctx, nodes)
+		// O navigator expande a estrutura com sinapses conectadas (Ativa + Referências)
+		fullContext := a.navigator.ExpandContext(a.ctx, nodes, allowedPaths)
 
-		contextInfo = "\n\n[CONHECIMENTO ORQUESTRADO (OBSIDIAN + SINAPSES)]\n"
+		contextInfo = "\n\n[CONHECIMENTO DA ÓRBITA ATIVA: " + filepath.Base(activeWorkspace) + "]\n"
 
-		// 🛡️ Limite Absoluto de Caracteres (Proteção de Custos API LLM)
 		const MAX_CHARS = 100000
 		for _, ctxPart := range fullContext {
 			if len(contextInfo)+len(ctxPart) > MAX_CHARS {
-				contextInfo += "\n\n[⚠️ CONTEÚDO ADICIONAL TRUNCADO POR LIMITE DE MEMÓRIA (Max Tokens Atingido)]"
+				contextInfo += "\n\n[⚠️ CONTEÚDO ADICIONAL TRUNCADO POR LIMITE DE MEMÓRIA]"
 				break
 			}
 			contextInfo += ctxPart + "\n\n"
 		}
-		fmt.Printf("[RAG] 🧠 Contexto Híbrido Finalizado: %d Fontes Base -> Tamanho total: %d caracteres.\n", len(nodes), len(contextInfo))
+		fmt.Printf("[RAG] 🧠 Contexto de Órbita Finalizado: %d Fontes -> %d caracteres.\n", len(nodes), len(contextInfo))
 	}
 
 	return contextInfo
@@ -284,7 +368,9 @@ func (a *App) ConsolidateChatKnowledge(sessionID string, chatText string) string
 
 	fmt.Printf("[App] Consolidando ligações nervosas para sessão %s...\n", sessionID)
 	a.emitAgentStatus("memory", "Consolidando memória da conversa no grafo", "memory")
-	err := a.weaver.WeaveChatKnowledge(a.ctx, sessionID, chatText)
+	
+	activeWorkspace := a.executor.Workspace
+	err := a.weaver.WeaveChatKnowledge(a.ctx, sessionID, chatText, activeWorkspace)
 	if err != nil {
 		return "Erro ao tecer sinapses: " + err.Error()
 	}
@@ -362,15 +448,16 @@ func (a *App) ResolveConflict(decision string, subject string, predicate string,
 		newID := h.Sum64()
 
 		payload := map[string]interface{}{
-			"id":         newID,
-			"session_id": sessionID,
-			"subject":    subject,
-			"predicate":  predicate,
-			"object":     newValue,
-			"source":     "chat_memory",
-			"status":     "active",
-			"timestamp":  time.Now().Format(time.RFC3339),
-			"content":    factText,
+			"id":             newID,
+			"session_id":     sessionID,
+			"workspace_path": a.executor.Workspace,
+			"subject":        subject,
+			"predicate":      predicate,
+			"object":         newValue,
+			"source":         "chat_memory",
+			"status":         "active",
+			"timestamp":      time.Now().Format(time.RFC3339),
+			"content":        factText,
 		}
 
 		a.qdrant.UpsertPoint("knowledge_graph", newID, vector, payload)
@@ -392,7 +479,7 @@ func (a *App) ResolveConflict(decision string, subject string, predicate string,
 // SendTerminalData envia input do usuário para o processo do terminal (stdin).
 func (a *App) SendTerminalData(agent string, data string) {
 	sessionID := "acp-session-" + agent
-	a.executor.SendInput(sessionID, data, nil)
+	a.executor.SendInput(sessionID, data, nil, "")
 }
 
 // SendSteeringHint envia uma dica de direcionamento em tempo real para a sessão ativa do agente.

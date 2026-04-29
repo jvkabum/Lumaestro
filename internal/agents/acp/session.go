@@ -19,7 +19,7 @@ import (
 )
 
 // StartSession inicia o Gemini CLI com a flag --acp. Se loadSessionID for fornecido, tenta restaurar essa sessão em vez de criar uma nova.
-func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID string, loadSessionID string, agentID uuid.UUID, issueID *uuid.UUID, planMode bool, parent *ACPSession) error {
+func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID string, loadSessionID string, agentID uuid.UUID, issueID *uuid.UUID, planMode bool, parent *ACPSession, agentCWD string) error {
 	e.Mu.Lock()
 	e.Ctx = ctx
 	e.Tools.Ctx = ctx
@@ -42,7 +42,10 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 	e.Mu.Unlock()
 
 	// 📂 Workspace: Usa o diretório de projeto ativo, ou fallback para CWD do Lumaestro
-	cwd := e.Workspace
+	cwd := agentCWD
+	if cwd == "" {
+		cwd = e.Workspace
+	}
 	if cwd == "" {
 		cwd, _ = os.Getwd()
 	}
@@ -129,26 +132,29 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 			isUsingOAuth = false
 		}
 
-		// 🌐 Lógica de Autenticação Híbrida (Lumaestro 2.0)
-		userHome, _ := os.UserHomeDir()
-		globalGeminiHome := filepath.Join(userHome, ".gemini")
+		// 🌐 LÓGICA MOTHERSHIP: Tudo converge para o diretório raiz do Lumaestro
+		baseAppPath, _ := os.Getwd()
+		mothershipHome := filepath.Join(baseAppPath, ".lumaestro")
+		os.MkdirAll(mothershipHome, 0755)
+
+		sessionHome = mothershipHome
+		fmt.Printf("[SOBERANIA] 🛸 Arquitetura Mothership Ativada: Gravando em %s\n", sessionHome)
 
 		if isUsingOAuth {
-			if agent == "gemini" {
-				// Motores principais: Usar o Home do usuário onde reside a pasta .gemini
-				sessionHome = userHome
-				fmt.Printf("[ACP] 🌐 Motor Central: Usando Perfil em %s (Base .gemini)\n", sessionHome)
-			} else {
-				// Contas Gemini do Projeto/Sub-agentes: Tentar local primeiro
-				if _, err := os.Stat(filepath.Join(cwd, ".gemini")); err == nil {
-					sessionHome = cwd
-					fmt.Printf("[ACP] 📂 Conta de Projeto: Usando Login Local em %s\n", sessionHome)
-				} else {
-					sessionHome = globalGeminiHome // Fallback se não houver isolamento local
+			// 🌉 PONTE DE CREDENCIAIS (Mothership): Copia as credenciais do usuário para a Nave Mãe
+			userHome, _ := os.UserHomeDir()
+			globalCreds := filepath.Join(userHome, ".gemini", "oauth_creds.json")
+			localCreds := filepath.Join(sessionHome, "oauth_creds.json")
+
+			if _, err := os.Stat(globalCreds); err == nil {
+				if _, errLocal := os.Stat(localCreds); errLocal != nil {
+					data, _ := os.ReadFile(globalCreds)
+					os.WriteFile(localCreds, data, 0600)
+					fmt.Println("[SOBERANIA] 🌉 Ponte de Credenciais transferida para a raiz da Mothership.")
 				}
 			}
 
-			// Se houver uma conta específica ATIVA no pool (Identidades), ela tem prioridade total
+			// Se houver uma conta específica ATIVA no pool (Identidades), ela pode apontar para outro local (Avançado)
 			if cfgLoaded != nil {
 				for _, id := range cfgLoaded.Identities {
 					if id.Provider == "google" && id.Active && id.HomeDir != "" {
@@ -337,13 +343,11 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		} else if cfgLoaded != nil && cfgLoaded.UseGeminiAPIKey {
 			methodId = "gemini-api-key"
 		} else {
-			// 🌐 Lógica de Silêncio: Se já houver credenciais OAuth, não pede login de novo
+			// 🌐 Força Autenticação: O motor exige o comando authenticate para validar o arquivo na memória
 			methodId = "oauth-personal" // Força o ID correto para modo login
-			userHome, _ := os.UserHomeDir()
-			credsPath := filepath.Join(userHome, ".gemini", "oauth_creds.json")
+			credsPath := filepath.Join(sessionHome, "oauth_creds.json")
 			if _, err := os.Stat(credsPath); err == nil {
-				fmt.Printf("[ACP] 🛡️ Credenciais OAuth detectadas em %s. Pulando login redundante.\n", credsPath)
-				shouldAuthenticate = false
+				fmt.Printf("[ACP] 🛡️ Credenciais OAuth detectadas na Mothership (%s). Validando no motor...\n", credsPath)
 			}
 		}
 
@@ -420,10 +424,12 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		fmt.Println("[ACP] Estágio 3 concluído. Sessão pronta!")
 	}
 
-	fmt.Println("[ACP] Enviando setSessionMode (auto-approve)...")
+	// 🛸 Sincronização inicial da Mothership realizada via ensureMothershipSync no início do fluxo.
+
+	fmt.Println("[ACP] Enviando setSessionMode (yolo)...")
 	modeParams, _ := json.Marshal(map[string]interface{}{
 		"sessionId": session.ACPSessID,
-		"modeId":    "auto-approve", // Nome real que o motor processa internamente
+		"modeId":    "yolo", // Gemini v0.40.0 usa 'yolo' em vez de 'auto-approve'
 	})
 	
 	setModeID := e.getNextID()
@@ -435,6 +441,14 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 	})
 	// Espera e engole silenciosamente se a CLI der Internal Error para newly created sessions.
 	_, _ = e.waitForResponse(setModeID, 5*time.Second)
+
+	// 🔓 SINALIZAÇÃO DE PRONTIDÃO: Avisa que o boot foi concluído com sucesso (Apenas uma vez)
+	select {
+	case <-session.initDone:
+		// Já fechado, ignora
+	default:
+		close(session.initDone)
+	}
 
 	utils.SafeEmit(e.Ctx, "terminal:started", map[string]interface{}{
 		"agent":     agent,
@@ -448,25 +462,32 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 
 // ListSessions recupera a lista de conversas salvas diretamente do sistema de arquivos.
 func (e *ACPExecutor) ListSessions(s *ACPSession) ([]SessionInfo, error) {
-	// 1. Determinar o diretório de base (.gemini)
-	userHome, _ := os.UserHomeDir()
-	sessionHome := filepath.Join(userHome, ".gemini")
+	baseAppPath, _ := os.Getwd()
+	sessionHome := filepath.Join(baseAppPath, ".lumaestro")
+	
+	// 🚀 Sincroniza a Mothership antes de listar (Garate que histórico global apareça)
+	e.ensureMothershipSync(sessionHome)
 
-	cwd, _ := os.Getwd()
-	if cfg, errCfg := config.Load(); errCfg == nil {
-		for _, id := range cfg.Identities {
-			if id.Provider == "google" && id.Active && id.HomeDir != "" {
-				sessionHome = id.HomeDir
-				break
+	// Se não houver Mothership, tentamos o fallback para a identidade global (legado)
+	if _, err := os.Stat(sessionHome); err != nil {
+		if cfg, errCfg := config.Load(); errCfg == nil {
+			for _, id := range cfg.Identities {
+				if id.Provider == "google" && id.Active && id.HomeDir != "" {
+					sessionHome = id.HomeDir
+					break
+				}
 			}
-		}
-	} else {
-		if _, err := os.Stat(filepath.Join(cwd, ".gemini")); err == nil {
-			sessionHome = filepath.Join(cwd, ".gemini")
 		}
 	}
 
+	cwd := e.Workspace
+	if cwd == "" {
+		cwd = baseAppPath
+	}
+
+	// 2. Tentar identificar o ID do Projeto para filtrar o histórico
 	projectID := "lumaestro"
+	
 	projectsPath := filepath.Join(sessionHome, "projects.json")
 	if data, err := os.ReadFile(projectsPath); err == nil {
 		var p struct {
@@ -482,14 +503,13 @@ func (e *ACPExecutor) ListSessions(s *ACPSession) ([]SessionInfo, error) {
 		}
 	}
 
+	// 🚀 UNIFICAÇÃO MOTHERSHIP: O Lumaestro agora prioriza a estrutura nativa do motor dentro da pasta soberana
 	sessionsDirs := []string{
-		filepath.Join(sessionHome, "history", projectID),
-		filepath.Join(sessionHome, "history", "ia"),
-		filepath.Join(sessionHome, "history", "lumaestro"),
-		filepath.Join(sessionHome, "history", "lumaestro-1"),
-		filepath.Join(sessionHome, "tmp", "lumaestro", "chats"),
-		filepath.Join(sessionHome, "tmp", "lumaestro-1", "chats"),
-		filepath.Join(sessionHome, "sessions"),
+		filepath.Join(sessionHome, ".gemini", "tmp", "lumaestro", "chats"),
+		filepath.Join(sessionHome, ".gemini", "history", projectID),
+		filepath.Join(sessionHome, ".gemini", "history", "ia"),
+		filepath.Join(sessionHome, ".gemini", "history", "lumaestro"),
+		filepath.Join(sessionHome, "history"), // Fallback para migrações antigas
 	}
 
 	var finalList []SessionInfo
@@ -506,7 +526,8 @@ func (e *ACPExecutor) ListSessions(s *ACPSession) ([]SessionInfo, error) {
 		}
 
 		for _, f := range files {
-			if !f.IsDir() && strings.HasSuffix(f.Name(), ".json") && f.Name() != "index.json" {
+			isHistory := strings.HasSuffix(f.Name(), ".json") || strings.HasSuffix(f.Name(), ".jsonl")
+			if !f.IsDir() && isHistory && f.Name() != "index.json" {
 				path := filepath.Join(dirPath, f.Name())
 				if visited[path] {
 					continue
@@ -526,33 +547,41 @@ func (e *ACPExecutor) ListSessions(s *ACPSession) ([]SessionInfo, error) {
 					UpdatedAt string `json:"updatedAt"`
 					CreatedAt string `json:"createdAt"`
 				}
-				if err := json.Unmarshal(data, &meta); err == nil {
-					finalID := meta.ID
-					if meta.SessID != "" {
-						finalID = meta.SessID
+				
+				if err := json.Unmarshal(data, &meta); err != nil {
+					// Fallback para JSONL: Tenta ler apenas a primeira linha
+					lines := strings.Split(string(data), "\n")
+					if len(lines) > 0 {
+						json.Unmarshal([]byte(lines[0]), &meta)
 					}
-
-					title := meta.Title
-					if title == "" {
-						title = meta.DispName
-					}
-					if title == "" {
-						title = strings.TrimSuffix(f.Name(), ".json")
-					}
-
-					info, _ := f.Info()
-					updatedAt := meta.UpdatedAt
-					if updatedAt == "" {
-						updatedAt = info.ModTime().Format(time.RFC3339)
-					}
-
-					finalList = append(finalList, SessionInfo{
-						SessionID: finalID,
-						Title:     title,
-						UpdatedAt: updatedAt,
-						File:      path,
-					})
 				}
+
+				finalID := meta.ID
+				if meta.SessID != "" {
+					finalID = meta.SessID
+				}
+
+				title := meta.Title
+				if title == "" {
+					title = meta.DispName
+				}
+				if title == "" {
+					title = strings.TrimSuffix(f.Name(), ".json")
+					title = strings.TrimSuffix(title, ".jsonl")
+				}
+
+				info, _ := f.Info()
+				updatedAt := meta.UpdatedAt
+				if updatedAt == "" {
+					updatedAt = info.ModTime().Format(time.RFC3339)
+				}
+
+				finalList = append(finalList, SessionInfo{
+					SessionID: finalID,
+					Title:     title,
+					UpdatedAt: updatedAt,
+					File:      path,
+				})
 			}
 		}
 	}
@@ -597,16 +626,18 @@ func (e *ACPExecutor) DeleteSession(filePath string) error {
 	defer e.Mu.Unlock()
 
 	cwd, _ := os.Getwd()
-	geminiPath := filepath.Join(cwd, ".gemini")
+	localGeminiPath := filepath.Join(cwd, ".gemini")
+	mothershipPath := filepath.Join(cwd, ".lumaestro")
 	userHome, _ := os.UserHomeDir()
 	globalGeminiPath := filepath.Join(userHome, ".gemini")
 
 	cleanPath := filepath.Clean(filePath)
-	allowedLocal := strings.HasPrefix(cleanPath, filepath.Clean(geminiPath))
+	allowedLocal := strings.HasPrefix(cleanPath, filepath.Clean(localGeminiPath))
 	allowedGlobal := strings.HasPrefix(cleanPath, filepath.Clean(globalGeminiPath))
+	allowedMothership := strings.HasPrefix(cleanPath, filepath.Clean(mothershipPath))
 
-	if !allowedLocal && !allowedGlobal {
-		return fmt.Errorf("🛡️ BLOQUEIO DE SEGURANÇA: Não é permitido deletar arquivos fora das pastas .gemini autorizadas")
+	if !allowedLocal && !allowedGlobal && !allowedMothership {
+		return fmt.Errorf("🛡️ BLOQUEIO DE SEGURANÇA: Não é permitido deletar arquivos fora das pastas autorizadas (.gemini ou .lumaestro)")
 	}
 
 	fmt.Printf("[ACP] Deletando Sinfonia: %s\n", filePath)
@@ -621,33 +652,35 @@ func (e *ACPExecutor) DeleteSession(filePath string) error {
 	return nil
 }
 
-// findLatestSessionID vasculha recursivamente a pasta .gemini/tmp em busca do chat JSON mais recente.
+// findLatestSessionID vasculha recursivamente a pasta tmp em busca do chat JSON mais recente.
 func (e *ACPExecutor) findLatestSessionID(sessionHome string) string {
 	var latestFile string
 	var latestTime time.Time
 
-	// 🕵️ Sempre buscar dentro de .gemini/tmp, mesmo que o sessionHome seja a raiz do perfil
-	userHome, _ := os.UserHomeDir()
-	geminiHome := filepath.Join(userHome, ".gemini")
-	
-	tmpDir := filepath.Join(geminiHome, "tmp")
-	if _, err := os.Stat(tmpDir); err != nil {
-		return ""
+	// 🕵️ No Modo Híbrido, sessionHome já aponta para a base correta (.lumaestro ou ~/.gemini)
+	// Como o motor sempre cria uma subpasta .gemini, verificamos ambas as possibilidades.
+	tmpDirs := []string{
+		filepath.Join(sessionHome, ".gemini", "tmp"),
+		filepath.Join(sessionHome, "tmp"),
 	}
 
-	filepath.Walk(tmpDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return nil
+	for _, tmpDir := range tmpDirs {
+		if _, err := os.Stat(tmpDir); err == nil {
+			filepath.Walk(tmpDir, func(path string, info os.FileInfo, err error) error {
+				if err != nil {
+					return nil
+				}
+				// Procuramos por arquivos .json dentro de diretórios 'chats'
+				if !info.IsDir() && strings.HasSuffix(path, ".json") && strings.Contains(path, "chats") {
+					if info.ModTime().After(latestTime) {
+						latestTime = info.ModTime()
+						latestFile = path
+					}
+				}
+				return nil
+			})
 		}
-		// Procuramos por arquivos .json dentro de diretórios 'chats'
-		if !info.IsDir() && strings.HasSuffix(path, ".json") && strings.Contains(path, "chats") {
-			if info.ModTime().After(latestTime) {
-				latestTime = info.ModTime()
-				latestFile = path
-			}
-		}
-		return nil
-	})
+	}
 
 	if latestFile != "" {
 		data, err := os.ReadFile(latestFile)
@@ -661,4 +694,70 @@ func (e *ACPExecutor) findLatestSessionID(sessionHome string) string {
 		}
 	}
 	return ""
+}
+
+// ForceSyncGlobalHistory remove o marcador e executa a sincronização forçada.
+func (e *ACPExecutor) ForceSyncGlobalHistory() error {
+	baseAppPath, _ := os.Getwd()
+	sessionHome := filepath.Join(baseAppPath, ".lumaestro")
+	markerPath := filepath.Join(sessionHome, ".migration_done")
+	
+	// Remove o marcador para permitir nova migração
+	os.Remove(markerPath)
+	
+	fmt.Println("[SOBERANIA] 🔄 Gatilho de Sincronização Manual ativado pelo usuário.")
+	e.ensureMothershipSync(sessionHome)
+	return nil
+}
+
+// ensureMothershipSync garante que os dados vitais da pasta global sejam migrados para a Mothership apenas uma vez.
+func (e *ACPExecutor) ensureMothershipSync(sessionHome string) {
+	markerPath := filepath.Join(sessionHome, ".migration_done")
+	if _, err := os.Stat(markerPath); err == nil {
+		return // Migração já realizada anteriormente
+	}
+
+	userHome, _ := os.UserHomeDir()
+	globalGemini := filepath.Join(userHome, ".gemini")
+	
+	migrationOccurred := false
+
+	// 1. Migrar projects.json
+	globalProjects := filepath.Join(globalGemini, "projects.json")
+	localProjects := filepath.Join(sessionHome, ".gemini", "projects.json")
+	if _, err := os.Stat(globalProjects); err == nil {
+		if _, errEx := os.Stat(localProjects); os.IsNotExist(errEx) {
+			os.MkdirAll(filepath.Dir(localProjects), 0755)
+			utils.CopyFile(globalProjects, localProjects)
+			fmt.Println("[SOBERANIA] 🗺️ Mapa de projetos migrado para a Mothership (.gemini).")
+			migrationOccurred = true
+		}
+	}
+
+	// 2. Migrar histórico de conversas
+	globalHistory := filepath.Join(globalGemini, "history")
+	localHistory := filepath.Join(sessionHome, ".gemini", "history")
+	if _, err := os.Stat(globalHistory); err == nil {
+		if entries, errRead := os.ReadDir(globalHistory); errRead == nil && len(entries) > 0 {
+			os.MkdirAll(localHistory, 0755)
+			for _, entry := range entries {
+				oldPath := filepath.Join(globalHistory, entry.Name())
+				newPath := filepath.Join(localHistory, entry.Name())
+				if _, errEx := os.Stat(newPath); os.IsNotExist(errEx) {
+					if entry.IsDir() {
+						utils.CopyDir(oldPath, newPath)
+					} else {
+						utils.CopyFile(oldPath, newPath)
+					}
+					migrationOccurred = true
+				}
+			}
+			if migrationOccurred {
+				fmt.Printf("[SOBERANIA] 📚 %d itens de histórico migrados.\n", len(entries))
+			}
+		}
+	}
+
+	// Cria o marcador para nunca mais re-migrar (Soberania de via única)
+	os.WriteFile(markerPath, []byte(time.Now().Format(time.RFC3339)), 0644)
 }

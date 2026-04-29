@@ -90,6 +90,10 @@ export function FixEnvironment() {
   return window['go']['core']['App']['FixEnvironment']();
 }
 
+export function ForceSyncGlobalHistory() {
+  return window['go']['core']['App']['ForceSyncGlobalHistory']();
+}
+
 export function FullSync() {
   return window['go']['core']['App']['FullSync']();
 }

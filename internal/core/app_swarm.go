@@ -60,7 +60,7 @@ func (a *App) handleAgentWakeUp(agent db.Agent, runID uuid.UUID) {
 	}
 
 	// 2. Iniciar ou Reutilizar Sessão ACP vinculada à Identidade
-	err = a.executor.StartSession(a.ctx, swarmProvider, sessionID, "LATEST", agent.ID, &issue.ID, false, nil)
+	err = a.executor.StartSession(a.ctx, swarmProvider, sessionID, "LATEST", agent.ID, &issue.ID, false, nil, "")
 	if err != nil {
 		orchestration.FinalizeHeartbeat(agent.ID, runID, false, "Erro ACP Swarm: "+err.Error())
 		return
@@ -85,7 +85,7 @@ func (a *App) handleAgentWakeUp(agent db.Agent, runID uuid.UUID) {
 
 	// 3. Injetar Pulso de Inteligência no Agente Concorrente
 	// O SendInput é assíncrono e lidará com o fluxo JSON-RPC
-	err = a.executor.SendInput(sessionID, prompt, nil)
+	err = a.executor.SendInput(sessionID, prompt, nil, "")
 	if err != nil {
 		orchestration.FinalizeHeartbeat(agent.ID, runID, false, "Erro ao injetar comando: "+err.Error())
 		return

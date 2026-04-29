@@ -24,11 +24,16 @@ func (a *App) SetWorkspace(path string) error {
 			a.config.ActiveWorkspace = ""
 			config.Save(*a.config)
 		}
-		fmt.Println("[Cosmos] 🏛️ Retornando ao ponto zero do Universo.")
+		// 🧼 [LIMPEZA DE ÓRBITA] Reseta o motor de grafos em RAM para evitar crosstalk
+		if a.GEngine != nil {
+			a.GEngine.Clear()
+		}
+
 		a.emitEvent("workspace:changed", map[string]string{
 			"path": "",
 			"name": "Universo Lumaestro",
 		})
+		a.emitEvent("graph:clear", nil)
 		return nil
 	}
 
@@ -62,6 +67,12 @@ func (a *App) SetWorkspace(path string) error {
 		"path": absPath,
 		"name": projectName,
 	})
+
+	// 🧼 [LIMPEZA DE ÓRBITA] Reseta e limpa o frontend antes de carregar novo projeto
+	if a.GEngine != nil {
+		a.GEngine.Clear()
+	}
+	a.emitEvent("graph:clear", nil)
 
 	return nil
 }

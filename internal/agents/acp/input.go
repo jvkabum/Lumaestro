@@ -8,7 +8,7 @@ import (
 )
 
 // SendInput envia texto para uma sessão ativa da IA via RPC 'prompt', suportando imagens em base64.
-func (e *ACPExecutor) SendInput(sessionID string, input string, images []map[string]string) error {
+func (e *ACPExecutor) SendInput(sessionID string, input string, images []map[string]string, agentCWD string) error {
 	fmt.Printf("[ACP] >> SendInput recebido! Session: %s, Msg: %s...\n", sessionID, input)
 	
 	e.Mu.Lock()
@@ -25,16 +25,14 @@ func (e *ACPExecutor) SendInput(sessionID string, input string, images []map[str
 		return fmt.Errorf("sessão %s não encontrada", sessionID)
 	}
 
-	// ⏳ Aguarda o Handshake terminar se ele ainda estiver rolando em background
-	if session.ACPSessID == "" {
-		fmt.Printf("[ACP] ⏳ Sessão %s ainda sem ID ACP. Aguardando estabilização...\n", sessionID)
-		for i := 0; i < 10; i++ {
-			time.Sleep(500 * time.Millisecond)
-			if session.ACPSessID != "" { break }
-		}
+	// ⏳ Aguarda o Handshake terminar de forma assíncrona e limpa
+	select {
+	case <-session.initDone:
 		if session.ACPSessID == "" {
-			return fmt.Errorf("sessão não initializada completamente (sem ACP sessionId)")
+			return fmt.Errorf("inicialização concluída, mas sem ACP sessionId")
 		}
+	case <-time.After(90 * time.Second): // Tolerância alta para slow boots/downloads
+		return fmt.Errorf("timeout crítico aguardando a estabilização do motor")
 	}
 
 	// 🧠 Construção do Prompt Multimodal (Texto + Imagens)
@@ -116,7 +114,7 @@ func (e *ACPExecutor) AskSync(sessionID string, prompt string, images []map[stri
 	e.turnChannels[sessionID] = ch
 	e.turnMu.Unlock()
 
-	err := e.SendInput(sessionID, prompt, images)
+	err := e.SendInput(sessionID, prompt, images, "")
 	if err != nil { return "", err }
 
 	var fullResponse strings.Builder

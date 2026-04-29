@@ -250,7 +250,7 @@ func (e *ACPExecutor) HandleQuotaExhausted(sessionID string) {
 	// Como estamos dentro do Executor, podemos chamar StartSession.
 	// Precisamos apenas dos parâmetros originais.
 	time.Sleep(1 * time.Second) // Delay tático para limpeza de pipes
-			if err := e.StartSession(e.Ctx, session.AgentName, session.ID, session.ACPSessID, session.AgentID, session.CurrentIssueID, session.PlanMode, nil); err != nil {
+			if err := e.StartSession(e.Ctx, session.AgentName, session.ID, session.ACPSessID, session.AgentID, session.CurrentIssueID, session.PlanMode, nil, ""); err != nil {
 		fmt.Printf("[Resilience] Erro ao reiniciar motor: %v\n", err)
 		return
 	}
@@ -273,7 +273,7 @@ func (e *ACPExecutor) HandleQuotaExhausted(sessionID string) {
 			json.Unmarshal([]byte(session.LastImagesJSON), &images)
 		}
 		
-		go e.SendInput(session.ID, session.LastInput, images)
+		go e.SendInput(session.ID, session.LastInput, images, "")
 	}
 }
 
@@ -283,7 +283,7 @@ func (e *ACPExecutor) SpawnSubagent(parent *ACPSession, agentName string, goal s
 	
 	fmt.Printf("[Subagent] 🚀 Spawning subagent '%s' para: %s\n", agentName, goal)
 	
-	err := e.StartSession(parent.Ctx, agentName, subSessID, "LATEST", parent.AgentID, parent.CurrentIssueID, parent.PlanMode, parent)
+	err := e.StartSession(parent.Ctx, agentName, subSessID, "LATEST", parent.AgentID, parent.CurrentIssueID, parent.PlanMode, parent, "")
 	if err != nil {
 		return nil, err
 	}

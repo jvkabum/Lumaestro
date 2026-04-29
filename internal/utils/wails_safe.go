@@ -29,9 +29,7 @@ func SafeEmit(ctx context.Context, name string, data interface{}) {
 		return
 	default:
 		// Contexto saudável: delega a emissão para o runtime oficial
-		if name != "agent:log" { // Evita floodar o terminal com logs de agente
-			fmt.Printf("📡 [SafeEmit] Enviando evento '%s' para o Frontend...\n", name)
-		}
+		// Logs ruidosos são silenciados para manter o terminal do Comandante limpo.
 		runtime.EventsEmit(ctx, name, data)
 	}
 }

@@ -42,7 +42,7 @@ func NewChatService(executor *agents.Executor, orchestrator *acp.Orchestrator, s
 }
 
 // Ask orquestra o fluxo GUI-CLI: Query -> RAG -> Orchestrator -> CLI Stdin -> Output
-func (s *ChatService) Ask(ctx context.Context, agent string, sessionID string, question string) (string, error) {
+func (s *ChatService) Ask(ctx context.Context, agent string, sessionID string, question string, allowedPaths []string) (string, error) {
 	// 1. Detectar Intenção de Instalação (Pula o RAG se for comando de terminal)
 	q := strings.ToLower(question)
 	if strings.Contains(q, "instala") || strings.Contains(q, "download") || strings.Contains(q, "configura") {
@@ -68,14 +68,14 @@ func (s *ChatService) Ask(ctx context.Context, agent string, sessionID string, q
 		if err != nil {
 			utils.SafeEmit(s.ctx, "graph:log", fmt.Sprintf("[%s] ⚠️ Semântica indisponível no momento. Prosseguindo sem RAG.", now))
 		} else {
-			// 2. Busca Vetorial (RAG): Busca por proximidade semântica
+			// 2. Busca Vetorial (RAG): Busca por proximidade semântica filtrada pelas órbitas autorizadas
 			// Aumentado de 3 para 5 para maior cobertura de contexto
-			notes, _ := s.Search.SearchNote(ctx, vector, 5)
+			notes, _ := s.Search.SearchNote(ctx, vector, allowedPaths, 5)
 			if len(notes) > 0 {
 				utils.SafeEmit(s.ctx, "graph:log", fmt.Sprintf("[%s] 📄 encontradas %d notas matrizes para a resposta.", now, len(notes)))
 			}
 
-			fullContext := s.Nav.ExpandContext(ctx, notes)
+			fullContext := s.Nav.ExpandContext(ctx, notes, allowedPaths)
 			contextData = strings.Join(fullContext, "\n---\n")
 
 			// 3. Brilhar as notas iniciais encontradas no Grafo e lançar Log

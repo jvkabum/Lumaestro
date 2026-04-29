@@ -50,6 +50,8 @@ export function ExportTelemetry():Promise<string>;
 
 export function FixEnvironment():Promise<string>;
 
+export function ForceSyncGlobalHistory():Promise<void>;
+
 export function FullSync():Promise<string>;
 
 export function GenerateGeminiMD():Promise<string>;

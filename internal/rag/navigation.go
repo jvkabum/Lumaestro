@@ -24,8 +24,9 @@ type ScoredNode struct {
 
 // NavStore define a interface mínima necessária para o DuckDBStore no navegador.
 type NavStore interface {
-	SearchNodesByKeyword(keyword string, limit int) ([]map[string]interface{}, error)
-	GetNeighbors(nodeID string) ([]map[string]interface{}, error)
+	SearchNodesByKeyword(keyword string, allowedPaths []string, limit int) ([]map[string]interface{}, error)
+	GetNeighbors(nodeID string, allowedPaths []string) ([]map[string]interface{}, error)
+	FindNodeInText(text string, allowedPaths []string) (string, error)
 }
 
 // GraphNavigator gerencia a expansão de contexto baseada em links com suporte a Destaque Visual.
@@ -67,10 +68,8 @@ func NewGraphNavigatorV2(qdrant *provider.QdrantClient, ranker *neural.Ranker, l
 	}
 }
 
-// ExpandContext realiza uma travessia inteligente e emite a "Trilha de Raciocínio" para o frontend.
-// SearchByKeyword realiza uma busca direta no Qdrant filtrando por termos contidos na pergunta.
-// Usado como fallback automático quando a API de Embeddings falha (Quota/429).
-func (n *GraphNavigator) SearchByKeyword(ctx context.Context, input string) []map[string]interface{} {
+// SearchByKeyword realiza uma busca direta no Qdrant filtrando por termos contidos na pergunta, restrito às órbitas autorizadas.
+func (n *GraphNavigator) SearchByKeyword(ctx context.Context, input string, allowedPaths []string) []map[string]interface{} {
 	fmt.Printf("[RADAR] 📡 Iniciando Deep Scan Híbrido: \"%s\"\n", input)
 
 	cleanWords := n.extractKeywords(input)
@@ -81,9 +80,9 @@ func (n *GraphNavigator) SearchByKeyword(ctx context.Context, input string) []ma
 	results := make([]map[string]interface{}, 0)
 	seenIDs := make(map[string]bool)
 
-	// 1. FAST PATH: DuckDB (Radar Relacional)
-	if n.LStore != nil {
-		dbResults, err := n.LStore.SearchNodesByKeyword(input, 30)
+	// 1. FAST PATH: DuckDB (Radar Relacional Multi-Órbita)
+	if n.LStore != nil && len(allowedPaths) > 0 {
+		dbResults, err := n.LStore.SearchNodesByKeyword(input, allowedPaths, 30)
 		if err == nil {
 			for _, res := range dbResults {
 				nodeID, ok := res["id"].(string)
@@ -96,14 +95,14 @@ func (n *GraphNavigator) SearchByKeyword(ctx context.Context, input string) []ma
 					seenIDs[nodeID] = true
 				}
 			}
-			if len(results) >= 3 { // Reduzi para 3 para ser mais ágil
+			if len(results) >= 3 {
 				fmt.Printf("[RADAR] ✅ DuckDB entregou %d resultados de elite.\n", len(results))
 				return results
 			}
 		}
 	}
 
-	// 2. DEEP SCAN: Qdrant + Ranking Manual
+	// 2. DEEP SCAN: Qdrant + Ranking Manual (Filtrado por Órbita)
 	scored := make([]ScoredNode, 0)
 	collections := []string{"obsidian_knowledge", "knowledge_graph"}
 
@@ -120,16 +119,27 @@ func (n *GraphNavigator) SearchByKeyword(ctx context.Context, input string) []ma
 				continue
 			}
 
+			// FILTRO DE SOBERANIA MULTI-ÓRBITA
+			if col == "obsidian_knowledge" && len(allowedPaths) > 0 {
+				nodePath, _ := raw["path"].(string)
+				found := false
+				for _, p := range allowedPaths {
+					if nodePath != "" && strings.HasPrefix(nodePath, p) {
+						found = true
+						break
+					}
+				}
+				if !found { continue }
+			}
+
 			// Validação estrita de nome/sujeito
 			name, ok := raw["name"].(string)
 			if !ok || name == "" {
 				name, ok = raw["subject"].(string) // Fallback para memória
 			}
-			if !ok || name == "" {
-				continue
-			} // Ignora nós sem identificação válida
+			if !ok || name == "" { continue }
+			
 			content, _ := raw["content"].(string)
-
 			score := n.calculateScore(name, content, cleanWords)
 			if score > 0 {
 				if col == "knowledge_graph" {
@@ -163,7 +173,6 @@ func (n *GraphNavigator) SearchByKeyword(ctx context.Context, input string) []ma
 // Auxiliares de Refatoração
 
 func (n *GraphNavigator) extractKeywords(input string) []string {
-	// Normalização: Minúsculas + Remoção de Acentos (Simplificado para evitar dependências externas pesadas)
 	input = n.removeAccents(strings.ToLower(input))
 	words := strings.Fields(input)
 	clean := make([]string, 0)
@@ -178,7 +187,6 @@ func (n *GraphNavigator) extractKeywords(input string) []string {
 
 func (n *GraphNavigator) calculateScore(name, content string, keywords []string) int {
 	score := 0
-	// Normaliza para comparação (ignora acentos no ranking)
 	lowerName := n.removeAccents(strings.ToLower(name))
 	lowerContent := n.removeAccents(strings.ToLower(content))
 
@@ -187,7 +195,7 @@ func (n *GraphNavigator) calculateScore(name, content string, keywords []string)
 			score += 100
 			if lowerName == kw {
 				score += 50
-			} // Match exato
+			}
 		}
 		if strings.Contains(lowerContent, kw) {
 			score += 10
@@ -197,7 +205,6 @@ func (n *GraphNavigator) calculateScore(name, content string, keywords []string)
 }
 
 func (n *GraphNavigator) removeAccents(s string) string {
-	// Replacer focado em português para garantir recall em "ação", "vovô", etc.
 	r := strings.NewReplacer(
 		"á", "a", "à", "a", "â", "a", "ã", "a", "ä", "a",
 		"é", "e", "è", "e", "ê", "e", "ë", "e",
@@ -214,159 +221,179 @@ func (n *GraphNavigator) safeID(node map[string]interface{}) string {
 		return id
 	}
 	if id, ok := node["id"].(float64); ok {
-		// Formata com precisão para evitar colisões em números grandes
 		return fmt.Sprintf("id-%v", id)
 	}
 	return ""
 }
 
-func (n *GraphNavigator) ExpandContext(ctx context.Context, initialNotes []map[string]interface{}) []string {
+// FindNodeInText identifica um nó citado no texto, restrito aos caminhos autorizados.
+func (n *GraphNavigator) FindNodeInText(ctx context.Context, text string, allowedPaths []string) string {
+	id, err := n.LStore.FindNodeInText(text, allowedPaths)
+	if err != nil {
+		return ""
+	}
+	return id
+}
+
+// ExpandContext realiza uma travessia inteligente e emite a "Trilha de Raciocínio" para o frontend, restrito às órbitas autorizadas.
+func (n *GraphNavigator) ExpandContext(ctx context.Context, initialNotes []map[string]interface{}, allowedPaths []string) []string {
 	var fullContext []string
 	visited := make(map[string]bool)
 
 	cfg, _ := config.Load()
 	depthLimit := 1
 	neighborLimit := 5
-	contextLimit := 4000
+	contextLimit := 8000
 	if cfg != nil {
-		if cfg.GraphDepth > 0 {
-			depthLimit = cfg.GraphDepth
-		}
-		if cfg.GraphNeighborLimit > 0 {
-			neighborLimit = cfg.GraphNeighborLimit
-		}
-		if cfg.GraphContextLimit > 0 {
-			contextLimit = cfg.GraphContextLimit
-		}
+		if cfg.GraphDepth > 0 { depthLimit = cfg.GraphDepth }
+		if cfg.GraphNeighborLimit > 0 { neighborLimit = cfg.GraphNeighborLimit }
+		if cfg.GraphContextLimit > 0 { contextLimit = cfg.GraphContextLimit }
 	}
 
 	totalChars := 0
+	activePath := ""
+	if len(allowedPaths) > 0 {
+		activePath = allowedPaths[0]
+	}
 
 	// 🚀 FASE 1: Processar Núcleos (Depth 0)
 	for _, note := range initialNotes {
 		name, _ := note["name"].(string)
 		id := n.safeID(note)
+		nodePath, _ := note["workspace_path"].(string)
 
 		if name != "" {
 			visited[name] = true
 			content, _ := note["content"].(string)
-			fullContext = append(fullContext, fmt.Sprintf("=== [NÚCLEO]: %s ===\n%s", name, content))
+			
+			// Identificação de Órbita
+			originLabel := "[PROJETO ATUAL]"
+			if activePath != "" && nodePath != "" && !strings.HasPrefix(nodePath, activePath) {
+				originLabel = "[REFERÊNCIA EXTERNA]"
+			}
+
+			fullContext = append(fullContext, fmt.Sprintf("=== %s: %s ===\n%s", originLabel, name, content))
 			totalChars += len(content)
 
-			// ✨ RESTAURAÇÃO: Eventos de Zoom e Destaque Visual para o Frontend
+			// ✨ Eventos de Zoom e Destaque Visual
 			utils.SafeEmit(n.ctx, "node:active", name)
 			utils.SafeEmit(n.ctx, "graph:highlight", map[string]interface{}{
 				"name": name,
 				"id":   id,
 			})
-		}
-	}
 
-	// 🚀 FASE 2: Expansão de Vizinhança (N-Hop) guiada pelo Grafo Visual
-	if depthLimit > 0 {
-		type TrailHop struct {
-			From   string  `json:"from"`
-			To     string  `json:"to"`
-			Weight float32 `json:"weight"` // Peso aprendido para visualização visual
-		}
-		var trail []TrailHop
+			// 🚀 FASE 2: Expansão de Vizinhança (N-Hop) guiada pelo Grafo Visual
+			if depthLimit > 0 {
+				type TrailHop struct {
+					From   string  `json:"from"`
+					To     string  `json:"to"`
+					Weight float32 `json:"weight"` 
+				}
+				var trail []TrailHop
 
-		for _, note := range initialNotes {
-			parentName, _ := note["name"].(string)
-			if links, ok := note["links"].([]interface{}); ok {
-				for _, linkIntf := range links {
-					if len(trail) >= neighborLimit {
-						break
-					}
+				// 1. Expansão via Links Explícitos (Obsidian Style)
+				if links, ok := note["links"].([]interface{}); ok {
+					for _, linkIntf := range links {
+						if len(trail) >= neighborLimit { break }
+						linkName, ok := linkIntf.(string)
+						if !ok || visited[linkName] { continue }
+						
+						nb, err := n.Qdrant.SearchByField("obsidian_knowledge", "name", linkName)
+						if err == nil && nb != nil {
+							sNodePath, _ := nb["path"].(string)
+							
+							// Filtro de Órbita
+							found := false
+							for _, p := range allowedPaths {
+								if sNodePath != "" && strings.HasPrefix(sNodePath, p) {
+									found = true
+									break
+								}
+							}
+							if !found { continue }
 
-					linkName, ok := linkIntf.(string)
-					if !ok {
-						continue
-					}
+							visited[linkName] = true
+							sName, _ := nb["name"].(string)
+							sContent, _ := nb["content"].(string)
 
-					if visited[linkName] {
-						continue
-					}
-					visited[linkName] = true
+							if totalChars+len(sContent) > contextLimit { continue }
 
-					nb, err := n.Qdrant.SearchByField("obsidian_knowledge", "name", linkName)
-					if err == nil && nb != nil {
-						name, _ := nb["name"].(string)
-						content, _ := nb["content"].(string)
+							sOriginLabel := "[PROJETO ATUAL]"
+							if activePath != "" && sNodePath != "" && !strings.HasPrefix(sNodePath, activePath) {
+								sOriginLabel = "[REFERÊNCIA EXTERNA]"
+							}
 
-						if totalChars+len(content) > contextLimit {
-							continue
+							fullContext = append(fullContext, fmt.Sprintf("=== %s (Relacionado): %s ===\n%s", sOriginLabel, sName, sContent))
+							totalChars += len(sContent)
+							trail = append(trail, TrailHop{From: name, To: sName, Weight: n.Ranker.GetWeight(sName)})
 						}
-
-						fullContext = append(fullContext, fmt.Sprintf("=== [CONTEXTO_RELACIONADO]: %s ===\n%s", name, content))
-						totalChars += len(content)
-
-						neuralWeight := n.Ranker.GetWeight(name)
-						trail = append(trail, TrailHop{From: parentName, To: name, Weight: neuralWeight})
 					}
 				}
-			}
-
-			// 🧠 [NOVO] Expansão via Sinapses Semânticas (ID Vinculador)
-			// Busca vizinhos implícitos que citam este nó ou são citados por ele
-			if n.LStore != nil {
-				nodeID := n.safeID(note)
-				if nodeID != "" {
-					semanticNeighbors, err := n.LStore.GetNeighbors(nodeID)
+				
+				// 🧠 2. Expansão via Sinapses Semânticas (ID Vinculador)
+				if n.LStore != nil && id != "" {
+					semanticNeighbors, err := n.LStore.GetNeighbors(id, allowedPaths)
 					if err == nil {
 						for _, snb := range semanticNeighbors {
-							if len(trail) >= neighborLimit {
-								break
-							}
-
+							if len(trail) >= neighborLimit { break }
 							sName, _ := snb["name"].(string)
-							if sName == "" || visited[sName] {
-								continue
-							}
+							if sName == "" || visited[sName] { continue }
 
 							sContent, _ := snb["content"].(string)
-							if totalChars+len(sContent) > contextLimit {
-								continue
-							}
+							sNodePath, _ := snb["workspace_path"].(string)
+
+							if totalChars+len(sContent) > contextLimit { continue }
 
 							visited[sName] = true
-							fullContext = append(fullContext, fmt.Sprintf("=== [REFERÊNCIA_VINCULADA]: %s ===\n%s", sName, sContent))
-							totalChars += len(sContent)
+							sOriginLabel := "[PROJETO ATUAL]"
+							if activePath != "" && sNodePath != "" && !strings.HasPrefix(sNodePath, activePath) {
+								sOriginLabel = "[REFERÊNCIA EXTERNA]"
+							}
 
-							// Adiciona à trilha visual (mas como é semântico, o frontend não desenha linhas se não quiser)
-							trail = append(trail, TrailHop{
-								From:   parentName,
-								To:     sName,
-								Weight: 0.3, // Peso menor para vínculos implícitos
-							})
+							fullContext = append(fullContext, fmt.Sprintf("=== %s (Vinculado): %s ===\n%s", sOriginLabel, sName, sContent))
+							totalChars += len(sContent)
+							trail = append(trail, TrailHop{From: name, To: sName, Weight: 0.3})
 						}
 					}
 				}
+				
+				if len(trail) > 0 {
+					utils.SafeEmit(n.ctx, "graph:traverse", map[string]interface{}{
+						"hops":  trail,
+						"total": len(trail),
+					})
+				}
 			}
-		}
-
-		// 🚀 Emite o percurso completo como uma única mensagem animável no frontend
-		if len(trail) > 0 {
-			utils.SafeEmit(n.ctx, "graph:traverse", map[string]interface{}{
-				"hops":  trail,
-				"total": len(trail),
-			})
 		}
 	}
 
 	// 🚀 FASE 3: Sinapses de Chat (Memória Longa)
-	// (Busca os últimos fatos relevantes da sessão ou conhecimentos consolidados)
-	synapses, err := n.Qdrant.Search("knowledge_graph", nil, 5)
+	// Filtramos sinapses para garantir que apenas memórias vinculadas às órbitas autorizadas apareçam
+	synapses, err := n.Qdrant.Search("knowledge_graph", nil, 20) // Aumentado para compensar filtros
 	if err == nil && synapses != nil {
 		for _, syn := range synapses {
 			fact, _ := syn["content"].(string)
+			wsPath, _ := syn["workspace_path"].(string)
+
+			// FILTRO DE SOBERANIA DE MEMÓRIA
+			if len(allowedPaths) > 0 {
+				found := false
+				for _, p := range allowedPaths {
+					if wsPath != "" && strings.HasPrefix(wsPath, p) {
+						found = true
+						break
+					}
+				}
+				if !found { continue }
+			} else {
+				continue // Modo Cego total
+			}
+
 			if fact != "" && totalChars+len(fact) < contextLimit {
 				fullContext = append(fullContext, fmt.Sprintf("[SINAPSE]: %s", fact))
 				totalChars += len(fact)
 			}
 		}
-	} else if err != nil {
-		fmt.Printf("[DEBUG-RAG] ⚠️ Falha ao buscar sinapses (ignorando): %v\n", err)
 	}
 
 	return fullContext
