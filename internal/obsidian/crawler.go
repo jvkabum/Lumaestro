@@ -15,6 +15,7 @@ import (
 	"time"
 	"hash/fnv"
 
+	"Lumaestro/internal/agents/acp"
 	"Lumaestro/internal/config"
 	"Lumaestro/internal/lightning"
 	"Lumaestro/internal/provider"
@@ -32,6 +33,7 @@ type Crawler struct {
 	Embedder  provider.Embedder
 	Qdrant    *provider.QdrantClient
 	Ontology  *provider.OntologyService
+	CPI       *acp.CPIValidator // 🛡️ Porteiro de Segurança
 	cachePath string
 	cache     IndexCache
 	mu        sync.Mutex
@@ -58,13 +60,14 @@ func (c *Crawler) SetContext(ctx context.Context) {
 }
 
 // NewCrawler inicializa o crawler com suporte a cache de indexação e banco analítico.
-func NewCrawler(vaultPath string, embedder provider.Embedder, qdrant *provider.QdrantClient, ontology *provider.OntologyService, lStore *lightning.DuckDBStore) *Crawler {
+func NewCrawler(vaultPath string, embedder provider.Embedder, qdrant *provider.QdrantClient, ontology *provider.OntologyService, lStore *lightning.DuckDBStore, cpi *acp.CPIValidator) *Crawler {
 	c := &Crawler{
 		VaultPath:   vaultPath,
 		Embedder:    embedder,
 		Qdrant:      qdrant,
 		Ontology:    ontology,
 		LStore:      lStore,
+		CPI:         cpi,
 		cachePath:   ".lumaestro/cache/index_cache.json",
 		cache:       make(IndexCache),
 		workerCount: 2, // ⚙️ Reduzido para 2 — evita burst de cota em chaves gratuitas
@@ -249,7 +252,13 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 		// Lê conteúdo (md/código) para gerar resumo real e extrair links
 		var fileSummary, fileWhatItDoes string
 		if isMD || isCode {
-			rawContent, readErr := os.ReadFile(path)
+			// 🛡️ CPI: Validação de Segurança Proativa
+			safePath, errCPI := c.CPI.ValidatePath(path)
+			if errCPI != nil {
+				return nil // Pula arquivo não autorizado
+			}
+
+			rawContent, readErr := os.ReadFile(safePath)
 			if readErr == nil {
 				content := string(rawContent)
 				fileSummary, fileWhatItDoes = extractFileSummary(nodeName, ext, content)
@@ -680,7 +689,13 @@ func (c *Crawler) processFile(ctx context.Context, path string, workspacePath st
 	pathHash := hex.EncodeToString(h.Sum(nil))[:6]
 	nodeID := "moon:" + pathHash + ":" + strings.ToLower(nodeName)
 
-	rawContent, err := os.ReadFile(path)
+	// 🛡️ CPI: Validação de Segurança Proativa no Processamento Semântico
+	safePath, errCPI := c.CPI.ValidatePath(path)
+	if errCPI != nil {
+		return false, errCPI
+	}
+
+	rawContent, err := os.ReadFile(safePath)
 	if err != nil {
 		return false, err
 	}
@@ -886,8 +901,6 @@ func (c *Crawler) processFile(ctx context.Context, path string, workspacePath st
 	c.mu.Lock()
 	c.cache[path] = hash
 	c.mu.Unlock()
-
-	return true, nil
 
 	// ⏱️ Throttle suave: Respira 200ms entre cada arquivo para distribuir as chamadas
 	time.Sleep(200 * time.Millisecond)

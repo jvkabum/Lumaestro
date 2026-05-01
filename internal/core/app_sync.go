@@ -63,18 +63,22 @@ func (a *App) ScanVault() string {
 		a.SyncAllNodes()
 
 		// 2. Indexar a documentação do projeto (Lumaestro Core)
-		// Isso garante que o conhecimento 'RAG' do sistema também esteja disponível.
-		fmt.Println("[BACKEND] Indexando documentos internos do sistema...")
-		err = crawler.IndexSystemDocs(ctx, "./")
-		if err != nil {
-			fmt.Printf("[BACKEND] Aviso: Erro ao indexar docs do sistema: %v\n", err)
+		// 🛡️ SEGURANÇA: Só indexa o sistema se o CPI estiver armado e autorizado (Prevenção de vazamento de código)
+		if a.executor.CPI.IsArmed() {
+			fmt.Println("[BACKEND] Indexando documentos internos do sistema...")
+			err = crawler.IndexSystemDocs(ctx, "./")
+			if err != nil {
+				fmt.Printf("[BACKEND] Aviso: Erro ao indexar docs do sistema: %v\n", err)
+			}
+		} else {
+			fmt.Println("[BACKEND] 🛡️ Segurança: Indexação de documentos do sistema bloqueada (CPI Desarmado).")
 		}
 
 		// 3. Indexar Repositórios Dinâmicos e o Workspace Ativo (Devorador de Código)
 		projectsToScan := append([]config.ProjectScan{}, a.config.ExternalProjects...)
 
-		// 🚀 INTEGRAÇÃO WORKSPACE: Se houver um workspace ativo, ele entra como prioridade no Devorador
-		if a.executor.Workspace != "" {
+		// 🚀 INTEGRAÇÃO WORKSPACE: Se houver um workspace ativo e o CPI estiver armado, ele entra como prioridade no Devorador
+		if a.executor.Workspace != "" && a.executor.CPI.IsArmed() {
 			projectName := filepath.Base(a.executor.Workspace)
 			projectsToScan = append(projectsToScan, config.ProjectScan{
 				Path:        a.executor.Workspace,

@@ -4,6 +4,7 @@ import (
 	"Lumaestro/internal/config"
 	"Lumaestro/internal/provider"
 	"Lumaestro/internal/obsidian"
+	"Lumaestro/internal/agents/acp"
 	"context"
 	"fmt"
 	"time"
@@ -84,10 +85,14 @@ func (a *App) initServices() error {
 	}
 	a.config = cfg
 
-	// 📂 Restaurar workspace salvo
-	if cfg.ActiveWorkspace != "" {
-		a.executor.Workspace = cfg.ActiveWorkspace
-		fmt.Printf("[Boot] 📂 Workspace restaurado: %s\n", cfg.ActiveWorkspace)
+	// 🛡️ RE-ARMAMENTO TARDIO: Agora que temos a config, armamos o CPI com as órbitas reais
+	a.executor.CPI = acp.NewCPIValidator(cfg.ActiveWorkspace, cfg.ObsidianVaultPath)
+	a.executor.Workspace = a.executor.CPI.ActiveOrbit
+
+	if a.executor.CPI.IsArmed() {
+		fmt.Printf("[Boot] 🛡️ Segurança: CPI ARMADO. Órbita: %s | Vault: %s\n", a.executor.CPI.ActiveOrbit, a.executor.CPI.VaultOrbit)
+	} else {
+		fmt.Println("[Boot] 🛡️ Segurança: Sistema operando em modo de amnésia total (sem órbitas definidas).")
 	}
 
 	// 1. LM Studio

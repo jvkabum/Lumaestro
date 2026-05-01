@@ -57,6 +57,9 @@ type ACPExecutor struct {
 
 	// 📂 Workspace Ativo (diretório de trabalho da IA, isolamento de projeto)
 	Workspace      string
+
+	// 🛡️ CPI — Consciousness Protocol Isolation (Protocolo de Isolamento de Consciência)
+	CPI            *CPIValidator
 }
 
 // ACPSession representa a conexão JSON-RPC ativa com um Agent Server.

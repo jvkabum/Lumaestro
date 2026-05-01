@@ -13,7 +13,7 @@ func (a *App) initRAGInfrastructure(cfg *config.Config) {
 	a.emitBoot("neon", "🧠", "Sincronizando Córtex Neural...")
 
 	search := rag.NewSearchService(a.qdrant, a.ranker)
-	a.navigator = rag.NewGraphNavigatorV2(a.qdrant, a.ranker, a.LStore)
+	a.navigator = rag.NewGraphNavigatorV2(a.qdrant, a.ranker, a.LStore, a.executor.CPI)
 
 	if a.embedder != nil && a.ontology != nil {
 		a.weaver = rag.NewKnowledgeWeaver(a.ontology, a.qdrant, a.embedder)
@@ -33,7 +33,7 @@ func (a *App) initRAGInfrastructure(cfg *config.Config) {
 	if targetRoot == "" {
 		targetRoot = cfg.ObsidianVaultPath
 	}
-	a.crawler = obsidian.NewCrawler(targetRoot, a.embedder, a.qdrant, a.ontology, a.LStore)
+	a.crawler = obsidian.NewCrawler(targetRoot, a.embedder, a.qdrant, a.ontology, a.LStore, a.executor.CPI)
 	
 	if a.embedder == nil || a.ontology == nil {
 		a.emitBoot("crawler", "⚠️", "Crawler em modo degradado: Somente estrutura de arquivos (IA offline).")

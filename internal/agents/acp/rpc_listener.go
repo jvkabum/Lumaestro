@@ -29,6 +29,21 @@ func (e *ACPExecutor) runStderrMonitor(s *ACPSession, stderr io.Reader) {
 
 		// Filtragem inteligente: Reportar apenas o que importa para o usuário no Chat
 		lv := strings.ToLower(cleanLine)
+
+		// 🛡️ SUPRESSÃO DE RUÍDO (Drivers/Node-PTY): Ignorar erros de console irrelevantes para o usuário
+		isNoise := strings.Contains(lv, "attachconsole failed") ||
+			strings.Contains(lv, "consoleprocesslist") ||
+			strings.Contains(lv, "getconsoleprocesslist") ||
+			strings.Contains(lv, "conpty_console_list_agent.js") ||
+			strings.Contains(lv, "node:internal") ||
+			strings.Contains(lv, "module._compile")
+
+		if isNoise {
+			// Log apenas no terminal do backend para auditoria
+			fmt.Printf("[%s/stderr-noise] %s\n", s.AgentName, cleanLine)
+			continue
+		}
+
 		isRelevant := strings.Contains(lv, "login") ||
 			strings.Contains(lv, "auth") ||
 			strings.Contains(lv, "error") ||

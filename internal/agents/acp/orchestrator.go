@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"Lumaestro/internal/config"
+	"Lumaestro/internal/utils"
 )
 
 // Orchestrator é o cérebro central que decide qual agente usar e mantém a memória.
@@ -119,7 +120,8 @@ func (o *Orchestrator) Execute(ctx context.Context, sessionID string, goal strin
 	o.mu.RUnlock()
 
 	// 3. Construir o Prompt com RAG + Histórico
-	finalPrompt := o.builder.Build(profile, contextData, history, goal, o.executor.AutonomousMode)
+	// 🛡️ SEGURANÇA: Nunca injetar a ActiveOrbit real no prompt. Usamos o Workspace higienizado.
+	finalPrompt := o.builder.Build(profile, contextData, history, goal, o.executor.AutonomousMode, o.executor.Workspace)
 
 	// 4. Execução via ACP (Modo YOLO incluído no executor)
 	// Como o AskAgent em app.go já gerencia a sessão, injetamos a pergunta.
@@ -132,10 +134,13 @@ func (o *Orchestrator) AddToHistory(sessionID string, message string) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
+	// 🛡️ SEGURANÇA: Sanitizar a mensagem antes de salvar na memória
+	safeMsg := utils.SanitizePath(message)
+
 	// Limitar o histórico para as últimas 10 interações (evitar estouro de contexto)
 	h := o.sessionCache[sessionID]
 	if len(h) > 10 {
 		h = h[1:]
 	}
-	o.sessionCache[sessionID] = append(h, message)
+	o.sessionCache[sessionID] = append(h, safeMsg)
 }

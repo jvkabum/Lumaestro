@@ -9,6 +9,7 @@ import (
 	"Lumaestro/internal/config"
 	"Lumaestro/internal/provider"
 	"Lumaestro/internal/rag/neural"
+	"Lumaestro/internal/agents/acp"
 	"Lumaestro/internal/utils"
 )
 
@@ -34,6 +35,7 @@ type GraphNavigator struct {
 	Qdrant *provider.QdrantClient
 	Ranker *neural.Ranker
 	LStore NavStore
+	CPI    *acp.CPIValidator // 🛡️ Guarda do Protocolo de Isolamento
 }
 
 var stopWords = map[string]bool{
@@ -59,11 +61,12 @@ func (n *GraphNavigator) SetContext(ctx context.Context) {
 }
 
 // NewGraphNavigatorV2 inicializa o navegador com foco em Trajetória Semântica e Aprendizado Ativo.
-func NewGraphNavigatorV2(qdrant *provider.QdrantClient, ranker *neural.Ranker, lStore NavStore) *GraphNavigator {
+func NewGraphNavigatorV2(qdrant *provider.QdrantClient, ranker *neural.Ranker, lStore NavStore, cpi *acp.CPIValidator) *GraphNavigator {
 	return &GraphNavigator{
 		Qdrant: qdrant,
 		Ranker: ranker,
 		LStore: lStore,
+		CPI:    cpi,
 	}
 }
 
@@ -250,6 +253,15 @@ func (n *GraphNavigator) ExpandContext(ctx context.Context, initialNotes []map[s
 		if name != "" {
 			visited[name] = true
 			content, _ := note["content"].(string)
+			path, _ := note["path"].(string)
+
+			// 🛡️ SEGURANÇA: Validar se o conteúdo pode ser exposto ao agente via prompt
+			if n.CPI != nil {
+				if _, err := n.CPI.ValidatePath(path); err != nil {
+					content = fmt.Sprintf("[🛡️ CONTEÚDO BLOQUEADO PELO PROTOCOLO CPI: %v]", err)
+				}
+			}
+
 			fullContext = append(fullContext, fmt.Sprintf("=== [NÚCLEO]: %s ===\n%s", name, content))
 			totalChars += len(content)
 
@@ -293,6 +305,14 @@ func (n *GraphNavigator) ExpandContext(ctx context.Context, initialNotes []map[s
 					if err == nil && nb != nil {
 						name, _ := nb["name"].(string)
 						content, _ := nb["content"].(string)
+						path, _ := nb["path"].(string)
+
+						// 🛡️ SEGURANÇA: Validar se o conteúdo pode ser exposto ao agente via prompt
+						if n.CPI != nil {
+							if _, err := n.CPI.ValidatePath(path); err != nil {
+								content = fmt.Sprintf("[🛡️ CONTEÚDO BLOQUEADO PELO PROTOCOLO CPI: %v]", err)
+							}
+						}
 
 						if totalChars+len(content) > contextLimit {
 							continue
@@ -325,6 +345,15 @@ func (n *GraphNavigator) ExpandContext(ctx context.Context, initialNotes []map[s
 							}
 
 							sContent, _ := snb["content"].(string)
+							sPath, _ := snb["path"].(string)
+
+							// 🛡️ SEGURANÇA: Validar se o conteúdo pode ser exposto ao agente via prompt
+							if n.CPI != nil {
+								if _, err := n.CPI.ValidatePath(sPath); err != nil {
+									sContent = fmt.Sprintf("[🛡️ CONTEÚDO BLOQUEADO PELO PROTOCOLO CPI: %v]", err)
+								}
+							}
+
 							if totalChars+len(sContent) > contextLimit {
 								continue
 							}

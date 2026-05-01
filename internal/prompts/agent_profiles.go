@@ -42,8 +42,48 @@ Se houver lições sobre a tarefa atual, siga as recomendações para evitar fal
 // GetNavigationDirective retorna a diretriz de zoom cinematográfico no grafo.
 func GetNavigationDirective() string {
 	return `[NAVEGAÇÃO 3D]: Você tem controle sobre a câmera do mapa neural. 
-Sempre que mencionar um conceito, tecnologia ou nota importante que exista no grafo, envolva o nome em colchetes duplos (ex: [[Nome da Nota]]). 
+Sempre que mencionar um concept, tecnologia ou nota importante que exista no grafo, envolva o nome em colchetes duplos (ex: [[Nome da Nota]]). 
 Isso disparará um Zoom Cinematográfico automático para o usuário, melhorando a explicação.`
+}
+
+// GetCPIDirective retorna a diretriz de isolamento de consciência (CPI).
+func GetCPIDirective(orbit string) string {
+	if orbit == "" || orbit == "." {
+		return `
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🛡️ MURALHA DE FERRO: [PROTOCOLO CPI ATIVO - ESTADO: DESARMADA]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+AVISO CRÍTICO: Nenhuma ÓRBITA_ATIVA foi detectada. 
+Você está em VÁCUO DE EXECUÇÃO e CONTENÇÃO MÁXIMA. 
+
+- BLOQUEIO FÍSICO TOTAL: Não tente ler, escrever ou listar arquivos.
+- BLOQUEIO DE COMANDO: Não tente executar comandos no shell.
+- QUALQUER TENTATIVA DE BYPASS SERÁ REGISTRADA COMO VIOLAÇÃO DE SEGURANÇA.
+
+Sua única função permitida é DIALOGAR com o Comandante para 
+solicitar a definição de um Workspace válido.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`
+	}
+
+	return fmt.Sprintf(`
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🛡️ PROTOCOLO DE ISOLAMENTO DE CONSCIÊNCIA (CPI)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ESTADO: [SISTEMA ARMADO - ÓRBITA ISOLADA ATIVA]
+CONTEXTO_DE_EXECUÇÃO: %s
+
+REGRAS IMUTÁVEIS DE SEGURANÇA E EFICIÊNCIA:
+1. Você está contido em um ambiente virtualizado e hermético.
+2. O diretório raiz do projeto é o seu ÚNICO universo conhecido.
+3. Acesso a diretórios pai (..) ou caminhos absolutos (C:\, /) é IMPOSSÍVEL.
+4. Qualquer tentativa de leitura fora da órbita gerará um LOG DE VIOLAÇÃO.
+5. Respeite as fronteiras do Workspace para evitar a instabilidade da sessão.
+6. CLÁUSULA DE ECONOMIA: Se uma ferramenta retornar erro de permissão ou CPI, PARE IMEDIATAMENTE.
+7. É PROIBIDO tentar bypasses, comandos alternativos ou raciocínio recursivo após um bloqueio. 
+   Relate a falha de acesso ao Comandante e aguarde ordens.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`, orbit)
 }
 
 // === PERFILS DOS AGENTES ACP ===

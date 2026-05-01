@@ -264,6 +264,13 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			Path string `json:"path"`
 		}
 		if json.Unmarshal(params, &p) == nil {
+			// 🛡️ CPI: Validação Proativa
+			validPath, errCPI := h.Executor.CPI.ValidatePath(p.Path)
+			if errCPI != nil {
+				rpcErr = &RPCError{Code: 403, Message: errCPI.Error()}
+				break
+			}
+
 			utils.SafeEmit(h.Executor.Ctx, "agent:status", map[string]string{
 				"agent":  h.Session.AgentName,
 				"tool":   "read_file",
@@ -271,7 +278,7 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			})
 			cfg, _ := config.Load()
 			if cfg.Security.AllowRead {
-				content, err := h.Executor.Proxy.ReadFile(p.Path)
+				content, err := h.Executor.Proxy.ReadFile(validPath)
 				if err == nil {
 					result = map[string]string{"content": content}
 				} else {
@@ -288,6 +295,13 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			Content string `json:"content"`
 		}
 		if json.Unmarshal(params, &p) == nil {
+			// 🛡️ CPI: Validação Proativa
+			validPath, errCPI := h.Executor.CPI.ValidatePath(p.Path)
+			if errCPI != nil {
+				rpcErr = &RPCError{Code: 403, Message: errCPI.Error()}
+				break
+			}
+
 			utils.SafeEmit(h.Executor.Ctx, "agent:status", map[string]string{
 				"agent":  h.Session.AgentName,
 				"tool":   "write_file",
@@ -295,7 +309,7 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			})
 			cfg, _ := config.Load()
 			fileExists := false
-			if _, err := os.Stat(p.Path); err == nil {
+			if _, err := os.Stat(validPath); err == nil {
 				fileExists = true
 			}
 
@@ -307,14 +321,14 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			}
 
 			if canAct {
-				needsReview := !cfg.Security.FullMachineAccess || strings.HasSuffix(p.Path, ".go") || strings.HasSuffix(p.Path, ".json")
+				needsReview := !cfg.Security.FullMachineAccess || strings.HasSuffix(validPath, ".go") || strings.HasSuffix(validPath, ".json")
 				if needsReview {
 					actionLabel := "ESCREVER ARQUIVO"
 					if !fileExists {
 						actionLabel = "CRIAR ARQUIVO"
 					}
 					if h.Executor.RequestReview(reviewID, actionLabel, p.Path) {
-						err := h.Executor.Proxy.WriteFile(p.Path, p.Content)
+						err := h.Executor.Proxy.WriteFile(validPath, p.Content)
 						if err == nil {
 							result = map[string]bool{"success": true}
 						} else {
@@ -324,7 +338,7 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 						rpcErr = &RPCError{Code: 403, Message: "Ação recusada."}
 					}
 				} else {
-					err := h.Executor.Proxy.WriteFile(p.Path, p.Content)
+					err := h.Executor.Proxy.WriteFile(validPath, p.Content)
 					if err == nil {
 						result = map[string]bool{"success": true}
 					} else {
@@ -341,6 +355,13 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			Path string `json:"path"`
 		}
 		if json.Unmarshal(params, &p) == nil {
+			// 🛡️ CPI: Validação Proativa
+			validPath, errCPI := h.Executor.CPI.ValidatePath(p.Path)
+			if errCPI != nil {
+				rpcErr = &RPCError{Code: 403, Message: errCPI.Error()}
+				break
+			}
+
 			utils.SafeEmit(h.Executor.Ctx, "agent:status", map[string]string{
 				"agent":  h.Session.AgentName,
 				"tool":   "delete_file",
@@ -349,7 +370,7 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			cfg, _ := config.Load()
 			if cfg.Security.AllowDelete {
 				if h.Executor.RequestReview(reviewID, "DELETAR ARQUIVO", p.Path) {
-					err := h.Executor.Proxy.DeleteFile(p.Path)
+					err := h.Executor.Proxy.DeleteFile(validPath)
 					if err == nil {
 						result = map[string]bool{"success": true}
 					} else {
@@ -369,6 +390,12 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			NewPath string `json:"newPath"`
 		}
 		if json.Unmarshal(params, &p) == nil {
+			// 🛡️ CPI: Validação Proativa
+			_, errOld := h.Executor.CPI.ValidatePath(p.OldPath)
+			_, errNew := h.Executor.CPI.ValidatePath(p.NewPath)
+			if errOld != nil { rpcErr = &RPCError{Code: 403, Message: errOld.Error()}; break }
+			if errNew != nil { rpcErr = &RPCError{Code: 403, Message: errNew.Error()}; break }
+
 			utils.SafeEmit(h.Executor.Ctx, "agent:status", map[string]string{
 				"agent":  h.Session.AgentName,
 				"tool":   "move_file",
@@ -398,6 +425,12 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			Args    []string `json:"args"`
 		}
 		if json.Unmarshal(params, &p) == nil {
+			// 🛡️ CPI: Validação de Comando
+			if errCPI := h.Executor.CPI.ValidateCommand(p.Command, p.Args); errCPI != nil {
+				rpcErr = &RPCError{Code: 403, Message: errCPI.Error()}
+				break
+			}
+
 			utils.SafeEmit(h.Executor.Ctx, "agent:status", map[string]string{
 				"agent":  h.Session.AgentName,
 				"tool":   "run_command",

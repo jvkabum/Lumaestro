@@ -1,6 +1,7 @@
 package acp
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -15,19 +16,24 @@ import (
 )
 
 // NewACPExecutor inicializa o novo executor JSON-RPC.
-func NewACPExecutor() *ACPExecutor {
-	return &ACPExecutor{
+func NewACPExecutor(workspace string, vaultPath string) *ACPExecutor {
+	cpi := NewCPIValidator(workspace, vaultPath) // 🛡️ Inicializa o CPI com as órbitas autorizadas
+
+	e := &ACPExecutor{
 		ActiveSessions:  make(map[string]*ACPSession),
 		LogChan:         make(chan ExecutionLog, 100),
 		TerminalOutput:  make(chan TerminalData, 256),
-		Proxy:           NewFSProxy(),
+		Proxy:           NewFSProxy(cpi),
 		Tools:           NewToolRegistry(), // 🛠️ Inicializa as ferramentas Obsidian
 		pendingReviews:  make(map[string]chan bool),
 		pendingRequests: make(map[int]chan JSONRPCMessage),
 		execLock:        make(chan struct{}, 1), // Apenas 1 ferramenta por vez
 		NetLog:          utils.NewNetworkLogger(5 * time.Second),
 		turnChannels:    make(map[string]chan string),
+		CPI:             cpi,
 	}
+
+	return e
 }
 
 func isPotentiallyDestructiveCommand(details string) bool {
@@ -93,7 +99,7 @@ func (e *ACPExecutor) SendRPC(s *ACPSession, msg JSONRPCMessage) error {
 
 	// 📡 TRANSPARÊNCIA: Mostra no terminal o JSON exato sendo enviado para a IA
 	fmt.Printf(">> [ACP SEND] %s\n", string(data))
-	
+
 	_, err = fmt.Fprintln(s.Stdin, string(data))
 	return err
 }
@@ -217,6 +223,7 @@ func (e *ACPExecutor) SetSessionModel(sessionID string, model string) error {
 	fmt.Printf("[ACP] ✅ Modelo alterado com sucesso via RPC.\n")
 	return nil
 }
+
 // HandleQuotaExhausted aciona a rotação da frota de resiliência.
 func (e *ACPExecutor) HandleQuotaExhausted(sessionID string) {
 	e.Mu.Lock()
@@ -233,10 +240,10 @@ func (e *ACPExecutor) HandleQuotaExhausted(sessionID string) {
 		return
 	}
 
-	// Se houver mais chaves, rotaciona. 
+	// Se houver mais chaves, rotaciona.
 	// Se for modelo Pro, tentamos o fallback para Flash na mesma chave antes de rotacionar (opcional).
 	_ = cfg.RotateGeminiKey() // Rotaciona e ignora o retorno (o índice interno já é atualizado)
-	
+
 	// 2. Notificar UI
 	if e.Ctx != nil {
 		runtime.EventsEmit(e.Ctx, "agent:status", map[string]string{
@@ -250,7 +257,7 @@ func (e *ACPExecutor) HandleQuotaExhausted(sessionID string) {
 	// Como estamos dentro do Executor, podemos chamar StartSession.
 	// Precisamos apenas dos parâmetros originais.
 	time.Sleep(1 * time.Second) // Delay tático para limpeza de pipes
-			if err := e.StartSession(e.Ctx, session.AgentName, session.ID, session.ACPSessID, session.AgentID, session.CurrentIssueID, session.PlanMode, nil); err != nil {
+	if err := e.StartSession(e.Ctx, session.AgentName, session.ID, session.ACPSessID, session.AgentID, session.CurrentIssueID, session.PlanMode, nil); err != nil {
 		fmt.Printf("[Resilience] Erro ao reiniciar motor: %v\n", err)
 		return
 	}
@@ -259,7 +266,7 @@ func (e *ACPExecutor) HandleQuotaExhausted(sessionID string) {
 	if session.LastInput != "" {
 		fmt.Printf("[Resilience] Re-enviando último input após rotação...\n")
 		time.Sleep(2 * time.Second) // Aguarda o boot do novo processo
-		
+
 		// Injetamos um aviso de log para o usuário saber que o maestro voltou
 		e.LogChan <- ExecutionLog{
 			Source:  "SYSTEM",
@@ -272,7 +279,7 @@ func (e *ACPExecutor) HandleQuotaExhausted(sessionID string) {
 		if session.LastImagesJSON != "" {
 			json.Unmarshal([]byte(session.LastImagesJSON), &images)
 		}
-		
+
 		go e.SendInput(session.ID, session.LastInput, images)
 	}
 }
@@ -280,18 +287,18 @@ func (e *ACPExecutor) HandleQuotaExhausted(sessionID string) {
 // SpawnSubagent cria uma nova sessão ACP efêmera vinculada a esta sessão pai.
 func (e *ACPExecutor) SpawnSubagent(parent *ACPSession, agentName string, goal string) (*ACPSession, error) {
 	subSessID := fmt.Sprintf("%s-sub-%s", parent.ID, uuid.NewString()[:8])
-	
+
 	fmt.Printf("[Subagent] 🚀 Spawning subagent '%s' para: %s\n", agentName, goal)
-	
+
 	err := e.StartSession(parent.Ctx, agentName, subSessID, "LATEST", parent.AgentID, parent.CurrentIssueID, parent.PlanMode, parent)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	e.Mu.Lock()
 	subSess := e.ActiveSessions[subSessID]
 	e.Mu.Unlock()
-	
+
 	// 📡 Telemetria: Avisa o Frontend sobre o novo subagente no enxame
 	if e.Ctx != nil {
 		runtime.EventsEmit(e.Ctx, "agent:subagent_spawned", map[string]string{
@@ -305,7 +312,14 @@ func (e *ACPExecutor) SpawnSubagent(parent *ACPSession, agentName string, goal s
 	return subSess, nil
 }
 
-// StopSession encerra uma sessão ACP e todos os seus subagentes recursivamente.
+// Start inicia o rpc_listener e o processamento de logs.
+func (e *ACPExecutor) Start(ctx context.Context) {
+	e.Ctx = ctx
+	if e.Proxy != nil {
+		e.Proxy.Ctx = ctx // 🛰️ Conecta o sensor de segurança ao contexto visual
+	}
+}
+
 func (e *ACPExecutor) StopSession(sessionID string) error {
 	e.Mu.Lock()
 	session, ok := e.ActiveSessions[sessionID]

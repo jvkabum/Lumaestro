@@ -90,7 +90,7 @@ func (a *App) SendAgentInput(agent string, input string, images []map[string]str
 		a.emitAgentStatus(agent, "Direcionando motor em tempo real (Steering Hint)", "status")
 
 		// Envia diretamente sem passar por RAG/Orquestrador para garantir latência zero na dica
-		return a.executor.SendInput(agent, "[DIRECIONAMENTO DO USUÁRIO]: "+input, images)
+		return a.executor.SendInput(agent, "[DIRECIONAMENTO DO USUÁRIO]: "+utils.SanitizePath(input), images)
 	}
 
 	// ⚡ Log Premium e Limpo
@@ -112,7 +112,12 @@ func (a *App) SendAgentInput(agent string, input string, images []map[string]str
 
 	// 🧠 Orquestração Soberana: Decide o Agente e monta o Prompt Contextual (RAG + Skills)
 	a.emitAgentStatus(agent, "Definindo estratégia e montando prompt final", "status")
-	agentName, finalPrompt, profile, err := a.orchestrator.Execute(a.ctx, "default", input, contextInfo)
+	
+	// 🛡️ SEGURANÇA: Sanitizar caminhos reais do contexto e da pergunta antes da orquestração
+	safeContext := utils.SanitizePath(contextInfo)
+	safeInput := utils.SanitizePath(input)
+	
+	agentName, finalPrompt, profile, err := a.orchestrator.Execute(a.ctx, "default", safeInput, safeContext)
 	if err != nil {
 		fmt.Printf("[App] ERRO na Orquestração: %v\n", err)
 		return fmt.Errorf("falha ao orquestrar sinfonia: %v", err)

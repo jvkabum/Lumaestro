@@ -41,12 +41,21 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 	}
 	e.Mu.Unlock()
 
-	// 📂 Workspace: Usa o diretório de projeto ativo, ou fallback para CWD do Lumaestro
+	// 📂 Workspace: Usa o diretório de projeto ativo
 	cwd := e.Workspace
-	if cwd == "" {
-		cwd, _ = os.Getwd()
-	}
+	
+	// 🛡️ Sincroniza o CPI com o Workspace da sessão
+	// Se e.Workspace estiver vazio, o CPI entra em modo DESARMADO (Fail-Closed)
+	e.CPI = NewCPIValidator(cwd, e.CPI.VaultOrbit)
+	e.Proxy.CPI = e.CPI // 🔄 Sincroniza o proxy
+	fmt.Printf("[ACP] Protocolo CPI Sincronizado: %s\n", e.CPI.ActiveOrbit)
+
+	// 🛡️ SEGURANÇA: Se o workspace está vazio, o agente NÃO deve saber onde estamos.
 	sessionHome := cwd
+	if sessionHome == "" {
+		// Em modo de contenção, usamos um caminho nulo para o agente
+		sessionHome = "" 
+	}
 	cfgLoaded, _ := config.Load()
 
 	if !isHotSwap {
@@ -122,7 +131,47 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 
 		cmd := exec.CommandContext(cmdCtx, binaryPath, args...)
 		cmd.Dir = cwd
-		cmd.Env = os.Environ()
+		
+		// 🛡️ ESCURECIMENTO DE AMBIENTE: Não herda todas as variáveis do sistema
+		// Deixamos passar apenas o essencial para o Windows/Node e as nossas variáveis.
+		var safeEnv []string
+		essentialKeys := []string{"SystemRoot", "SystemDrive", "TEMP", "TMP", "COMSPEC", "PATHEXT", "WINDIR", "USERNAME"}
+		for _, envVar := range os.Environ() {
+			pair := strings.SplitN(envVar, "=", 2)
+			if len(pair) < 2 { continue }
+			key := pair[0]
+			isEssential := false
+			for _, ek := range essentialKeys {
+				if strings.EqualFold(key, ek) {
+					isEssential = true
+					break
+				}
+			}
+			// 🕵️ Filtro de PATH: Mantém apenas o essencial para o Node/Git, remove pistas de projetos
+			if strings.EqualFold(key, "PATH") {
+				isEssential = true
+			}
+
+			if isEssential {
+				safeEnv = append(safeEnv, envVar)
+			}
+		}
+		cmd.Env = safeEnv
+
+		// 🛰️ ATIVAÇÃO DE TELEMETRIA (Blackbox ACP)
+		if agent == "gemini" {
+			userHome, _ := os.UserHomeDir()
+			logDir := filepath.Join(userHome, ".gemini", "antigravity", "logs")
+			_ = os.MkdirAll(logDir, 0755)
+			
+			telemetryFile := filepath.Join(logDir, "acp-telemetry.json")
+			cmd.Env = append(cmd.Env,
+				"GEMINI_TELEMETRY_ENABLED=true",
+				"GEMINI_TELEMETRY_TARGET=local",
+				"GEMINI_TELEMETRY_OUTFILE="+telemetryFile,
+			)
+			fmt.Printf("[ACP] 🛰️ Telemetria Ativada: %s\n", telemetryFile)
+		}
 
 		isUsingOAuth := true
 		if cfgLoaded != nil && cfgLoaded.UseGeminiAPIKey {
@@ -320,7 +369,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 			JSONRPC: JSONRPCVersion,
 			ID:      initID,
 			Method:  "initialize",
-			Params:  json.RawMessage(`{"protocolVersion":1,"clientInfo":{"name":"Lumaestro","version":"2.0.0"},"clientCapabilities":{"fs":{"readTextFile":true,"writeTextFile":true}}}`),
+			Params:  json.RawMessage(`{"protocolVersion":1,"clientInfo":{"name":"Lumaestro","version":"2.0.0"},"clientCapabilities":{"fs":{"readTextFile":false,"writeTextFile":false}}}`),
 		})
 
 		if _, err := e.waitForResponse(initID, 60*time.Second); err != nil {
@@ -385,14 +434,13 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 				session.ACPSessID = "" // Limpa o ID inválido
 			}
 		}
-
 		if targetID == "" {
 			sessionCreationID = e.getNextID()
 			e.SendRPC(session, JSONRPCMessage{
 				JSONRPC: JSONRPCVersion,
 				ID:      sessionCreationID,
 				Method:  "session/new",
-				Params:  json.RawMessage(`{"cwd":"` + strings.ReplaceAll(cwd, "\\", "\\\\") + `","mcpServers":[]}`),
+				Params:  json.RawMessage(`{"cwd":"` + strings.ReplaceAll(e.Workspace, "\\", "\\\\") + `","mcpServers":[]}`),
 			})
 		}
 	} else {
@@ -402,7 +450,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 			JSONRPC: JSONRPCVersion,
 			ID:      sessionCreationID,
 			Method:  "session/new",
-			Params:  json.RawMessage(`{"cwd":"` + strings.ReplaceAll(cwd, "\\", "\\\\") + `","mcpServers":[]}`),
+			Params:  json.RawMessage(`{"cwd":"` + strings.ReplaceAll(e.Workspace, "\\", "\\\\") + `","mcpServers":[]}`),
 		})
 	}
 
@@ -569,10 +617,10 @@ func (e *ACPExecutor) LoadSession(s *ACPSession, acpSessionID string) error {
 	s.ACPSessID = acpSessionID
 
 	id := e.getNextID()
-	cwd, _ := os.Getwd()
+	// 🛡️ SEGURANÇA: Usar o workspace autorizado do executor, não o CWD do processo
 	params := map[string]interface{}{
 		"sessionId":  acpSessionID,
-		"cwd":        cwd,
+		"cwd":        e.Workspace,
 		"mcpServers": []interface{}{},
 	}
 	paramsJSON, _ := json.Marshal(params)

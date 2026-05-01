@@ -63,7 +63,7 @@ type App struct {
 // NewApp cria uma nova instância soberana do Lumaestro.
 func NewApp() *App {
 	a := &App{}
-	a.executor = acp.NewACPExecutor()
+	a.executor = acp.NewACPExecutor("", "")
 	a.orchestrator = acp.NewOrchestrator(a.executor)
 	a.legacyExec = agents.NewExecutor()
 	a.installer = tools.NewInstaller()

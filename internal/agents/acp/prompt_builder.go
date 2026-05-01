@@ -43,7 +43,7 @@ func NewPromptBuilder() *PromptBuilder {
 }
 
 // Build gera o prompt final injetando contexto e histórico.
-func (b *PromptBuilder) Build(profile AgentProfile, context string, history []string, goal string, autonomous bool) string {
+func (b *PromptBuilder) Build(profile AgentProfile, context string, history []string, goal string, autonomous bool, orbit string) string {
 	var sb strings.Builder
 
 	// 1. Identidade e Idioma do Sistema
@@ -53,6 +53,9 @@ func (b *PromptBuilder) Build(profile AgentProfile, context string, history []st
 	sb.WriteString(fmt.Sprintf("INSTRUÇÕES DE SISTEMA:\n%s\n\n", profile.SystemPrompt))
 	sb.WriteString(fmt.Sprintf("%s\n\n", prompts.GetLightningDirective()))
 	sb.WriteString(fmt.Sprintf("%s\n\n", prompts.GetNavigationDirective()))
+	
+	// 🛡️ PROTOCOLO CPI (Isolamento de Consciência)
+	sb.WriteString(fmt.Sprintf("%s\n\n", prompts.GetCPIDirective(orbit)))
 
 	// 2. Contexto do Obsidian (RAG)
 	if context != "" {
