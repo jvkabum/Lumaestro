@@ -1,10 +1,10 @@
 <script setup>
-import { onMounted, ref, watch, computed } from 'vue'
-import { useSettingsStore } from '../stores/settings'
-import { useSettingsConfig } from '../composables/useSettingsConfig'
-import { useSettingsTools } from '../composables/useSettingsTools'
-import { useSettingsMCP } from '../composables/useSettingsMCP'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useSettingsAccounts } from '../composables/useSettingsAccounts'
+import { useSettingsConfig } from '../composables/useSettingsConfig'
+import { useSettingsMCP } from '../composables/useSettingsMCP'
+import { useSettingsTools } from '../composables/useSettingsTools'
+import { useSettingsStore } from '../stores/settings'
 
 // ── Store Pinia ──
 const store = useSettingsStore()
@@ -22,6 +22,7 @@ const { handleAddAccount, handleLoginAccount, handleSwitchAccount, handleRemoveA
 
 // ── IDENTIDADE MULTI-PROVEDOR ──
 const selectedAccountProvider = ref('google')
+const showQuickSwitch = ref(false)
 const accountProviders = [
   { id: 'google', label: 'Google (Gemini)', icon: '💎', color: '#3b82f6' },
   { id: 'claude', label: 'Claude', icon: '🟠', color: '#f97316' },
@@ -847,17 +848,46 @@ runtime.EventsOn("native:progress", (data) => {
                   <input v-else v-model="store.config.lmstudio_model" type="text" class="maestro-input" placeholder="ID do modelo" style="padding: 8px 12px; font-size: 0.8rem;" />
                 </div>
 
-                <div style="display: flex; gap: 12px; margin-top: auto;">
-                   <button v-if="tool !== 'groq'" @click="install(tool)" class="unit-btn-solid" style="flex: 1.5;">
+                 <div style="display: flex; gap: 8px; margin-top: auto; flex-wrap: wrap;">
+                   <button v-if="tool !== 'groq'" @click="install(tool)" class="unit-btn-solid" style="flex: 1; min-width: 110px; padding: 10px; font-size: 0.7rem; white-space: nowrap;">
                      {{ tool === 'lmstudio' ? 'SALVAR CONFIG' : 'SINCRONIZAR' }}
                    </button>
-                   <button v-if="tool !== 'lmstudio' && tool !== 'groq' && store.status.tools[tool]" @click="setup(tool)" class="unit-btn-glow" :style="getAuthStyle(tool)" style="flex: 1;">
+                   
+                   <!-- 🔄 SWITCH DE IDENTIDADE RÁPIDO (PREMIUM) -->
+                   <div v-if="tool === 'gemini' && store.config.identities && store.config.identities.filter(id => id.provider === 'google').length > 1" class="custom-maestro-dropdown" style="flex: 1; min-width: 50px; max-width: 130px; margin-top: 0; position: relative;">
+                     <div class="dropdown-trigger maestro-input" 
+                          @click.stop="showQuickSwitch = !showQuickSwitch" 
+                          style="width: 100%; border: 1px solid var(--p-border); background: rgba(255, 255, 255, 0.05); border-radius: 14px; justify-content: center; gap: 4px; padding: 10px !important; display: flex; align-items: center; transition: all 0.3s; cursor: pointer;">
+                       <span class="active-model-name" style="font-size: 0.75rem; color: #fff; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; text-align: center; min-width: 0;">
+                         {{ store.config.identities.find(id => id.provider === 'google' && id.active)?.name || 'ALTERNAR PILOTO' }}
+                       </span>
+                     </div>
+                     
+                     <transition name="maestro-fade">
+                       <div v-if="showQuickSwitch" class="dropdown-options-list" style="border-color: rgba(59, 130, 246, 0.3); bottom: calc(100% + 10px); top: auto; background: rgba(13, 17, 23, 0.98);">
+                         <div style="font-size: 0.55rem; color: #60a5fa; font-weight: 900; letter-spacing: 1px; padding: 4px 8px; margin-bottom: 4px; border-bottom: 1px solid rgba(59, 130, 246, 0.2);">PILOTOS SINCRONIZADOS:</div>
+                         <div v-for="acc in store.config.identities.filter(id => id.provider === 'google')" 
+                              :key="acc.name" 
+                              class="dropdown-item"
+                              :class="{ 'selected': acc.active }"
+                              @click.stop="handleSwitchAccount('google', acc.name); showQuickSwitch = false;"
+                              style="padding: 6px 10px;">
+                           <div class="item-meta" style="width: 100%; overflow: hidden;">
+                             <div class="item-title" style="font-size: 0.8rem; font-weight: 800; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ acc.name }}</div>
+                             <div class="item-repo" style="text-align: center; margin-top: 4px;" :style="acc.active ? 'color: #3b82f6;' : ''">{{ acc.active ? '🚀 ATIVO' : '💤 STANDBY' }}</div>
+                           </div>
+                         </div>
+                       </div>
+                     </transition>
+                   </div>
+
+                   <button v-if="tool !== 'lmstudio' && tool !== 'groq' && store.status.tools[tool]" @click="setup(tool)" class="unit-btn-glow" :style="getAuthStyle(tool)" style="flex: 1; min-width: 110px; padding: 10px; font-size: 0.7rem; white-space: nowrap;">
                       {{ getAuthLabel(tool) }}
                    </button>
-                   <button v-if="tool === 'groq'" @click="store.activeTab = 'groq'" class="unit-btn-glow" style="background: rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.3); color: #f59e0b; flex: 1;">
+                   <button v-if="tool === 'groq'" @click="store.activeTab = 'groq'" class="unit-btn-glow" style="background: rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.3); color: #f59e0b; flex: 1; min-width: 110px; padding: 10px; font-size: 0.7rem; white-space: nowrap;">
                       RECONFIGURAR 🏎️
                    </button>
-                   <button v-if="tool === 'lmstudio'" @click="testLMStudio" :disabled="store.lmTesting" style="background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.3); color: #10b981; border-radius: 8px; padding: 8px 16px; font-size: 0.75rem; font-weight: 900; cursor: pointer; flex: 1;">
+                   <button v-if="tool === 'lmstudio'" @click="testLMStudio" :disabled="store.lmTesting" style="background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.3); color: #10b981; border-radius: 8px; padding: 8px 16px; font-size: 0.75rem; font-weight: 900; cursor: pointer; flex: 1; min-width: 110px; white-space: nowrap;">
                       {{ store.lmTesting ? '⏳ TESTANDO' : '⚡ TESTAR' }}
                    </button>
                 </div>
@@ -1164,10 +1194,10 @@ runtime.EventsOn("native:progress", (data) => {
               </button>
               
               <button v-if="!acc.active" @click="handleSwitchAccount(selectedAccountProvider, acc.name)" class="btn-nexus-action">
-                ATIVAR
+                💤 DESATIVADO
               </button>
-              <button v-else class="btn-nexus-action" style="background: #fff; color: #000; cursor: default;">
-                ONLINE
+              <button v-else class="btn-nexus-action" style="background: rgba(16, 185, 129, 0.2); border-color: rgba(16, 185, 129, 0.5); color: #10b981; cursor: default; box-shadow: 0 0 15px rgba(16, 185, 129, 0.2);">
+                🚀 ATIVADO
               </button>
               
               <button @click="handleRemoveAccount(selectedAccountProvider, acc.name)" class="btn-nexus-action danger" title="Remover Identidade">

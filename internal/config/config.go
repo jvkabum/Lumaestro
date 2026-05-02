@@ -380,5 +380,67 @@ func Load() (*Config, error) {
 		Save(cfg)
 	}
 
+	// 🌟 Onboarding Automático: Conta Principal
+	hasPrincipal := false
+	for _, id := range cfg.Identities {
+		if id.Provider == "google" && id.Name == "Principal" {
+			hasPrincipal = true
+			break
+		}
+	}
+
+	if !hasPrincipal {
+		cwd, _ := os.Getwd()
+		principalHome := filepath.Join(cwd, ".lumaestro")
+		credPath := filepath.Join(principalHome, ".gemini", "oauth_creds.json")
+		fallbackCredPath := filepath.Join(principalHome, "oauth_creds.json")
+
+		// Verifica se há credenciais de login no diretório principal
+		credExists := false
+		if _, err := os.Stat(credPath); err == nil {
+			credExists = true
+		} else if _, err := os.Stat(fallbackCredPath); err == nil {
+			credExists = true
+		}
+
+		if credExists {
+			fmt.Println("[Config] 🌟 Conta Principal detectada fisicamente! Sincronizando com Identidades...")
+			
+			// Se não há nenhuma outra identidade do Google ativa, ativamos a principal
+			isActive := true
+			for _, id := range cfg.Identities {
+				if id.Provider == "google" && id.Active {
+					isActive = false
+					break
+				}
+			}
+
+			// Prepend (coloca no início) para a principal ser o Piloto 1
+			newIdentity := Identity{
+				Provider: "google",
+				Name:     "Principal",
+				HomeDir:  principalHome,
+				Active:   isActive,
+			}
+			cfg.Identities = append([]Identity{newIdentity}, cfg.Identities...)
+			Save(cfg)
+		}
+	}
+
 	return &cfg, nil
+}
+// GetActiveGoogleIdentity retorna o nome do perfil ativo para o provedor Google/Gemini.
+func (c *Config) GetActiveGoogleIdentity() string {
+	for _, id := range c.Identities {
+		if id.Provider == "google" && id.Active {
+			return id.Name
+		}
+	}
+	// Fallback para legado (GeminiAccounts)
+	for _, id := range c.GeminiAccounts {
+		if id.Active {
+			return id.Name
+		}
+	}
+	return "default"
 }

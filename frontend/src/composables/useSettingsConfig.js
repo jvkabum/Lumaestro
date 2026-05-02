@@ -119,18 +119,26 @@ export function useSettingsConfig() {
     }
   }
 
-  const getAuthLabel = (agent) => {
-    if (store.config[`use_${agent}_api_key`]) {
-      return 'CHAVE API ⚡'
-    }
-    return agent === 'claude' ? 'FAZER LOGIN (OAUTH)' : 'CONFIGURAR LOGIN'
+  const getAuthLabel = (tool) => {
+    const isAuth = store.status.tools[tool + '_auth'] || store.config[`use_${tool}_api_key`]
+    if (tool === 'gemini') return isAuth ? 'LOGIN ATIVADO ✓' : 'CONFIGURAR LOGIN'
+    if (tool === 'claude') return isAuth ? 'CONECTADO ✓' : 'FAZER LOGIN (OAUTH)'
+    return 'CONFIGURAR LOGIN'
   }
 
-  const getAuthStyle = (agent) => {
-    if (store.config[`use_${agent}_api_key`]) {
-      return 'border-color: rgba(245, 158, 11, 0.4); color: #fde68a; background: rgba(245, 158, 11, 0.08);'
+  const getAuthStyle = (tool) => {
+    const isAuth = store.status.tools[tool + '_auth'] || store.config[`use_${tool}_api_key`]
+    if (tool === 'gemini') {
+      return isAuth 
+        ? 'background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.3); color: #10b981;' 
+        : 'background: rgba(59, 130, 246, 0.05); border-color: rgba(59, 130, 246, 0.3); color: #60a5fa;'
     }
-    return 'border-color: #3b82f6;'
+    if (tool === 'claude') {
+      return isAuth 
+        ? 'background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.3); color: #10b981;' 
+        : 'background: rgba(249, 115, 22, 0.05); border-color: rgba(249, 115, 22, 0.3); color: #fdba74;'
+    }
+    return ''
   }
 
   return {

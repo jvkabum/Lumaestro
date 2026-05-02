@@ -26,7 +26,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   const isNavigating = ref(false); // 🔍 Inteligência de Navegação em Tempo Real
   const isTerminalMode = ref(false);
   const isWeaving = ref(false); // 🧶 Teccelagem de Conhecimento em Background
-  const activeAgent = ref(null);
+  const activeAgent = ref('gemini');
   const activeProfile = ref(null); // 🎭 Perfil de Agente (Doc-Master, etc) - Começa limpo
   const currentStatus = ref(""); // 📡 Status de Ação em Tempo Real
   const currentStatusKind = ref('status');
@@ -171,6 +171,9 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
       console.log('[Store] Listeners já inicializados. Ignorando nova inscrição para evitar duplicidade.');
       return;
     }
+    // 🚀 AUTO-START: Dispara a varredura de Sinfonias logo após inicializar os listeners
+    fetchSessions('gemini');
+
     listenersInitialized.value = true;
 
     // 📂 Carregar workspace salvo ao iniciar

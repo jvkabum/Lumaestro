@@ -78,16 +78,8 @@ func (a *App) StartBackgroundAgentSession(agent string) error {
 
 // ListAgentSessions retorna a lista de conversas salvas para o agente
 func (a *App) ListAgentSessions(agent string) ([]acp.SessionInfo, error) {
-	sessionID := agent
-	a.executor.Mu.Lock()
-	session, ok := a.executor.ActiveSessions[sessionID]
-	a.executor.Mu.Unlock()
-
-	if !ok {
-		return nil, fmt.Errorf("inicie o agente antes de listar o histórico")
-	}
-
-	return a.executor.ListSessions(session)
+	// 🛰️ Agora permitimos listar o histórico mesmo sem sessão ativa (Standby Mode)
+	return a.executor.ListSessions(nil)
 }
 
 // LoadAgentSession encerra a atual e carrega uma antiga (Checkpoint)

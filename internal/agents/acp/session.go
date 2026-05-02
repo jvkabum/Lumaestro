@@ -388,11 +388,56 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		} else {
 			// 🌐 Lógica de Silêncio: Se já houver credenciais OAuth, não pede login de novo
 			methodId = "oauth-personal" // Força o ID correto para modo login
+			
 			userHome, _ := os.UserHomeDir()
 			credsPath := filepath.Join(userHome, ".gemini", "oauth_creds.json")
+			tmpDir := filepath.Join(userHome, ".gemini", "tmp")
+
+			// 🚀 HANGAR DE IDENTIDADES (Multi-Account Rotation)
+			vaultDir := filepath.Join(userHome, ".gemini", "vault")
+			_ = os.MkdirAll(vaultDir, 0755)
+
+			lastIdentityPath := filepath.Join(userHome, ".gemini", "last_identity.txt")
+			currentIdentity := "default"
+			if cfgLoaded != nil {
+				currentIdentity = cfgLoaded.GetActiveGoogleIdentity()
+			}
+
+			lastIdentityData, _ := os.ReadFile(lastIdentityPath)
+			lastIdentity := strings.TrimSpace(string(lastIdentityData))
+
+			// Se a identidade mudou, salvamos a atual e restauramos a nova
+			if lastIdentity != "" && lastIdentity != currentIdentity {
+				fmt.Printf("[ACP] 🔄 Rotacionando Identidades (%s -> %s)...\n", lastIdentity, currentIdentity)
+				
+				// 1. Arquiva a credencial da identidade anterior
+				if _, err := os.Stat(credsPath); err == nil {
+					oldVaultPath := filepath.Join(vaultDir, lastIdentity + ".json")
+					data, _ := os.ReadFile(credsPath)
+					_ = os.WriteFile(oldVaultPath, data, 0644)
+				}
+
+				// 2. Tenta restaurar a credencial da nova identidade
+				newVaultPath := filepath.Join(vaultDir, currentIdentity + ".json")
+				if data, err := os.ReadFile(newVaultPath); err == nil {
+					_ = os.WriteFile(credsPath, data, 0644)
+					fmt.Printf("[ACP] ✅ Credencial de %s restaurada do Hangar.\n", currentIdentity)
+				} else {
+					// Se não temos no vault, removemos a antiga para forçar novo login uma única vez
+					_ = os.Remove(credsPath)
+				}
+				
+				_ = os.RemoveAll(tmpDir) // Limpa cache para evitar conflitos de cookies
+			}
+			_ = os.WriteFile(lastIdentityPath, []byte(currentIdentity), 0644)
+
 			if _, err := os.Stat(credsPath); err == nil {
-				fmt.Printf("[ACP] 🛡️ Credenciais OAuth detectadas em %s. Pulando login redundante.\n", credsPath)
+				fmt.Printf("[ACP] 🛡️ Credenciais OAuth detectadas em %s.\n", credsPath)
 				shouldAuthenticate = false
+			} else {
+				fmt.Println("[ACP] 🔑 Nenhuma credencial válida. Iniciando fluxo de login no navegador...")
+				shouldAuthenticate = true
+				_ = os.RemoveAll(tmpDir) 
 			}
 		}
 
@@ -496,74 +541,98 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 
 // ListSessions recupera a lista de conversas salvas diretamente do sistema de arquivos.
 func (e *ACPExecutor) ListSessions(s *ACPSession) ([]SessionInfo, error) {
-	// 1. Determinar o diretório de base (.gemini)
+	// 1. Determinar o diretório de base (.gemini) e incluir TODOS os pilotos conhecidos
 	userHome, _ := os.UserHomeDir()
-	sessionHome := filepath.Join(userHome, ".gemini")
+	
+	// Lista de diretórios para varredura
+	var sessionHomes []string
+	sessionHomes = append(sessionHomes, filepath.Join(userHome, ".gemini"))
 
 	cwd, _ := os.Getwd()
 	if cfg, errCfg := config.Load(); errCfg == nil {
 		for _, id := range cfg.Identities {
-			if id.Provider == "google" && id.Active && id.HomeDir != "" {
-				sessionHome = id.HomeDir
-				break
+			if id.Provider == "google" && id.HomeDir != "" {
+				// 🛡️ Adiciona o diretório de cada piloto à varredura global
+				sessionHomes = append(sessionHomes, filepath.Join(id.HomeDir, ".gemini"))
 			}
 		}
 	} else {
 		if _, err := os.Stat(filepath.Join(cwd, ".gemini")); err == nil {
-			sessionHome = filepath.Join(cwd, ".gemini")
+			sessionHomes = append(sessionHomes, filepath.Join(cwd, ".gemini"))
 		}
 	}
 
 	projectID := "lumaestro"
-	projectsPath := filepath.Join(sessionHome, "projects.json")
-	if data, err := os.ReadFile(projectsPath); err == nil {
-		var p struct {
-			Projects map[string]string `json:"projects"`
-		}
-		if json.Unmarshal(data, &p) == nil {
-			for path, id := range p.Projects {
-				if strings.EqualFold(path, cwd) {
-					projectID = id
-					break
+	// 🎯 Varredura Dinâmica de Project ID em todos os Homes
+	for _, sHome := range sessionHomes {
+		projectsPath := filepath.Join(sHome, "projects.json")
+		if data, err := os.ReadFile(projectsPath); err == nil {
+			var p struct {
+				Projects map[string]string `json:"projects"`
+			}
+			if json.Unmarshal(data, &p) == nil {
+				for path, id := range p.Projects {
+					if strings.EqualFold(path, cwd) {
+						projectID = id
+						break
+					}
 				}
 			}
 		}
 	}
 
-	sessionsDirs := []string{
-		filepath.Join(sessionHome, "history", projectID),
-		filepath.Join(sessionHome, "history", "ia"),
-		filepath.Join(sessionHome, "history", "lumaestro"),
-		filepath.Join(sessionHome, "history", "lumaestro-1"),
-		filepath.Join(sessionHome, "tmp", "lumaestro", "chats"),
-		filepath.Join(sessionHome, "tmp", "lumaestro-1", "chats"),
-		filepath.Join(sessionHome, "sessions"),
+	var sessionsDirs []string
+	for _, sHome := range sessionHomes {
+		sessionsDirs = append(sessionsDirs,
+			filepath.Join(sHome, "history", projectID),
+			filepath.Join(sHome, "history", "ia"),
+			filepath.Join(sHome, "history", "lumaestro"),
+			filepath.Join(sHome, "history", "lumaestro-1"),
+			filepath.Join(sHome, "tmp", "lumaestro", "chats"),
+			filepath.Join(sHome, "tmp", "lumaestro-1", "chats"),
+			filepath.Join(sHome, "sessions"),
+		)
 	}
 
 	var finalList []SessionInfo
 	visited := make(map[string]bool)
+
+	fmt.Printf("[ListSessions] 🛰️ Iniciando varredura global em %d diretórios base...\n", len(sessionHomes))
 
 	for _, dirPath := range sessionsDirs {
 		if _, err := os.Stat(dirPath); err != nil {
 			continue
 		}
 
+		fmt.Printf("[ListSessions] 📂 Varrendo: %s\n", dirPath)
 		files, err := os.ReadDir(dirPath)
 		if err != nil {
+			fmt.Printf("[ListSessions] ❌ Erro ao ler diretório %s: %v\n", dirPath, err)
 			continue
 		}
 
+		foundInDir := 0
 		for _, f := range files {
-			if !f.IsDir() && strings.HasSuffix(f.Name(), ".json") && f.Name() != "index.json" {
+			name := f.Name()
+			if !f.IsDir() && (strings.HasSuffix(name, ".json") || strings.HasSuffix(name, ".jsonl")) && name != "index.json" {
+				foundInDir++
 				path := filepath.Join(dirPath, f.Name())
 				if visited[path] {
 					continue
 				}
 				visited[path] = true
-
 				data, err := os.ReadFile(path)
 				if err != nil {
 					continue
+				}
+
+				// 🛠️ Suporte a JSONL: Se for .jsonl, pegamos apenas a primeira linha para o Unmarshal de meta
+				jsonToParse := data
+				if strings.HasSuffix(name, ".jsonl") {
+					lines := strings.Split(string(data), "\n")
+					if len(lines) > 0 {
+						jsonToParse = []byte(lines[0])
+					}
 				}
 
 				var meta struct {
@@ -574,7 +643,7 @@ func (e *ACPExecutor) ListSessions(s *ACPSession) ([]SessionInfo, error) {
 					UpdatedAt string `json:"updatedAt"`
 					CreatedAt string `json:"createdAt"`
 				}
-				if err := json.Unmarshal(data, &meta); err == nil {
+				if err := json.Unmarshal(jsonToParse, &meta); err == nil {
 					finalID := meta.ID
 					if meta.SessID != "" {
 						finalID = meta.SessID
@@ -603,12 +672,16 @@ func (e *ACPExecutor) ListSessions(s *ACPSession) ([]SessionInfo, error) {
 				}
 			}
 		}
+		if foundInDir > 0 {
+			fmt.Printf("[ListSessions] ✅ Encontradas %d Sinfonias em %s\n", foundInDir, dirPath)
+		}
 	}
 
 	sort.Slice(finalList, func(i, j int) bool {
 		return finalList[i].UpdatedAt > finalList[j].UpdatedAt
 	})
 
+	fmt.Printf("[ListSessions] ✨ Varredura completa. Total unificado: %d Sinfonias.\n", len(finalList))
 	return finalList, nil
 }
 
@@ -687,8 +760,8 @@ func (e *ACPExecutor) findLatestSessionID(sessionHome string) string {
 		if err != nil {
 			return nil
 		}
-		// Procuramos por arquivos .json dentro de diretórios 'chats'
-		if !info.IsDir() && strings.HasSuffix(path, ".json") && strings.Contains(path, "chats") {
+		// Procuramos por arquivos .json ou .jsonl dentro de diretórios 'chats'
+		if !info.IsDir() && (strings.HasSuffix(path, ".json") || strings.HasSuffix(path, ".jsonl")) && strings.Contains(path, "chats") {
 			if info.ModTime().After(latestTime) {
 				latestTime = info.ModTime()
 				latestFile = path

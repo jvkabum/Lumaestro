@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"time"
+	"Lumaestro/internal/config"
 )
 
 // Installer gerencia a instalação de ferramentas externas com streaming de logs.
@@ -73,6 +74,29 @@ func (i *Installer) CheckClaudeAuth() bool {
 
 // CheckGeminiAuth verifica silenciosamente se existe uma sessão configurada do Gemini no sistema.
 func (i *Installer) CheckGeminiAuth() bool {
+	// 🌟 NOVO SISTEMA DE IDENTIDADES (Prioridade)
+	cfg, err := config.Load()
+	if err == nil && cfg != nil {
+		for _, id := range cfg.Identities {
+			if id.Provider == "google" && id.Active && id.HomeDir != "" {
+				// Verifica no padrão de sessão atual da conta
+				credPathLegacy := filepath.Join(id.HomeDir, ".gemini", "oauth_creds.json")
+				credPathModern := filepath.Join(id.HomeDir, "oauth_creds.json")
+				
+				if _, err := os.Stat(credPathModern); err == nil {
+					return true
+				}
+				if _, err := os.Stat(credPathLegacy); err == nil {
+					return true
+				}
+			}
+		}
+	}
+
+	// ---------------------------------------------------------
+	// FALLBACKS LEGADOS ABAIXO
+	// ---------------------------------------------------------
+
 	// A biblioteca do Gemini CLI utiliza Application Default Credentials (ADC)
 	// Verifica o ADC do Google Cloud no Windows
 	appData := os.Getenv("APPDATA")
