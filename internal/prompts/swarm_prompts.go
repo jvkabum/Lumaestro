@@ -1,13 +1,13 @@
 package prompts
 
-import "fmt"
-
 // GetSwarmNewTaskPrompt retorna o prompt de onboarding quando um agente corporativo assume uma nova tarefa.
+// Token-Optimized: formato telegráfico, sem prosa narrativa.
 func GetSwarmNewTaskPrompt(agentName, role, taskTitle, taskDescription string) string {
-	return fmt.Sprintf("Você é o agente corporativo %s (Cargo: %s). Você acaba de assumir a tarefa: %s\nDescrição: %s\nInicie o trabalho imediatamente. Use as ferramentas de 'Lumaestro/' para Handoff ou Conclusão se necessário.", agentName, role, taskTitle, taskDescription)
+	return "Agente " + agentName + " (" + role + "). Nova tarefa: " + taskTitle + "\nDescrição: " + taskDescription + "\nInicie imediatamente. Use ferramentas Lumaestro/ para Handoff ou Conclusão."
 }
 
 // GetSwarmContinuePrompt retorna o prompt de continuidade quando um agente retoma uma tarefa em andamento.
+// Token-Optimized: sem fmt.Sprintf, concatenação direta.
 func GetSwarmContinuePrompt(agentName, role, taskTitle, historyStr string) string {
-	return fmt.Sprintf("Você é o agente corporativo %s (Cargo: %s). Continuando tarefa: %s\nHistórico recente:\n%s\nPor favor, prossiga com os próximos passos.", agentName, role, taskTitle, historyStr)
+	return "Agente " + agentName + " (" + role + "). Continuando: " + taskTitle + "\nHistórico:\n" + historyStr + "\nProssiga com os próximos passos."
 }

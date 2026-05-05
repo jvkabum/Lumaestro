@@ -27,6 +27,9 @@ func (a *App) bootSequence() {
 		return
 	}
 
+	// 🧠 Os serviços estão prontos. Agora podemos iniciar os agentes e o RAG.
+	a.NLPReady = true 
+
 	c, cx := a.crawler, a.ctx
 	if c != nil && cx != nil {
 		go func(cr *obsidian.Crawler, ct context.Context) {
@@ -35,18 +38,22 @@ func (a *App) bootSequence() {
 	}
 
 	if a.config != nil {
+		fmt.Printf("[Boot] 🔍 Verificando Início Automático (%d agentes configurados)...\n", len(a.config.AutoStartAgents))
 		if len(a.config.AutoStartAgents) > 0 {
+			// ⏳ Pequeno delay para garantir que o Frontend recebeu o sinal de ONLINE
+			time.Sleep(2 * time.Second)
+
 			for _, agent := range a.config.AutoStartAgents {
-				a.emitBoot("agent", "🤖", "Iniciando agente "+agent+"...")
-				go func(agentName string) {
-					if err := a.StartAgentSession(agentName); err == nil {
-						time.Sleep(1 * time.Second)
-						a.emitEvent("agent:log", map[string]string{
-							"source": "SYSTEM", "type": "system",
-							"content": "🟢 Sessão '" + agentName + "' pronta.",
-						})
+				agentName := agent
+				go func(name string) {
+					fmt.Printf("[Boot] 🤖 Disparando início automático: %s (Workspace: %s)\n", name, a.config.ActiveWorkspace)
+					if err := a.StartAgentSession(name); err == nil {
+						fmt.Printf("[Boot] ✅ Agente %s iniciado e restaurado com sucesso.\n", name)
+						a.emitBoot("agent", "✅", "Agente "+name+" pronto!")
+					} else {
+						fmt.Printf("[Boot] ❌ Falha no início automático de %s: %v\n", name, err)
 					}
-				}(agent)
+				}(agentName)
 			}
 		}
 
@@ -57,8 +64,11 @@ func (a *App) bootSequence() {
 				a.emitBoot("complete", "✅", "Sincronização concluída.")
 			}()
 		}
-		go a.startOrchestration()
+	} else {
+		fmt.Println("[Boot] ⚠️ Erro: Configuração nula ao tentar iniciar agentes.")
 	}
+
+	go a.startOrchestration()
 }
 
 // initServices orquestra a inicialização fragmentada de todos os serviços.

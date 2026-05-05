@@ -4,6 +4,7 @@ import (
 	"Lumaestro/internal/agents/acp"
 	"fmt"
 	"os/exec"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -41,7 +42,19 @@ func (a *App) StartAgentSession(agent string) error {
 		return fmt.Errorf("falha de Autenticação: Claude Code requer setup de credenciais antes de operar via ACP")
 	}
 
-	sessionID := agent // 🚨 Unificação de ID: Usar o nome do agente diretamente casas sesão ACP
+	// ⏳ RESILIÊNCIA DE BOOT: Aguarda os motores estarem prontos antes do Fast-Track
+	// Se for o início do app, os motores nativos podem levar alguns segundos para subir.
+	if !a.NLPReady {
+		fmt.Printf("[App] ⏳ Aguardando motores ficarem ONLINE antes de iniciar %s...\n", agent)
+		for i := 0; i < 30; i++ { // Espera até 30 segundos
+			if a.NLPReady {
+				break
+			}
+			time.Sleep(1 * time.Second)
+		}
+	}
+
+	sessionID := agent // 🚨 Unificação de ID: Usar o nome do agente diretamente para sessão ACP
 
 	// 🕵️⚡ Trava de Segurança: Não inicia se já houver uma sessão ativa ou iniciando para este agente.
 	a.executor.Mu.Lock()
@@ -55,7 +68,26 @@ func (a *App) StartAgentSession(agent string) error {
 
 	fmt.Printf("[App] Iniciando agente: %s\n", agent)
 	// No primeiro boot ou reinício, passamos loadSessionID como "LATEST" para carregar a última Sinfonia.
-	return a.executor.StartSession(a.ctx, agent, sessionID, "LATEST", uuid.Nil, nil, false, nil)
+	err := a.executor.StartSession(a.ctx, agent, sessionID, "LATEST", uuid.Nil, nil, false, nil)
+	if err == nil {
+		// 📡 SINCRONIZAÇÃO: Puxa o ID real da sessão restaurada e avisa o frontend
+		go func() {
+			time.Sleep(2 * time.Second) // Espera o initialize e session/load concluírem
+			a.executor.Mu.Lock()
+			realID := ""
+			if sess, ok := a.executor.ActiveSessions[sessionID]; ok {
+				realID = sess.ACPSessID
+			}
+			a.executor.Mu.Unlock()
+
+			if realID != "" {
+				fmt.Printf("[App] 📡 Sincronizando UI com a Sinfonia Real: %s\n", realID)
+				a.emitEvent("sessions:updated", nil)
+				a.emitEvent("sessions:current", realID)
+			}
+		}()
+	}
+	return err
 }
 
 // StartBackgroundAgentSession cria uma instância paralela silenciosa exclusiva para o processamento de RAG
@@ -86,6 +118,20 @@ func (a *App) ListAgentSessions(agent string) ([]acp.SessionInfo, error) {
 func (a *App) LoadAgentSession(agent string, acpSessionID string) error {
 	fmt.Printf("[App] Trocando para sessão: %s\n", acpSessionID)
 	sessionID := agent
+
+	// 🛡️ HOT SWAP DIRETO: Se já houver uma sessão ativa, apenas envia session/load
+	// sem passar pelo fluxo completo de StartSession (que pode criar sessões extras).
+	a.executor.Mu.Lock()
+	existingSession, exists := a.executor.ActiveSessions[sessionID]
+	isAlive := exists && existingSession.Cmd != nil && existingSession.Cmd.ProcessState == nil
+	a.executor.Mu.Unlock()
+
+	if isAlive {
+		fmt.Printf("[App] ♻️ Hot Swap Direto: Carregando sessão %s no processo ativo\n", acpSessionID)
+		return a.executor.LoadSession(existingSession, acpSessionID)
+	}
+
+	// Se não houver processo ativo, faz o fluxo completo (inicia processo + carrega sessão)
 	return a.executor.StartSession(a.ctx, agent, sessionID, acpSessionID, uuid.Nil, nil, false, nil)
 }
 

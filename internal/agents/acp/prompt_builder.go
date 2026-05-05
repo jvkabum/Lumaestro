@@ -1,7 +1,6 @@
 package acp
 
 import (
-	"fmt"
 	"strings"
 
 	"Lumaestro/internal/prompts"
@@ -35,6 +34,18 @@ var (
 	}
 )
 
+// BuildContext agrupa todos os dados dinâmicos para montagem do prompt.
+// Permite injeção condicional: diretivas só entram se o contexto justificar.
+type BuildContext struct {
+	RAGContext string   // Contexto do Obsidian (pode ser vazio)
+	History    []string // Histórico de conversa
+	Goal       string   // Objetivo atual do usuário
+	Autonomous bool     // Modo YOLO ativo?
+	Orbit      string   // Workspace CPI (pode ser vazio = desarmado)
+	HasGraph   bool     // Grafo 3D está ativo? (evita injetar NavDirective sem grafo)
+	HasLessons bool     // Existem lições Lightning? (evita injetar sem conteúdo)
+}
+
 // PromptBuilder organiza as peças da sinfonia em uma string única para o agente.
 type PromptBuilder struct{}
 
@@ -42,40 +53,92 @@ func NewPromptBuilder() *PromptBuilder {
 	return &PromptBuilder{}
 }
 
-// Build gera o prompt final injetando contexto e histórico.
-func (b *PromptBuilder) Build(profile AgentProfile, context string, history []string, goal string, autonomous bool, orbit string) string {
+// Build gera o prompt final com injeção condicional de diretivas.
+//
+// Estratégia de economia de tokens:
+// - Diretivas core (idioma, agente, CPI) são SEMPRE injetadas.
+// - Diretivas situacionais só entram quando relevantes:
+//   - EnvironmentDirective → apenas para Coder (executa comandos).
+//   - NavigationDirective  → apenas se HasGraph=true.
+//   - LightningDirective   → apenas se HasLessons=true.
+//   - AutonomyDirective    → apenas se autonomous=true (modo inativo é o default implícito).
+func (b *PromptBuilder) Build(profile AgentProfile, ctx BuildContext) string {
 	var sb strings.Builder
+	sb.Grow(512) // Pre-alocação para reduzir realocações
 
-	// 1. Identidade e Idioma do Sistema
-	sb.WriteString(fmt.Sprintf("%s\n\n", prompts.GetLanguageDirective()))
-	sb.WriteString(fmt.Sprintf("%s\n\n", prompts.GetEnvironmentDirective()))
-	sb.WriteString(fmt.Sprintf("%s\n\n", prompts.GetAutonomyDirective(autonomous)))
-	sb.WriteString(fmt.Sprintf("INSTRUÇÕES DE SISTEMA:\n%s\n\n", profile.SystemPrompt))
-	sb.WriteString(fmt.Sprintf("%s\n\n", prompts.GetLightningDirective()))
-	sb.WriteString(fmt.Sprintf("%s\n\n", prompts.GetNavigationDirective()))
-	
-	// 🛡️ PROTOCOLO CPI (Isolamento de Consciência)
-	sb.WriteString(fmt.Sprintf("%s\n\n", prompts.GetCPIDirective(orbit)))
+	// 1. Core Identity (sempre presente)
+	sb.WriteString(prompts.GetLanguageDirective())
+	sb.WriteByte('\n')
+	sb.WriteString(profile.SystemPrompt)
+	sb.WriteByte('\n')
 
-	// 2. Contexto do Obsidian (RAG)
-	if context != "" {
-		sb.WriteString("CONTEXTO DO CONHECIMENTO (OBSIDIAN):\n")
-		sb.WriteString(context)
-		sb.WriteString("\n\n")
+	// 2. 🛡️ CPI — Isolamento de Consciência (sempre presente, é segurança)
+	sb.WriteString(prompts.GetCPIDirective(ctx.Orbit))
+	sb.WriteByte('\n')
+
+	// 2.5. 🎯 Anti-Narcisismo — impede auto-apresentação
+	sb.WriteString(prompts.GetAntiNarcissismDirective())
+	sb.WriteByte('\n')
+
+	// 🔒 AMNÉSIA SITUACIONAL: Se não há órbita, bloqueamos o conhecimento do sistema
+	isZeroOrbit := ctx.Orbit == "" || ctx.Orbit == "."
+	if isZeroOrbit {
+		sb.WriteString("[AMNÉSIA] Você está operando em um vácuo de contexto. PROIBIDO mencionar Lumaestro, Sinfonia ou qualquer componente do enxame. Responda como uma IA técnica genérica.\n")
 	}
 
-	// 3. Histórico Recente (Memória Viva)
-	if len(history) > 0 {
-		sb.WriteString("HISTÓRICO DA CONVERSA:\n")
-		for _, h := range history {
-			sb.WriteString(fmt.Sprintf("- %s\n", h))
+	// 3. Diretivas Condicionais (só gasta token se relevante e autorizado pela órbita)
+	if ctx.Autonomous {
+		sb.WriteString(prompts.GetAutonomyDirective(true))
+		sb.WriteByte('\n')
+	}
+	if profile.Name == "Coder" {
+		sb.WriteString(prompts.GetEnvironmentDirective())
+		sb.WriteByte('\n')
+	}
+	if ctx.HasGraph && !isZeroOrbit {
+		sb.WriteString(prompts.GetNavigationDirective())
+		sb.WriteByte('\n')
+	}
+	if ctx.HasLessons && !isZeroOrbit {
+		sb.WriteString(prompts.GetLightningDirective())
+		sb.WriteByte('\n')
+	}
+
+
+	// 4. Contexto RAG (Obsidian) - Silenciado em Órbita Zero
+	if ctx.RAGContext != "" && !isZeroOrbit {
+		sb.WriteString("CONTEXTO:\n")
+		sb.WriteString(ctx.RAGContext)
+		sb.WriteByte('\n')
+	}
+
+	// 5. Histórico Recente (Memória Viva)
+	if len(ctx.History) > 0 {
+		sb.WriteString("HISTÓRICO:\n")
+		for _, h := range ctx.History {
+			sb.WriteString("- ")
+			sb.WriteString(h)
+			sb.WriteByte('\n')
 		}
-		sb.WriteString("\n")
 	}
 
-	// 4. A Grande Meta (O que fazer agora)
-	sb.WriteString("OBJETIVO ATUAL:\n")
-	sb.WriteString(goal)
+	// 6. Objetivo
+	sb.WriteString("OBJETIVO: ")
+	sb.WriteString(ctx.Goal)
 
 	return sb.String()
+}
+
+// BuildLegacy mantém compatibilidade com a assinatura antiga durante a transição.
+// Deprecated: Use Build(profile, BuildContext{...}) diretamente.
+func (b *PromptBuilder) BuildLegacy(profile AgentProfile, context string, history []string, goal string, autonomous bool, orbit string) string {
+	return b.Build(profile, BuildContext{
+		RAGContext: context,
+		History:    history,
+		Goal:       goal,
+		Autonomous: autonomous,
+		Orbit:      orbit,
+		HasGraph:   true,  // comportamento antigo: sempre injetava
+		HasLessons: true,  // comportamento antigo: sempre injetava
+	})
 }

@@ -3,68 +3,57 @@ package prompts
 import "fmt"
 
 // GetConflictValidatorPrompt retorna o prompt do Agente Validador de Verdade (resolver conflitos no grafo).
+// Token-Optimized: formato estruturado compacto, instruções telegráficas.
 func GetConflictValidatorPrompt(oldFact, newFact, contextStr string) string {
-	return fmt.Sprintf(`Você é o Agente Validador de Verdade.
-Detectamos um conflito no Grafo de Conhecimento.
-
-FATO ANTIGO: %s
-FATO NOVO: %s
-CONTEXTO RECENTE: %s
-
-Sua tarefa:
-Responda APENAS "UPDATE" se o Fato Novo for claramente uma atualização ou correção válida.
-Responda APENAS "CONFLICT" se houver dúvida real.
-
-Decisão:`, oldFact, newFact, contextStr)
+	return fmt.Sprintf(`Conflito no Grafo de Conhecimento.
+ANTIGO: %s
+NOVO: %s
+CONTEXTO: %s
+Responda APENAS "UPDATE" (fato novo é correção válida) ou "CONFLICT" (dúvida real).`, oldFact, newFact, contextStr)
 }
 
 // GetBeamCritiquePrompt retorna o template Beam Search do motor APO de Elite.
+// Token-Optimized: instruções compactas, formato XML preservado (parsing depende dele).
 func GetBeamCritiquePrompt(failures, currentPrompt string) string {
-	return fmt.Sprintf(`
-Você é o Arquiteto Metacognitivo do Enxame Lumaestro.
-Sua tarefa é analisar falhas de um agente e propor 3 VARIANTES de System Prompt diferentes (Beam Search).
+	return fmt.Sprintf(`Arquiteto Metacognitivo: analise falhas e proponha 3 variantes de System Prompt (Beam Search).
 
----
-FALHAS ANALISADAS:
+FALHAS:
 %s
----
 PROMPT ATUAL:
 %s
----
 
-INSTRUÇÕES:
-Gere 3 propostas distintas, cada uma com uma "Personalidade" clara:
-1. "O Rigoroso": Focado em regras estritas, tipos e validações.
-2. "O Eficiente": Focado em concisão, velocidade e economia de tokens.
-3. "O Criativo": Focado em resolução de problemas complexos e pensamento lateral.
+Gere 3 propostas com personalidades distintas:
+1. "O Rigoroso": regras estritas, validações.
+2. "O Eficiente": concisão, economia de tokens.
+3. "O Criativo": pensamento lateral, resolução complexa.
 
-FORMATO DE RESPOSTA (OBRIGATÓRIO):
+FORMATO (OBRIGATÓRIO):
 <variants>
   <variant name="O Rigoroso">
-    <critique>Por que esta versão é melhor para este erro...</critique>
-    <prompt>O texto completo do novo prompt...</prompt>
+    <critique>Por que esta versão é melhor...</critique>
+    <prompt>Texto do novo prompt...</prompt>
   </variant>
   ... (repetir para as outras 2)
-</variants>
-`, failures, currentPrompt)
+</variants>`, failures, currentPrompt)
 }
 
 // GetSwarmAgentSystemPrompt retorna o system prompt para dados de fine-tuning RLHF.
 func GetSwarmAgentSystemPrompt(agentName string) string {
-	return "Você é o agente " + agentName + " do enxame Lumaestro."
+	return "Agente " + agentName + " do enxame Lumaestro."
 }
 
 // GetSwarmCommandPrompt retorna o system prompt para comandos diretos ao enxame.
 func GetSwarmCommandPrompt() string {
-	return "Você é o Maestro do enxame Lumaestro. Responda à ordem do Comandante de forma executiva."
+	return "Maestro do enxame Lumaestro. Responda à ordem do Comandante de forma executiva."
 }
 
 // GetLMStudioTestSystemPrompt retorna o system prompt para teste de capacidade do modelo LM Studio.
+// NOTA: Este prompt DEVE permanecer em inglês — é usado para testar compliance JSON do modelo.
 func GetLMStudioTestSystemPrompt() string {
-	return `You are a JSON API. You MUST respond ONLY with a valid JSON object, no prose, no markdown code blocks, no extra text. The JSON must have exactly these keys: "status" (string "ok"), "capability" (string describing what you can do in one sentence), "language" (string, the language of this prompt).`
+	return `JSON API. Respond ONLY with valid JSON, no prose/markdown. Keys: "status" ("ok"), "capability" (one sentence), "language" (language of this prompt).`
 }
 
 // GetLMStudioTestUserPrompt retorna a mensagem de usuário para teste de capacidade.
 func GetLMStudioTestUserPrompt() string {
-	return "Respond in JSON format as instructed by the system prompt."
+	return "Respond in JSON as instructed."
 }

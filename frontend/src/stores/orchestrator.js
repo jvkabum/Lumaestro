@@ -529,8 +529,21 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     }
   };
 
+  const isLoadingSession = ref(false); // 🛡️ Trava anti-duplicação de cliques
+
   const loadSession = async (agent, acpID) => {
+    // 🛡️ ANTI-DUPLICAÇÃO: Ignora se já estamos nesta sinfonia ou se outra carga está em andamento
+    if (currentACPID.value === acpID) {
+      console.log(`[Store] Sinfonia ${acpID} já está ativa. Ignorando.`);
+      return;
+    }
+    if (isLoadingSession.value) {
+      console.log(`[Store] Já carregando uma Sinfonia. Ignorando clique duplicado.`);
+      return;
+    }
+
     console.log(`[Store] Carregando Sinfonia: ${acpID}`);
+    isLoadingSession.value = true;
     isThinking.value = true;
     currentACPID.value = acpID;
     messages.value = []; // Limpa o chat para receber o novo contexto restaurado
@@ -541,6 +554,8 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     } catch (err) {
       messages.value.push({ role: 'assistant', text: `❌ Erro ao carregar: ${err}`, mode: 'system' });
       isThinking.value = false;
+    } finally {
+      isLoadingSession.value = false;
     }
   };
 

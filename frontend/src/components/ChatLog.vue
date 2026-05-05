@@ -60,10 +60,6 @@
           <!-- Renderização Premium via Markdown-It -->
           <div v-if="msg.text" class="message-text markdown-body" v-html="renderMarkdown(msg.text)"></div>
           
-          <!-- Metadados -->
-          <div v-if="msg.role === 'assistant' && msg.agent && msg.mode !== 'system'" class="message-meta">
-            <span class="agent-badge">{{ msg.agent }}</span>
-          </div>
         </div>
       </div>
     </div>

@@ -14,8 +14,9 @@ import (
 	"Lumaestro/internal/config"
 	"Lumaestro/internal/db"
 
-	"github.com/google/uuid"
 	"Lumaestro/internal/utils"
+
+	"github.com/google/uuid"
 )
 
 // StartSession inicia o Gemini CLI com a flag --acp. Se loadSessionID for fornecido, tenta restaurar essa sessão em vez de criar uma nova.
@@ -41,22 +42,30 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 	}
 	e.Mu.Unlock()
 
+	cfgLoaded, _ := config.Load()
+
 	// 📂 Workspace: Usa o diretório de projeto ativo
+	if e.Workspace == "" && cfgLoaded != nil && cfgLoaded.ActiveWorkspace != "" {
+		e.Workspace = cfgLoaded.ActiveWorkspace
+	}
 	cwd := e.Workspace
-	
+
 	// 🛡️ Sincroniza o CPI com o Workspace da sessão
-	// Se e.Workspace estiver vazio, o CPI entra em modo DESARMADO (Fail-Closed)
 	e.CPI = NewCPIValidator(cwd, e.CPI.VaultOrbit)
-	e.Proxy.CPI = e.CPI // 🔄 Sincroniza o proxy
+	e.Proxy.CPI = e.CPI
 	fmt.Printf("[ACP] Protocolo CPI Sincronizado: %s\n", e.CPI.ActiveOrbit)
 
-	// 🛡️ SEGURANÇA: Se o workspace está vazio, o agente NÃO deve saber onde estamos.
+	// 🛡️ ISOLAMENTO FÍSICO: Define a Célula de Isolamento (Sandbox)
+	sandboxPath := filepath.Join(e.Workspace, ".lumaestro", "sandbox")
+	_ = os.MkdirAll(sandboxPath, 0755)
+
+	// 🛡️ SEGURANÇA: Se o workspace está vazio, usamos a Célula fixa
 	sessionHome := cwd
-	if sessionHome == "" {
-		// Em modo de contenção, usamos um caminho nulo para o agente
-		sessionHome = "" 
+	if cwd == "" || cwd == "." {
+		cwd = sandboxPath
+		sessionHome = sandboxPath
+		fmt.Printf("[ACP] 🛡️ MODO HERMÉTICO: Agente isolado na Célula: %s\n", sandboxPath)
 	}
-	cfgLoaded, _ := config.Load()
 
 	if !isHotSwap {
 		cmdCtx, cancel := context.WithCancel(ctx)
@@ -67,7 +76,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		if planMode {
 			approvalMode = "plan"
 		}
-		args := []string{"--acp", "--approval-mode=" + approvalMode}
+		args := []string{"--acp", "--approval-mode=" + approvalMode, "--skip-trust"}
 
 		// 💎 Injeção Dinâmica de Modelo (Gemini)
 		if agent == "gemini" && cfgLoaded != nil && cfgLoaded.GeminiModel != "" {
@@ -92,34 +101,36 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 			binaryPath = globalPath
 		} else {
 			// 2. Fallback para node_modules local (estilo dev)
-			binaryPath = filepath.Join(cwd, "node_modules", ".bin", binaryPath+".cmd")
+			// IMPORTANTE: Busca no e.Workspace (root real)
+			binaryPath = filepath.Join(e.Workspace, "node_modules", ".bin", binaryPath+".cmd")
 		}
 
 		// [TRUQUE DE SINFONIA] Se estivermos no Windows e for o Gemini, o .cmd (tanto local quanto global)
 		// costuma engolir o Stdin em Pipes IPC, quebrando o JSON-RPC. Precisamos bypassar rodando via 'node'.
+		jsTarget := ""
 		if agent == "gemini" && strings.HasSuffix(binaryPath, ".cmd") {
 			baseDir := filepath.Dir(binaryPath)
-			jsPathGlobalDist := filepath.Join(baseDir, "node_modules", "@google", "gemini-cli", "dist", "index.js")
-			jsPathLocalDist := filepath.Join(baseDir, "..", "@google", "gemini-cli", "dist", "index.js")
-			jsPathGlobalBundle := filepath.Join(baseDir, "node_modules", "@google", "gemini-cli", "bundle", "gemini.js")
-			jsPathLocalBundle := filepath.Join(baseDir, "..", "@google", "gemini-cli", "bundle", "gemini.js")
+			// Tenta localizar o index.js ou gemini.js real
+			pathsToTry := []string{
+				filepath.Join(baseDir, "node_modules", "@google", "gemini-cli", "bundle", "gemini.js"),
+				filepath.Join(baseDir, "..", "@google", "gemini-cli", "bundle", "gemini.js"),
+				filepath.Join(baseDir, "node_modules", "@google", "gemini-cli", "dist", "index.js"),
+				filepath.Join(baseDir, "..", "@google", "gemini-cli", "dist", "index.js"),
+			}
 
-			jsTarget := ""
-			if _, err := os.Stat(jsPathLocalBundle); err == nil {
-				jsTarget = jsPathLocalBundle
-			} else if _, err := os.Stat(jsPathGlobalBundle); err == nil {
-				jsTarget = jsPathGlobalBundle
-			} else if _, err := os.Stat(jsPathLocalDist); err == nil {
-				jsTarget = jsPathLocalDist
-			} else if _, err := os.Stat(jsPathGlobalDist); err == nil {
-				jsTarget = jsPathGlobalDist
+			for _, p := range pathsToTry {
+				if _, err := os.Stat(p); err == nil {
+					if abs, errAbs := filepath.Abs(p); errAbs == nil {
+						jsTarget = abs
+						break
+					}
+				}
 			}
 
 			if jsTarget != "" {
 				binaryPath = "node"
-				// Adiciona --debug para logs detalhados
-				args = []string{"--no-warnings=DEP0040", jsTarget, "--acp", "--approval-mode=" + approvalMode, "--debug"}
-				fmt.Printf("[ACP] Bypass CMD ativado: Rodando diretamente Node em %s (Modo: %s)\n", jsTarget, approvalMode)
+				args = []string{jsTarget, "--acp", "--approval-mode=" + approvalMode, "--skip-trust"}
+				fmt.Printf("[ACP] 🚀 Bypass Windows: Rodando via Node com caminho absoluto: %s\n", jsTarget)
 			}
 		}
 
@@ -130,41 +141,29 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		fmt.Printf("[ACP] Executando: %s %v\n", binaryPath, args)
 
 		cmd := exec.CommandContext(cmdCtx, binaryPath, args...)
-		cmd.Dir = cwd
 		
-		// 🛡️ ESCURECIMENTO DE AMBIENTE: Não herda todas as variáveis do sistema
-		// Deixamos passar apenas o essencial para o Windows/Node e as nossas variáveis.
-		var safeEnv []string
-		essentialKeys := []string{"SystemRoot", "SystemDrive", "TEMP", "TMP", "COMSPEC", "PATHEXT", "WINDIR", "USERNAME"}
-		for _, envVar := range os.Environ() {
-			pair := strings.SplitN(envVar, "=", 2)
-			if len(pair) < 2 { continue }
-			key := pair[0]
-			isEssential := false
-			for _, ek := range essentialKeys {
-				if strings.EqualFold(key, ek) {
-					isEssential = true
-					break
-				}
-			}
-			// 🕵️ Filtro de PATH: Mantém apenas o essencial para o Node/Git, remove pistas de projetos
-			if strings.EqualFold(key, "PATH") {
-				isEssential = true
-			}
+		// 🛡️ ISOLAMENTO FÍSICO REAL: Agora o processo inicia dentro do Sandbox.
+		// Como usamos caminhos absolutos acima, ele não se perderá mais.
+		cmd.Dir = sandboxPath
+		fmt.Printf("[ACP] 🛡️ MODO HERMÉTICO: Processo iniciado na Célula: %s\n", sandboxPath)
 
-			if isEssential {
-				safeEnv = append(safeEnv, envVar)
-			}
-		}
-		cmd.Env = safeEnv
+		// 🛡️ HERANÇA E AJUSTE DE MÓDULOS: Mantém o ambiente e garante que o Node ache as bibliotecas
+		cmd.Env = os.Environ()
+		
+		// Adiciona a node_modules da raiz ao NODE_PATH para que o processo no sandbox encontre as dependências
+		rootNodeModules, _ := filepath.Abs(filepath.Join(e.Workspace, "node_modules"))
+		cmd.Env = append(cmd.Env, "NODE_PATH="+rootNodeModules)
+		
+		absSessionHome, _ := filepath.Abs(sessionHome)
+		_ = absSessionHome // Variável preparada para uso posterior se necessário, mas não injetada agora
 
 		// 🛰️ ATIVAÇÃO DE TELEMETRIA (Blackbox ACP)
 		if agent == "gemini" {
-			userHome, _ := os.UserHomeDir()
-			logDir := filepath.Join(userHome, ".gemini", "antigravity", "logs")
-			_ = os.MkdirAll(logDir, 0755)
-			
-			telemetryFile := filepath.Join(logDir, "acp-telemetry.json")
+			// Centraliza telemetria no Hangar de Sinfonias
+			absSinfoniaPath, _ := filepath.Abs(filepath.Join(e.Workspace, ".lumaestro", "sinfonias", "gemini"))
+			_ = os.MkdirAll(absSinfoniaPath, 0755)
+
+			telemetryFile := filepath.Join(absSinfoniaPath, "telemetry.json")
 			cmd.Env = append(cmd.Env,
 				"GEMINI_TELEMETRY_ENABLED=true",
 				"GEMINI_TELEMETRY_TARGET=local",
@@ -182,11 +181,15 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		userHome, _ := os.UserHomeDir()
 		globalGeminiHome := filepath.Join(userHome, ".gemini")
 
+		// 🎼 SINFONIAS: Centraliza o histórico de todos os agentes Gemini (Independente da conta)
+		sinfoniaPath := filepath.Join(e.Workspace, ".lumaestro", "sinfonias", "gemini")
+		_ = os.MkdirAll(sinfoniaPath, 0755)
+
 		if isUsingOAuth {
 			if agent == "gemini" {
-				// Motores principais: Usar o Home do usuário onde reside a pasta .gemini
-				sessionHome = userHome
-				fmt.Printf("[ACP] 🌐 Motor Central: Usando Perfil em %s (Base .gemini)\n", sessionHome)
+				// Motores principais: Usar o Hangar de Sinfonias centralizado
+				sessionHome = sinfoniaPath
+				fmt.Printf("[ACP] 🎼 Sinfonia Central: Usando histórico unificado em %s\n", sessionHome)
 			} else {
 				// Contas Gemini do Projeto/Sub-agentes: Tentar local primeiro
 				if _, err := os.Stat(filepath.Join(cwd, ".gemini")); err == nil {
@@ -203,13 +206,47 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 					if id.Provider == "google" && id.Active && id.HomeDir != "" {
 						sessionHome = id.HomeDir
 						fmt.Printf("[ACP] 👤 Identidade Google Ativa: Direcionando para %s\n", sessionHome)
+
+						// 🚀 SINFONIA GLOBAL: Cria Junctions para centralizar o histórico e cache
+						// garantindo que, mesmo em uma conta específica, os logs fiquem unificados.
+						// ATENÇÃO: Aponta diretamente para sinfoniaPath (sem subpasta .gemini)
+						// para respeitar a pasta raiz de sinfonias que já contém history e tmp.
+						targetGemini := sinfoniaPath
+						_ = os.MkdirAll(filepath.Join(targetGemini, "history"), 0755)
+						_ = os.MkdirAll(filepath.Join(targetGemini, "tmp"), 0755)
+
+						identityGemini := filepath.Join(sessionHome, ".gemini")
+						_ = os.MkdirAll(identityGemini, 0755)
+
+						linkDirs := []string{"history", "tmp"}
+						for _, dirName := range linkDirs {
+							linkPath := filepath.Join(identityGemini, dirName)
+							targetPath := filepath.Join(targetGemini, dirName)
+
+							info, err := os.Lstat(linkPath)
+							if err == nil {
+								// Verifica se já é symlink/junction
+								if info.Mode()&os.ModeSymlink != 0 {
+									continue // Já está configurado
+								}
+								// Se for diretório comum (zerado ou antigo), remove para dar lugar ao link
+								_ = os.RemoveAll(linkPath)
+							}
+
+							// Cria a Junction no Windows (não exige admin)
+							cmdMklink := exec.Command("cmd", "/c", "mklink", "/J", linkPath, targetPath)
+							_ = cmdMklink.Run()
+						}
+						fmt.Printf("[ACP] 🔗 Sinfonia Junctions ativas para %s\n", sessionHome)
 						break
 					}
 				}
 			}
 		}
 
-		cmd.Env = append(cmd.Env, "GEMINI_CLI_HOME="+sessionHome)
+		absFinalSessionHome, _ := filepath.Abs(sessionHome)
+		cmd.Env = append(cmd.Env, "GEMINI_CLI_HOME="+absFinalSessionHome)
+
 		if agent == "lmstudio" && cfgLoaded != nil {
 			cmd.Env = append(cmd.Env, "LUMAESTRO_LMSTUDIO_URL="+cfgLoaded.LMStudioURL)
 			cmd.Env = append(cmd.Env, "LUMAESTRO_LMSTUDIO_MODEL="+cfgLoaded.LMStudioModel)
@@ -220,11 +257,6 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 			// O usuário deve usar Gemini ou Claude para o chat/ACP.
 			return fmt.Errorf("o motor de chat nativo (8087) foi desativado em favor do modo Híbrido Cloud-Local. Use Gemini ou Claude")
 		}
-
-		cmd.Env = append(cmd.Env, "GEMINI_TELEMETRY_ENABLED=true")
-		cmd.Env = append(cmd.Env, "GEMINI_TELEMETRY_TARGET=local")
-		// Salva telemetria na pasta do projeto para fácil inspeção
-		cmd.Env = append(cmd.Env, "GEMINI_TELEMETRY_OUTFILE=.lumaestro/telemetry.json")
 
 		if cfgLoaded != nil {
 			// 🔑 Injeção de Chave de API apenas se o usuário explicitamente optou por este modo
@@ -263,6 +295,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 			cancel()
 			return err
 		}
+
 		stderr, err := cmd.StderrPipe()
 		if err != nil {
 			cancel()
@@ -276,7 +309,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 
 		session = &ACPSession{
 			ID:             sessionID,
-			ACPSessID:      "",               // Aguarda o ID real retornado pelo comando 'newSession'
+			ACPSessID:      "", // Aguarda o ID real retornado pelo comando 'newSession'
 			AgentName:      agent,
 			Cmd:            cmd,
 			Stdin:          stdin,
@@ -309,20 +342,22 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 			for {
 				select {
 				case hint, ok := <-s.SteeringChan:
-					if !ok { return }
+					if !ok {
+						return
+					}
 					fmt.Printf("[Steering] ⚡ Recebido hint para %s: %s\n", s.ID, hint)
-					
+
 					// Emite log para a UI para feedback visual imediato
 					e.LogChan <- ExecutionLog{
 						Source:  "SYSTEM",
 						Content: fmt.Sprintf("⚡ Direcionamento: %s", hint),
 						Type:    "system",
 					}
-					
+
 					// TODO: Se o binário suportar sinal de steering (v0.37+), enviar aqui.
-					// Por enquanto, o log sistêmico e o re-prompting manual no próximo turno 
+					// Por enquanto, o log sistêmico e o re-prompting manual no próximo turno
 					// servem como fallback estável.
-					
+
 				case <-s.Ctx.Done():
 					return // Encerra monitor quando o processo morre
 				}
@@ -388,16 +423,17 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		} else {
 			// 🌐 Lógica de Silêncio: Se já houver credenciais OAuth, não pede login de novo
 			methodId = "oauth-personal" // Força o ID correto para modo login
-			
-			userHome, _ := os.UserHomeDir()
-			credsPath := filepath.Join(userHome, ".gemini", "oauth_creds.json")
-			tmpDir := filepath.Join(userHome, ".gemini", "tmp")
+
+			// 🛡️ O Hangar de Identidades agora opera dentro da Sinfonia selecionada (sessionHome)
+			// Isso garante que o histórico e as credenciais fiquem centralizados no projeto
+			credsPath := filepath.Join(sessionHome, ".gemini", "oauth_creds.json")
+			tmpDir := filepath.Join(sessionHome, ".gemini", "tmp")
 
 			// 🚀 HANGAR DE IDENTIDADES (Multi-Account Rotation)
-			vaultDir := filepath.Join(userHome, ".gemini", "vault")
+			vaultDir := filepath.Join(sessionHome, ".gemini", "vault")
 			_ = os.MkdirAll(vaultDir, 0755)
 
-			lastIdentityPath := filepath.Join(userHome, ".gemini", "last_identity.txt")
+			lastIdentityPath := filepath.Join(sessionHome, ".gemini", "last_identity.txt")
 			currentIdentity := "default"
 			if cfgLoaded != nil {
 				currentIdentity = cfgLoaded.GetActiveGoogleIdentity()
@@ -409,16 +445,16 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 			// Se a identidade mudou, salvamos a atual e restauramos a nova
 			if lastIdentity != "" && lastIdentity != currentIdentity {
 				fmt.Printf("[ACP] 🔄 Rotacionando Identidades (%s -> %s)...\n", lastIdentity, currentIdentity)
-				
+
 				// 1. Arquiva a credencial da identidade anterior
 				if _, err := os.Stat(credsPath); err == nil {
-					oldVaultPath := filepath.Join(vaultDir, lastIdentity + ".json")
+					oldVaultPath := filepath.Join(vaultDir, lastIdentity+".json")
 					data, _ := os.ReadFile(credsPath)
 					_ = os.WriteFile(oldVaultPath, data, 0644)
 				}
 
 				// 2. Tenta restaurar a credencial da nova identidade
-				newVaultPath := filepath.Join(vaultDir, currentIdentity + ".json")
+				newVaultPath := filepath.Join(vaultDir, currentIdentity+".json")
 				if data, err := os.ReadFile(newVaultPath); err == nil {
 					_ = os.WriteFile(credsPath, data, 0644)
 					fmt.Printf("[ACP] ✅ Credencial de %s restaurada do Hangar.\n", currentIdentity)
@@ -426,7 +462,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 					// Se não temos no vault, removemos a antiga para forçar novo login uma única vez
 					_ = os.Remove(credsPath)
 				}
-				
+
 				_ = os.RemoveAll(tmpDir) // Limpa cache para evitar conflitos de cookies
 			}
 			_ = os.WriteFile(lastIdentityPath, []byte(currentIdentity), 0644)
@@ -437,7 +473,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 			} else {
 				fmt.Println("[ACP] 🔑 Nenhuma credencial válida. Iniciando fluxo de login no navegador...")
 				shouldAuthenticate = true
-				_ = os.RemoveAll(tmpDir) 
+				_ = os.RemoveAll(tmpDir)
 			}
 		}
 
@@ -456,46 +492,64 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		}
 	}
 
-	var sessionCreationID int
-	if loadSessionID != "" {
-		targetID := loadSessionID
-		if loadSessionID == "LATEST" {
-			// 🚀 BUSCA DINÂMICA: Tenta achar a sessão mais recente no sistema de arquivos
-			targetID = e.findLatestSessionID(sessionHome)
-			if targetID != "" {
-				fmt.Printf("[ACP] 🕰️ Última sessão detectada: %s. Tentando restauração...\n", targetID)
-			} else {
-				fmt.Println("[ACP] Nenhuma sessão anterior encontrada. Iniciando conversa limpa.")
+	// 🕰️ RESTAURAÇÃO DE SESSÃO: Se loadSessionID for "LATEST", busca a mais recente.
+	if loadSessionID == "LATEST" || loadSessionID == "" {
+		lastSessionPath := filepath.Join(e.Workspace, ".lumaestro", "last_session.json")
+		if data, err := os.ReadFile(lastSessionPath); err == nil {
+			var lastSession struct {
+				SessionID string `json:"sessionId"`
+			}
+			if json.Unmarshal(data, &lastSession) == nil && lastSession.SessionID != "" {
+				loadSessionID = lastSession.SessionID
+				fmt.Printf("[ACP] 🕰️ Última sessão recuperada de last_session.json: %s\n", loadSessionID)
 			}
 		}
 
-		if targetID != "" {
-			errLoad := e.LoadSession(session, targetID)
-			if errLoad == nil {
-				fmt.Printf("[ACP] Sessão anterior (%s) restaurada com sucesso!\n", targetID)
+		if loadSessionID == "" || loadSessionID == "LATEST" {
+			fmt.Printf("[ACP] 🕰️ Buscando última Sinfonia para o agente %s...\n", agent)
+			sessions, err := e.ListSessions(nil)
+			if err == nil && len(sessions) > 0 {
+				loadSessionID = sessions[0].SessionID
+				if loadSessionID == "" {
+					loadSessionID = sessions[0].File
+				}
+				fmt.Printf("[ACP] 🕰️ Última sessão detectada: %s. Tentando restauração...\n", loadSessionID)
 			} else {
-				fmt.Printf("[ACP] Erro ao carregar sessão anterior (tentando nova): %v\n", errLoad)
-				targetID = ""
-				session.ACPSessID = "" // Limpa o ID inválido
+				fmt.Println("[ACP] ℹ️ Nenhuma sessão anterior encontrada para restauração automática.")
+				loadSessionID = ""
 			}
 		}
-		if targetID == "" {
-			sessionCreationID = e.getNextID()
-			e.SendRPC(session, JSONRPCMessage{
-				JSONRPC: JSONRPCVersion,
-				ID:      sessionCreationID,
-				Method:  "session/new",
-				Params:  json.RawMessage(`{"cwd":"` + strings.ReplaceAll(e.Workspace, "\\", "\\\\") + `","mcpServers":[]}`),
-			})
+	}
+
+	var sessionCreationID int
+	if loadSessionID != "" {
+		errLoad := e.LoadSession(session, loadSessionID)
+		if errLoad == nil {
+			fmt.Printf("[ACP] Sessão anterior (%s) restaurada com sucesso!\n", loadSessionID)
+			// Persistir a sessão restaurada como a última utilizada
+			lastSessionPath := filepath.Join(e.Workspace, ".lumaestro", "last_session.json")
+			_ = os.WriteFile(lastSessionPath, []byte(fmt.Sprintf(`{"sessionId":"%s"}`, loadSessionID)), 0644)
+		} else {
+			fmt.Printf("[ACP] ❌ Erro ao carregar sessão anterior (%s): %v. Tentando nova sessão.\n", loadSessionID, errLoad)
+			loadSessionID = ""
 		}
-	} else {
-		// Modo padrão: Criar nova se não houver flag de restauração
+	}
+
+	if loadSessionID == "" {
+		// 🚀 CRIAR NOVA SESSÃO: Se não houve restauração ou ela falhou
+		absSandboxPath, _ := filepath.Abs(filepath.Join(e.Workspace, ".lumaestro", "sandbox"))
+		_ = os.MkdirAll(absSandboxPath, 0755)
+		_ = os.WriteFile(filepath.Join(absSandboxPath, "GEMINI.md"), []byte("# Sandbox\nAmbiente Isolado."), 0644)
+		_ = os.WriteFile(filepath.Join(absSandboxPath, "package.json"), []byte("{\"name\": \"sandbox\"}"), 0644)
+
+		cleanSandboxPath := strings.ReplaceAll(absSandboxPath, "\\", "\\\\")
+
 		sessionCreationID = e.getNextID()
 		e.SendRPC(session, JSONRPCMessage{
 			JSONRPC: JSONRPCVersion,
 			ID:      sessionCreationID,
 			Method:  "session/new",
-			Params:  json.RawMessage(`{"cwd":"` + strings.ReplaceAll(e.Workspace, "\\", "\\\\") + `","mcpServers":[]}`),
+			Params:  json.RawMessage(`{"cwd":"` + cleanSandboxPath + `","mcpServers":[]}`),
 		})
 	}
 
@@ -518,7 +572,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		"sessionId": session.ACPSessID,
 		"modeId":    "auto-approve", // Nome real que o motor processa internamente
 	})
-	
+
 	setModeID := e.getNextID()
 	e.SendRPC(session, JSONRPCMessage{
 		JSONRPC: JSONRPCVersion,
@@ -526,7 +580,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		Method:  "session/set_mode",
 		Params:  modeParams,
 	})
-	// Espera e engole silenciosamente se a CLI der Internal Error para newly created sessions.
+	// Espera e engole silenciosamente se a CLI dar Internal Error para newly created sessions.
 	_, _ = e.waitForResponse(setModeID, 5*time.Second)
 
 	utils.SafeEmit(e.Ctx, "terminal:started", map[string]interface{}{
@@ -538,18 +592,32 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 	return nil
 }
 
-
 // ListSessions recupera a lista de conversas salvas diretamente do sistema de arquivos.
 func (e *ACPExecutor) ListSessions(s *ACPSession) ([]SessionInfo, error) {
 	// 1. Determinar o diretório de base (.gemini) e incluir TODOS os pilotos conhecidos
 	userHome, _ := os.UserHomeDir()
-	
+
 	// Lista de diretórios para varredura
 	var sessionHomes []string
+
+	// 🎼 Sinfonias: O diretório central do projeto tem prioridade total
+	sinfoniaPath := filepath.Join(e.Workspace, ".lumaestro", "sinfonias", "gemini")
+	sessionHomes = append(sessionHomes, sinfoniaPath)
+	sessionHomes = append(sessionHomes, filepath.Join(sinfoniaPath, ".gemini"))
+
 	sessionHomes = append(sessionHomes, filepath.Join(userHome, ".gemini"))
 
 	cwd, _ := os.Getwd()
+	if e.Workspace != "" {
+		cwd = e.Workspace
+	}
+
 	if cfg, errCfg := config.Load(); errCfg == nil {
+		// Se o workspace estiver vazio no config mas tivermos um ativo em memória, usa ele
+		if cfg.ActiveWorkspace == "" && e.Workspace != "" {
+			cfg.ActiveWorkspace = e.Workspace
+		}
+		
 		for _, id := range cfg.Identities {
 			if id.Provider == "google" && id.HomeDir != "" {
 				// 🛡️ Adiciona o diretório de cada piloto à varredura global
@@ -563,7 +631,7 @@ func (e *ACPExecutor) ListSessions(s *ACPSession) ([]SessionInfo, error) {
 	}
 
 	projectID := "lumaestro"
-	// 🎯 Varredura Dinâmica de Project ID em todos os Homes
+	// 🎯 Varredura Dinâmica de Project ID em todos os Home
 	for _, sHome := range sessionHomes {
 		projectsPath := filepath.Join(sHome, "projects.json")
 		if data, err := os.ReadFile(projectsPath); err == nil {
@@ -590,14 +658,16 @@ func (e *ACPExecutor) ListSessions(s *ACPSession) ([]SessionInfo, error) {
 			filepath.Join(sHome, "history", "lumaestro-1"),
 			filepath.Join(sHome, "tmp", "lumaestro", "chats"),
 			filepath.Join(sHome, "tmp", "lumaestro-1", "chats"),
+			filepath.Join(sHome, "tmp", "sandbox", "chats"),
 			filepath.Join(sHome, "sessions"),
 		)
 	}
 
-	var finalList []SessionInfo
+	var rawList []SessionInfo
 	visited := make(map[string]bool)
 
 	fmt.Printf("[ListSessions] 🛰️ Iniciando varredura global em %d diretórios base...\n", len(sessionHomes))
+	fmt.Printf("[ListSessions] 🎯 Workspace Ativo: %s | ProjectID Sugerido: %s\n", cwd, projectID)
 
 	for _, dirPath := range sessionsDirs {
 		if _, err := os.Stat(dirPath); err != nil {
@@ -615,12 +685,15 @@ func (e *ACPExecutor) ListSessions(s *ACPSession) ([]SessionInfo, error) {
 		for _, f := range files {
 			name := f.Name()
 			if !f.IsDir() && (strings.HasSuffix(name, ".json") || strings.HasSuffix(name, ".jsonl")) && name != "index.json" {
-				foundInDir++
-				path := filepath.Join(dirPath, f.Name())
-				if visited[path] {
+				// 🛡️ DEDUPLICAÇÃO DE JUNCTIONS: Usa o nome único do arquivo (com hash)
+				// em vez do caminho. Se a mesma sessão for vista pelo caminho real e pela junction, ignora.
+				if visited[name] {
 					continue
 				}
-				visited[path] = true
+				visited[name] = true
+
+				foundInDir++
+				path := filepath.Join(dirPath, f.Name())
 				data, err := os.ReadFile(path)
 				if err != nil {
 					continue
@@ -663,7 +736,7 @@ func (e *ACPExecutor) ListSessions(s *ACPSession) ([]SessionInfo, error) {
 						updatedAt = info.ModTime().Format(time.RFC3339)
 					}
 
-					finalList = append(finalList, SessionInfo{
+					rawList = append(rawList, SessionInfo{
 						SessionID: finalID,
 						Title:     title,
 						UpdatedAt: updatedAt,
@@ -675,6 +748,31 @@ func (e *ACPExecutor) ListSessions(s *ACPSession) ([]SessionInfo, error) {
 		if foundInDir > 0 {
 			fmt.Printf("[ListSessions] ✅ Encontradas %d Sinfonias em %s\n", foundInDir, dirPath)
 		}
+	}
+
+	// 🛡️ DEDUPLICAÇÃO AGRESSIVA: O Gemini CLI cria múltiplos checkpoints.
+	// Agrupamos por SessionID (ID lógico) e mantemos apenas o arquivo mais recente.
+	sessionMap := make(map[string]SessionInfo)
+	for _, s := range rawList {
+		if s.SessionID == "" {
+			// Se não tem ID, usa o título como chave de agrupamento (fallback)
+			key := "title:" + s.Title
+			existing, exists := sessionMap[key]
+			if !exists || s.UpdatedAt > existing.UpdatedAt {
+				sessionMap[key] = s
+			}
+			continue
+		}
+		
+		existing, exists := sessionMap[s.SessionID]
+		if !exists || s.UpdatedAt > existing.UpdatedAt {
+			sessionMap[s.SessionID] = s
+		}
+	}
+
+	finalList := make([]SessionInfo, 0, len(sessionMap))
+	for _, s := range sessionMap {
+		finalList = append(finalList, s)
 	}
 
 	sort.Slice(finalList, func(i, j int) bool {
@@ -690,10 +788,15 @@ func (e *ACPExecutor) LoadSession(s *ACPSession, acpSessionID string) error {
 	s.ACPSessID = acpSessionID
 
 	id := e.getNextID()
-	// 🛡️ SEGURANÇA: Usar o workspace autorizado do executor, não o CWD do processo
+	// 🛡️ SEGURANÇA: Usar o workspace isolado (sandbox) para impedir que a IA
+	// leia o código-fonte do próprio Lumaestro e crie ramificações no histórico.
+	absSandboxPath, _ := filepath.Abs(filepath.Join(e.Workspace, ".lumaestro", "sandbox"))
+	_ = os.MkdirAll(absSandboxPath, 0755)
+	cleanSandboxPath := strings.ReplaceAll(absSandboxPath, "\\", "\\\\")
+
 	params := map[string]interface{}{
 		"sessionId":  acpSessionID,
-		"cwd":        e.Workspace,
+		"cwd":        cleanSandboxPath,
 		"mcpServers": []interface{}{},
 	}
 	paramsJSON, _ := json.Marshal(params)
@@ -719,67 +822,24 @@ func (e *ACPExecutor) DeleteSession(filePath string) error {
 
 	cwd, _ := os.Getwd()
 	geminiPath := filepath.Join(cwd, ".gemini")
+	lumaestroPath := filepath.Join(cwd, ".lumaestro") // 🛡️ Autoriza o Hangar de Identidades
+	sinfoniaPath := filepath.Join(e.Workspace, ".lumaestro", "sinfonias", "gemini")
 	userHome, _ := os.UserHomeDir()
 	globalGeminiPath := filepath.Join(userHome, ".gemini")
 
-	cleanPath := filepath.Clean(filePath)
-	allowedLocal := strings.HasPrefix(cleanPath, filepath.Clean(geminiPath))
-	allowedGlobal := strings.HasPrefix(cleanPath, filepath.Clean(globalGeminiPath))
-
-	if !allowedLocal && !allowedGlobal {
-		return fmt.Errorf("🛡️ BLOQUEIO DE SEGURANÇA: Não é permitido deletar arquivos fora das pastas .gemini autorizadas")
-	}
-
-	fmt.Printf("[ACP] Deletando Sinfonia: %s\n", filePath)
-
-	err := os.Remove(filePath)
-	if err != nil {
-		return fmt.Errorf("falha ao deletar arquivo: %v", err)
-	}
-
-	utils.SafeEmit(e.Ctx, "agent:turn_complete", "system")
-
-	return nil
-}
-
-// findLatestSessionID vasculha recursivamente a pasta .gemini/tmp em busca do chat JSON mais recente.
-func (e *ACPExecutor) findLatestSessionID(sessionHome string) string {
-	var latestFile string
-	var latestTime time.Time
-
-	// 🕵️ Sempre buscar dentro de .gemini/tmp, mesmo que o sessionHome seja a raiz do perfil
-	userHome, _ := os.UserHomeDir()
-	geminiHome := filepath.Join(userHome, ".gemini")
-	
-	tmpDir := filepath.Join(geminiHome, "tmp")
-	if _, err := os.Stat(tmpDir); err != nil {
-		return ""
-	}
-
-	filepath.Walk(tmpDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return nil
-		}
-		// Procuramos por arquivos .json ou .jsonl dentro de diretórios 'chats'
-		if !info.IsDir() && (strings.HasSuffix(path, ".json") || strings.HasSuffix(path, ".jsonl")) && strings.Contains(path, "chats") {
-			if info.ModTime().After(latestTime) {
-				latestTime = info.ModTime()
-				latestFile = path
-			}
-		}
-		return nil
-	})
-
-	if latestFile != "" {
-		data, err := os.ReadFile(latestFile)
-		if err == nil {
-			var meta struct {
-				SessionID string `json:"sessionId"`
-			}
-			if json.Unmarshal(data, &meta) == nil && meta.SessionID != "" {
-				return meta.SessionID
-			}
+	// 🛡️ Validação de Segurança: Só permite deletar se o caminho for dentro de uma órbita autorizada
+	authorized := false
+	pathsToVerify := []string{geminiPath, lumaestroPath, sinfoniaPath, globalGeminiPath}
+	for _, p := range pathsToVerify {
+		if strings.HasPrefix(filepath.Clean(filePath), filepath.Clean(p)) {
+			authorized = true
+			break
 		}
 	}
-	return ""
+
+	if !authorized {
+		return fmt.Errorf("tentativa de exclusão fora das órbitas autorizadas: %s", filePath)
+	}
+
+	return os.Remove(filePath)
 }

@@ -121,7 +121,16 @@ func (o *Orchestrator) Execute(ctx context.Context, sessionID string, goal strin
 
 	// 3. Construir o Prompt com RAG + Histórico
 	// 🛡️ SEGURANÇA: Nunca injetar a ActiveOrbit real no prompt. Usamos o Workspace higienizado.
-	finalPrompt := o.builder.Build(profile, contextData, history, goal, o.executor.AutonomousMode, o.executor.Workspace)
+	// ⚡ TOKEN-OPT: BuildContext permite injeção condicional de diretivas.
+	finalPrompt := o.builder.Build(profile, BuildContext{
+		RAGContext: contextData,
+		History:    history,
+		Goal:       goal,
+		Autonomous: o.executor.AutonomousMode,
+		Orbit:      o.executor.Workspace,
+		HasGraph:   true, // TODO: plugar ao estado real do grafo 3D
+		HasLessons: true, // TODO: plugar ao estado real do Lightning/APO
+	})
 
 	// 4. Execução via ACP (Modo YOLO incluído no executor)
 	// Como o AskAgent em app.go já gerencia a sessão, injetamos a pergunta.

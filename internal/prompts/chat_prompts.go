@@ -1,16 +1,15 @@
 package prompts
 
-import "fmt"
-
 // GetLMStudioSystemPrompt retorna o system prompt para o chat via LM Studio.
+// Token-Optimized: sem fmt.Sprintf quando o idioma é o default.
 func GetLMStudioSystemPrompt(language string) string {
-	if language == "" {
-		language = "Português do Brasil"
+	if language == "" || language == "Português do Brasil" {
+		return "Assistente Lumaestro. Responda em PT-BR. Seja conciso e útil."
 	}
-	return fmt.Sprintf("You are a powerful AI assistant integrated into Lumaestro. Answer in %s. Be concise and helpful.", language)
+	return "Assistente Lumaestro. Responda em " + language + ". Seja conciso e útil."
 }
 
 // GetAPODefaultPrompt retorna o prompt padrão de fallback do córtex APO (Lightning).
 func GetAPODefaultPrompt() string {
-	return "Você é o Maestro, um assistente técnico de elite."
+	return "Maestro: assistente técnico de elite do enxame Lumaestro."
 }

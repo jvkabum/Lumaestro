@@ -106,7 +106,12 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 					msgType = "user"
 					
 					// 🧹 LIMPEZA DE HISTÓRICO: Remove diretrizes de sistema do prompt restaurado
-					if strings.Contains(txt, "OBJETIVO ATUAL:") {
+					if strings.Contains(txt, "OBJETIVO:") {
+						parts := strings.Split(txt, "OBJETIVO:")
+						if len(parts) > 1 {
+							txt = strings.TrimSpace(parts[1])
+						}
+					} else if strings.Contains(txt, "OBJETIVO ATUAL:") {
 						parts := strings.Split(txt, "OBJETIVO ATUAL:")
 						if len(parts) > 1 {
 							txt = strings.TrimSpace(parts[1])
@@ -116,7 +121,6 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 
 				if txt != "" && !isBg {
 					if !h.Session.isLoggingMessage && msgType == "message" {
-						utils.LogInfo("O Maestro está orquestrando a resposta...", "💬")
 						h.Session.isLoggingMessage = true
 						h.Session.isLoggingThought = false
 					}
@@ -126,7 +130,7 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 						Type:    msgType,
 					}
 				}
-			} else if update.SessionUpdate == "agent_thought_chunk" || update.SessionUpdate == "thought_chunk" {
+			} else if update.SessionUpdate == "agent_thought" || update.SessionUpdate == "agent_thought_chunk" || update.SessionUpdate == "thought_chunk" {
 				txt := update.Content.Text
 				if txt == "" {
 					txt = update.Text
@@ -134,7 +138,6 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 
 				if txt != "" && !isBg {
 					if !h.Session.isLoggingThought {
-						utils.LogInfo(fmt.Sprintf("Processando raciocínio: %s...", strings.ToUpper(h.Session.AgentName)), "🧠")
 						h.Session.isLoggingThought = true
 						h.Session.isLoggingMessage = false
 					}
