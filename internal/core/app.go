@@ -11,6 +11,10 @@ import (
 	"Lumaestro/internal/rag/neural"
 	"Lumaestro/internal/tools"
 	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 )
 
@@ -60,27 +64,47 @@ type App struct {
 	nativeGenerator  *provider.NativeGenerator // Gemma Chat (Port 8087)
 }
 
-// NewApp cria uma nova instância soberana do Lumaestro.
-func NewApp() *App {
-	a := &App{}
-	a.executor = acp.NewACPExecutor("", "")
-	a.orchestrator = acp.NewOrchestrator(a.executor)
-	a.legacyExec = agents.NewExecutor()
-	a.installer = tools.NewInstaller()
-
-	// 🧠 Motores Vitais (Sempre vivos para evitar Nil Panics)
-	a.GEngine = rag.NewGraphEngine()
-	a.ranker = neural.NewRanker()
-	a.ranker.Decay() // Inicializa o estado neural
-
-	return a
-}
-
 // BindLightning vincula o motor analítico e de recompensas após a instância original para uso seguro multi-pacote.
 func (a *App) BindLightning(lStore *lightning.DuckDBStore) {
 	a.LStore = lStore
 	if a.executor != nil {
 		a.executor.LStore = lStore
 		a.executor.RewardEngine = lightning.NewRewardEngine(lStore)
+	}
+}
+
+// GetLastSessionID recupera o ID da última sessão ativa.
+func (a *App) GetLastSessionID() (string, error) {
+	// Garante que o Workspace está acessível a partir do executor
+	workspace := a.executor.Workspace
+	if workspace == "" && a.config != nil {
+		workspace = a.config.ActiveWorkspace
+	}
+
+	lastSessionPath := filepath.Join(workspace, ".lumaestro", "last_session.json")
+	data, err := os.ReadFile(lastSessionPath)
+	if err != nil {
+		return "", fmt.Errorf("nenhuma sessão anterior encontrada: %v", err)
+	}
+
+	var lastSession struct {
+		SessionID string `json:"sessionId"`
+	}
+	if err := json.Unmarshal(data, &lastSession); err != nil {
+		return "", fmt.Errorf("erro ao ler arquivo de sessão: %v", err)
+	}
+
+	return lastSession.SessionID, nil
+}
+
+// NewApp creates a new App application struct
+func NewApp() *App {
+	exec := acp.NewACPExecutor("", "")
+	return &App{
+		installer:    tools.NewInstaller(),
+		executor:     exec,
+		legacyExec:   agents.NewExecutor(),
+		GEngine:      rag.NewGraphEngine(),
+		orchestrator: acp.NewOrchestrator(exec),
 	}
 }

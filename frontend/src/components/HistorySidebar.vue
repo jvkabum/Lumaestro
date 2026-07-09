@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, watch, ref } from 'vue';
 import { useOrchestratorStore } from '../stores/orchestrator';
+import { ListAgentSessions } from '../../wailsjs/go/core/App'; // Import the correct function
 
 const store = useOrchestratorStore();
 
@@ -66,11 +67,37 @@ const confirmDelete = async () => {
   }
 };
 
+
+
 onMounted(async () => {
   if (store.activeAgent) {
     await store.fetchSessions(store.activeAgent);
+    
+    // Auto-reconnect: Recupera última sessão se não houver sessão ativa
+    if (!store.currentACPID) {
+        try {
+            // Use ListAgentSessions instead of GetLastSessionID
+            const sessions = await ListAgentSessions(store.activeAgent); // Correctly use the imported function
+            if (sessions && sessions.length > 0) {
+                // Assuming the last session in the list is the one to auto-reconnect to
+                const lastSession = sessions[sessions.length - 1];
+                if (lastSession.sessionId) {
+                    console.log("🔄 Auto-Reconnect: Restaurando sessão", lastSession.sessionId);
+                    await store.loadSession(store.activeAgent, lastSession.sessionId);
+                } else {
+                    console.warn("Última sessão encontrada, mas sem sessionId.");
+                }
+            } else {
+                console.warn("Nenhuma sessão persistida encontrada.");
+            }
+        } catch (err) {
+            console.error("Erro ao tentar reconectar à última sessão:", err);
+            console.warn("Nenhuma sessão persistida encontrada.");
+        }
+    }
   }
 });
+
 
 watch(() => store.activeAgent, async (newAgent) => {
   if (newAgent) {

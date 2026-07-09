@@ -74,6 +74,8 @@ export function GetIssueTimeline(arg1:string):Promise<Array<db.IssueComment>>;
 
 export function GetIssues():Promise<Array<db.Issue>>;
 
+export function GetLastSessionID():Promise<string>;
+
 export function GetLatestSpans():Promise<Array<Record<string, any>>>;
 
 export function GetLightningStats():Promise<Record<string, any>>;

@@ -138,6 +138,10 @@ export function GetIssues() {
   return window['go']['core']['App']['GetIssues']();
 }
 
+export function GetLastSessionID() {
+  return window['go']['core']['App']['GetLastSessionID']();
+}
+
 export function GetLatestSpans() {
   return window['go']['core']['App']['GetLatestSpans']();
 }
