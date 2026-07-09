@@ -17,6 +17,8 @@ func (a *App) GetToolsStatus() map[string]bool {
 	return map[string]bool{
 		"node":        a.installer.CheckStatus("node"),
 		"gemini":      a.installer.CheckStatus("gemini"),
+		"antigravity": a.installer.CheckStatus("antigravity"),
+		"agy":         a.installer.CheckStatus("agy"),
 		"claude":      a.installer.CheckStatus("claude"),
 		"obsidian":    a.installer.CheckStatus("obsidian"),
 		"claude_auth": a.installer.CheckClaudeAuth(),
@@ -33,6 +35,8 @@ func (a *App) InstallTool(name string) string {
 		err = a.installer.InstallNode()
 	case "gemini":
 		err = a.installer.InstallGemini()
+	case "antigravity", "agy":
+		err = a.installer.InstallAntigravity()
 	case "claude":
 		err = a.installer.InstallClaude()
 	case "obsidian":

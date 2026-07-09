@@ -376,7 +376,7 @@ func (b *bridge) callLMStudio(ctx context.Context, msgs []chatMessage) (string, 
 				lastErr = fmt.Errorf("timeout: LM Studio em %s demorando muito (modelo processando). Verifique se o modelo está sobrecarregado ou se a rede está lenta", b.baseURL)
 			}
 			if strings.Contains(err.Error(), "context canceled") {
-				lastErr = fmt.Errorf("requisição cancelada: conexão com LM Studio foi abortada. Verifique a rede", b.baseURL)
+				lastErr = fmt.Errorf("requisição cancelada: conexão com LM Studio em %s foi abortada. Verifique a rede", b.baseURL)
 			}
 			continue
 		}

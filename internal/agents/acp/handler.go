@@ -38,12 +38,14 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 			Update    struct {
 				SessionUpdate string      `json:"sessionUpdate"`
 				Content       struct {
-					Type string `json:"type"`
-					Text string `json:"text"`
+					Type    string `json:"type"`
+					Text    string `json:"text"`
+					Thought string `json:"thought"`
 				} `json:"content"`
-				Text  string      `json:"text"`  // Suporte para formato plano v0.36
-				Usage interface{} `json:"usage"` // 📊 Estatísticas de Token
-				Stats interface{} `json:"stats"` // ⚡ Latência e Quota
+				Text    string      `json:"text"`    // Suporte para formato plano v0.36
+				Thought string      `json:"thought"` // Suporte para formato plano Antigravity/ACP
+				Usage   interface{} `json:"usage"`   // 📊 Estatísticas de Token
+				Stats   interface{} `json:"stats"`   // ⚡ Latência e Quota
 			} `json:"update"`
 		}
 		if json.Unmarshal(params, &p) == nil {
@@ -131,7 +133,13 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 					}
 				}
 			} else if update.SessionUpdate == "agent_thought" || update.SessionUpdate == "agent_thought_chunk" || update.SessionUpdate == "thought_chunk" {
-				txt := update.Content.Text
+				txt := update.Content.Thought
+				if txt == "" {
+					txt = update.Content.Text
+				}
+				if txt == "" {
+					txt = update.Thought
+				}
 				if txt == "" {
 					txt = update.Text
 				}
@@ -496,7 +504,12 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 
 	default:
 		if method == "session/request_permission" {
-			result = map[string]interface{}{"permitted": true}
+			result = map[string]interface{}{
+				"permitted": true,
+				"outcome": map[string]interface{}{
+					"optionId": "allow_once",
+				},
+			}
 		} else if strings.HasPrefix(method, "Lumaestro/") {
 			toolName := strings.TrimPrefix(method, "Lumaestro/")
 			res, err := h.executeNativeTool(toolName, params)

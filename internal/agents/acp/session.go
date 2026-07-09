@@ -78,11 +78,59 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		}
 		args := []string{"--acp", "--approval-mode=" + approvalMode, "--skip-trust"}
 
-		// 💎 Injeção Dinâmica de Modelo (Gemini)
-		if agent == "gemini" && cfgLoaded != nil && cfgLoaded.GeminiModel != "" {
+		// 🚀 Resolução do Google Antigravity CLI / Servidor ACP Oficial
+		userHome, _ := os.UserHomeDir()
+		isGoogleAgent := (agent == "gemini" || agent == "antigravity" || agent == "agy")
+		if isGoogleAgent {
+			// 1. Variável de ambiente explícita AGY_BIN
+			agyBinEnv := os.Getenv("AGY_BIN")
+			if agyBinEnv != "" {
+				if _, err := os.Stat(agyBinEnv); err == nil {
+					binaryPath = agyBinEnv
+					fmt.Printf("[ACP] 🚀 Usando AGY_BIN: %s\n", binaryPath)
+				}
+			}
+
+			// 2. Servidor ACP oficial de primeira entidade (agy_acp_server / agy_acp_server.exe)
+			if binaryPath == agent {
+				possibleServers := []string{
+					"agy_acp_server",
+					filepath.Join(userHome, "AppData", "Local", "agy", "bin", "agy_acp_server.exe"),
+					filepath.Join(userHome, ".gemini", "antigravity-cli", "bin", "agy_acp_server.exe"),
+					filepath.Join(e.Workspace, "bin", "agy_acp_server.exe"),
+				}
+				for _, srv := range possibleServers {
+					if path, err := exec.LookPath(srv); err == nil {
+						binaryPath = path
+						args = []string{} // Servidor autônomo já opera nativamente em JSON-RPC sobre stdio
+						fmt.Printf("[ACP] 💎 Servidor oficial Antigravity ACP detectado: %s\n", binaryPath)
+						break
+					} else if _, errStat := os.Stat(srv); errStat == nil {
+						binaryPath = srv
+						args = []string{}
+						fmt.Printf("[ACP] 💎 Servidor oficial Antigravity ACP detectado: %s\n", binaryPath)
+						break
+					}
+				}
+			}
+
+			// 3. Se for 'antigravity' ou 'agy' e não tiver agy_acp_server, usa o fallback estável para gemini (com ACP)
+			if binaryPath == "antigravity" || binaryPath == "agy" {
+				binaryPath = "gemini"
+				fmt.Println("[ACP] 🔄 Modo ACP do Antigravity chaveado para motor compatível Gemini CLI")
+			}
+		}
+
+		// Injeção de argumentos adicionais via AGY_EXTRA_ARGS
+		if extraArgs := os.Getenv("AGY_EXTRA_ARGS"); extraArgs != "" {
+			args = append(args, strings.Fields(extraArgs)...)
+		}
+
+		// 💎 Injeção Dinâmica de Modelo (Gemini / Antigravity)
+		if isGoogleAgent && cfgLoaded != nil && cfgLoaded.GeminiModel != "" {
 			if !strings.HasPrefix(cfgLoaded.GeminiModel, "auto-") {
 				args = append(args, "--model="+cfgLoaded.GeminiModel)
-				fmt.Printf("[ACP] 🎯 Forçando modelo Gemini: %s\n", cfgLoaded.GeminiModel)
+				fmt.Printf("[ACP] 🎯 Forçando modelo: %s\n", cfgLoaded.GeminiModel)
 			}
 		}
 
@@ -158,7 +206,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		_ = absSessionHome // Variável preparada para uso posterior se necessário, mas não injetada agora
 
 		// 🛰️ ATIVAÇÃO DE TELEMETRIA (Blackbox ACP)
-		if agent == "gemini" {
+		if isGoogleAgent {
 			// Centraliza telemetria no Hangar de Sinfonias
 			absSinfoniaPath, _ := filepath.Abs(filepath.Join(e.Workspace, ".lumaestro", "sinfonias", "gemini"))
 			_ = os.MkdirAll(absSinfoniaPath, 0755)
@@ -166,6 +214,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 			telemetryFile := filepath.Join(absSinfoniaPath, "telemetry.json")
 			cmd.Env = append(cmd.Env,
 				"GEMINI_TELEMETRY_ENABLED=true",
+				"AGY_TELEMETRY_ENABLED=true",
 				"GEMINI_TELEMETRY_TARGET=local",
 				"GEMINI_TELEMETRY_OUTFILE="+telemetryFile,
 			)
@@ -178,15 +227,15 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		}
 
 		// 🌐 Lógica de Autenticação Híbrida (Lumaestro 2.0)
-		userHome, _ := os.UserHomeDir()
+		userHome, _ = os.UserHomeDir()
 		globalGeminiHome := filepath.Join(userHome, ".gemini")
 
-		// 🎼 SINFONIAS: Centraliza o histórico de todos os agentes Gemini (Independente da conta)
+		// 🎼 SINFONIAS: Centraliza o histórico de todos os agentes Gemini/Antigravity
 		sinfoniaPath := filepath.Join(e.Workspace, ".lumaestro", "sinfonias", "gemini")
 		_ = os.MkdirAll(sinfoniaPath, 0755)
 
 		if isUsingOAuth {
-			if agent == "gemini" {
+			if isGoogleAgent {
 				// Motores principais: Usar o Hangar de Sinfonias centralizado
 				sessionHome = sinfoniaPath
 				fmt.Printf("[ACP] 🎼 Sinfonia Central: Usando histórico unificado em %s\n", sessionHome)
@@ -208,9 +257,6 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 						fmt.Printf("[ACP] 👤 Identidade Google Ativa: Direcionando para %s\n", sessionHome)
 
 						// 🚀 SINFONIA GLOBAL: Cria Junctions para centralizar o histórico e cache
-						// garantindo que, mesmo em uma conta específica, os logs fiquem unificados.
-						// ATENÇÃO: Aponta diretamente para sinfoniaPath (sem subpasta .gemini)
-						// para respeitar a pasta raiz de sinfonias que já contém history e tmp.
 						targetGemini := sinfoniaPath
 						_ = os.MkdirAll(filepath.Join(targetGemini, "history"), 0755)
 						_ = os.MkdirAll(filepath.Join(targetGemini, "tmp"), 0755)
@@ -225,15 +271,12 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 
 							info, err := os.Lstat(linkPath)
 							if err == nil {
-								// Verifica se já é symlink/junction
 								if info.Mode()&os.ModeSymlink != 0 {
-									continue // Já está configurado
+									continue
 								}
-								// Se for diretório comum (zerado ou antigo), remove para dar lugar ao link
 								_ = os.RemoveAll(linkPath)
 							}
 
-							// Cria a Junction no Windows (não exige admin)
 							cmdMklink := exec.Command("cmd", "/c", "mklink", "/J", linkPath, targetPath)
 							_ = cmdMklink.Run()
 						}
@@ -246,6 +289,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 
 		absFinalSessionHome, _ := filepath.Abs(sessionHome)
 		cmd.Env = append(cmd.Env, "GEMINI_CLI_HOME="+absFinalSessionHome)
+		cmd.Env = append(cmd.Env, "AGY_HOME="+absFinalSessionHome)
 
 		if agent == "lmstudio" && cfgLoaded != nil {
 			cmd.Env = append(cmd.Env, "LUMAESTRO_LMSTUDIO_URL="+cfgLoaded.LMStudioURL)
@@ -253,14 +297,12 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		}
 
 		if agent == "native" {
-			// No modo Cloud-Local, o agente 'native' (chat) é desativado para economizar VRAM.
-			// O usuário deve usar Gemini ou Claude para o chat/ACP.
 			return fmt.Errorf("o motor de chat nativo (8087) foi desativado em favor do modo Híbrido Cloud-Local. Use Gemini ou Claude")
 		}
 
 		if cfgLoaded != nil {
 			// 🔑 Injeção de Chave de API apenas se o usuário explicitamente optou por este modo
-			if agent == "gemini" && cfgLoaded.UseGeminiAPIKey && cfgLoaded.GeminiAPIKey != "" {
+			if isGoogleAgent && cfgLoaded.UseGeminiAPIKey && cfgLoaded.GeminiAPIKey != "" {
 				apiKey := cfgLoaded.GetActiveGeminiKey()
 				cmd.Env = append(cmd.Env, "GOOGLE_API_KEY="+apiKey)
 				cmd.Env = append(cmd.Env, "GEMINI_API_KEY="+apiKey)
@@ -404,11 +446,11 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 			JSONRPC: JSONRPCVersion,
 			ID:      initID,
 			Method:  "initialize",
-			Params:  json.RawMessage(`{"protocolVersion":1,"clientInfo":{"name":"Lumaestro","version":"2.0.0"},"clientCapabilities":{"fs":{"readTextFile":false,"writeTextFile":false}}}`),
+			Params:  json.RawMessage(`{"protocolVersion":1,"clientInfo":{"name":"Lumaestro","version":"15.0.0"},"capabilities":{"fileSystem":{"readTextFile":true,"writeTextFile":true},"terminal":{"create":true}},"clientCapabilities":{"fs":{"readTextFile":true,"writeTextFile":true}}}`),
 		})
 
 		if _, err := e.waitForResponse(initID, 60*time.Second); err != nil {
-			return fmt.Errorf("timeout/erro no 'initialize' do Gemini: %v", err)
+			return fmt.Errorf("timeout/erro no 'initialize' do agente: %v", err)
 		}
 		fmt.Println("[ACP] Estágio 1 (initialize) concluído.")
 

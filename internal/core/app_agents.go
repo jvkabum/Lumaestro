@@ -32,11 +32,11 @@ func (a *App) StartLoginSession(agent string) string {
 // TERMINAL ACP — JSON RPC 2.0 (O CÉREBRO)
 // ============================================================
 
-// StartAgentSession inicia a CLI do Gemini em modo seguro ACP (JSON RPC 2.0).
+// StartAgentSession inicia a CLI do Antigravity/Gemini em modo seguro ACP (JSON RPC 2.0).
 func (a *App) StartAgentSession(agent string) error {
 	// 🛡️ Gatekeeper de Autenticação: Bloqueia inicialização de instâncias "zumbis" se não houver credenciais.
-	if agent == "gemini" && a.config != nil && !a.config.UseGeminiAPIKey && !a.installer.CheckGeminiAuth() {
-		return fmt.Errorf("falha de Autenticação: O motor Gemini requer uma API Key ou Login OAuth (GCloud ADC) para iniciar o processo ACP")
+	if (agent == "gemini" || agent == "antigravity" || agent == "agy") && a.config != nil && !a.config.UseGeminiAPIKey && !a.installer.CheckGeminiAuth() {
+		return fmt.Errorf("falha de Autenticação: O motor Antigravity/Gemini requer uma API Key ou Login OAuth (GCloud ADC) para iniciar o processo ACP")
 	}
 	if agent == "claude" && a.config != nil && !a.config.UseClaudeAPIKey && !a.installer.CheckClaudeAuth() {
 		return fmt.Errorf("falha de Autenticação: Claude Code requer setup de credenciais antes de operar via ACP")

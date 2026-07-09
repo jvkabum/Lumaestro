@@ -16,7 +16,7 @@ func (m *MockWriteCloser) Close() error {
 }
 
 func TestSendRPC(t *testing.T) {
-	e := NewACPExecutor()
+	e := NewACPExecutor(".", ".")
 
 	// Criamos um mock de stdin
 	mockStdin := &MockWriteCloser{}

@@ -33,9 +33,38 @@ func (i *Installer) CheckStatus(name string) bool {
 		return true
 	}
 
-	// 2. ⚡ WIN-FIX: Verificação em diretórios globais do NPM (Roaming)
+	home, _ := os.UserHomeDir()
+
+	// 2. ⚡ Suporte ao Antigravity CLI / Servidor Oficial
+	if name == "antigravity" || name == "agy" || name == "gemini" {
+		if os.Getenv("AGY_BIN") != "" {
+			if _, err := os.Stat(os.Getenv("AGY_BIN")); err == nil {
+				return true
+			}
+		}
+		if _, err := exec.LookPath("agy_acp_server"); err == nil {
+			return true
+		}
+		if _, err := exec.LookPath("agy"); err == nil {
+			return true
+		}
+		if runtime.GOOS == "windows" {
+			agyPaths := []string{
+				filepath.Join(home, "AppData", "Local", "agy", "bin", "agy_acp_server.exe"),
+				filepath.Join(home, "AppData", "Local", "agy", "bin", "agy.exe"),
+				filepath.Join(home, ".gemini", "antigravity-cli", "bin", "agy.exe"),
+				filepath.Join(home, ".gemini", "antigravity-cli", "bin", "agy_acp_server.exe"),
+			}
+			for _, p := range agyPaths {
+				if _, err := os.Stat(p); err == nil {
+					return true
+				}
+			}
+		}
+	}
+
+	// 3. ⚡ WIN-FIX: Verificação em diretórios globais do NPM (Roaming)
 	if runtime.GOOS == "windows" {
-		home, _ := os.UserHomeDir()
 		// Caminho padrão do bundle NPM
 		npmPath := filepath.Join(home, "AppData", "Roaming", "npm", "node_modules", "@google", "gemini-cli", "bundle", "gemini.js")
 		if _, err := os.Stat(npmPath); err == nil {
@@ -49,7 +78,7 @@ func (i *Installer) CheckStatus(name string) bool {
 		}
 	}
 
-	// 3. Fallback para node_modules locais do projeto
+	// 4. Fallback para node_modules locais do projeto
 	cwd, _ := os.Getwd()
 	localBin := filepath.Join(cwd, "node_modules", ".bin", name+".cmd")
 	if _, err := os.Stat(localBin); err == nil {
@@ -126,6 +155,16 @@ func (i *Installer) CheckGeminiAuth() bool {
 		// 2. Fallback: Verifica no padrão global do sistema (~/.gemini)
 		geminiPath := filepath.Join(home, ".gemini", "oauth_creds.json")
 		if _, err := os.Stat(geminiPath); err == nil {
+			return true
+		}
+
+		// 3. Verifica configurações do Google Antigravity CLI / ACP
+		agySettings := filepath.Join(home, ".gemini", "antigravity-cli", "settings.json")
+		if _, err := os.Stat(agySettings); err == nil {
+			return true
+		}
+		agyAcpSettings := filepath.Join(home, ".gemini", "antigravity-acp", "settings.json")
+		if _, err := os.Stat(agyAcpSettings); err == nil {
 			return true
 		}
 	}
@@ -206,6 +245,15 @@ func (i *Installer) ensureNode() error {
 	return nil
 }
 
+// InstallAntigravity instala o Google Antigravity CLI no sistema.
+func (i *Installer) InstallAntigravity() error {
+	i.LogChan <- "📦 Instalando Google Antigravity CLI no sistema..."
+	if runtime.GOOS == "windows" {
+		return i.runStreaming("powershell", "-NoProfile", "-Command", "irm https://antigravity.google/cli/install.ps1 | iex")
+	}
+	return i.runStreaming("bash", "-c", "curl -fsSL https://antigravity.google/cli/install.sh | bash")
+}
+
 // InstallGemini CLI via NPM Global. Instala Node.js automaticamente se necessário.
 func (i *Installer) InstallGemini() error {
 	if err := i.ensureNode(); err != nil {
@@ -275,15 +323,18 @@ func (i *Installer) SyncPath() {
 
 	// 2. Caminhos estáticos conhecidos (fallback para SOs sem Registro)
 	paths := []string{
-		filepath.Join(home, ".local", "bin"),                       // Claude Code
-		filepath.Join(appData, "npm"),                              // Gemini CLI (NPM Global)
-		filepath.Join(home, "AppData", "Roaming", "npm"),           // Fallback NPM
-		`C:\Program Files\llama.cpp`,                              // Winget padrão (Admin)
-		filepath.Join(localAppData, "fnm_multishells"),             // FNM (Node Manager)
-		filepath.Join(home, ".nvm", "current", "bin"),              // NVM Unix
-		filepath.Join(appData, "nvm"),                              // NVM Windows
-		filepath.Join(home, "scoop", "shims"),                      // Scoop
-		`C:\Program Files\nodejs`,                                 // Node.js padrão
+		filepath.Join(home, ".local", "bin"),                                    // Claude Code
+		filepath.Join(appData, "Local", "agy", "bin"),                           // Google Antigravity CLI
+		filepath.Join(home, "AppData", "Local", "agy", "bin"),                   // Google Antigravity CLI (Home)
+		filepath.Join(home, ".gemini", "antigravity-cli", "bin"),                // Antigravity CLI (Alternativo)
+		filepath.Join(appData, "npm"),                                           // Gemini CLI (NPM Global)
+		filepath.Join(home, "AppData", "Roaming", "npm"),                        // Fallback NPM
+		`C:\Program Files\llama.cpp`,                                           // Winget padrão (Admin)
+		filepath.Join(localAppData, "fnm_multishells"),                          // FNM (Node Manager)
+		filepath.Join(home, ".nvm", "current", "bin"),                           // NVM Unix
+		filepath.Join(appData, "nvm"),                                           // NVM Windows
+		filepath.Join(home, "scoop", "shims"),                                   // Scoop
+		`C:\Program Files\nodejs`,                                              // Node.js padrão
 		filepath.Join(home, "AppData", "Local", "Programs", "Lumaestro", "bin"), // Produção
 	}
 
@@ -407,7 +458,20 @@ func (i *Installer) InstallObsidian() error {
 // GetSetupCommand retorna o binário e os argumentos necessários para configurar a IA interativamente.
 func (i *Installer) GetSetupCommand(name string) (string, []string) {
 	binaryPath := name
-	if _, err := exec.LookPath(name); err != nil {
+	home, _ := os.UserHomeDir()
+
+	if name == "antigravity" || name == "agy" {
+		if os.Getenv("AGY_BIN") != "" {
+			binaryPath = os.Getenv("AGY_BIN")
+		} else if path, err := exec.LookPath("agy"); err == nil {
+			binaryPath = path
+		} else if runtime.GOOS == "windows" {
+			agyWin := filepath.Join(home, "AppData", "Local", "agy", "bin", "agy.exe")
+			if _, errS := os.Stat(agyWin); errS == nil {
+				binaryPath = agyWin
+			}
+		}
+	} else if _, err := exec.LookPath(name); err != nil {
 		cwd, _ := os.Getwd()
 		localPath := filepath.Join(cwd, "node_modules", ".bin", name+".cmd")
 		if _, errS := os.Stat(localPath); errS == nil {
@@ -418,9 +482,8 @@ func (i *Installer) GetSetupCommand(name string) (string, []string) {
 	var args []string
 	if name == "claude" {
 		args = []string{"auth", "login"}
-	} else if name == "gemini" {
-		// No Gemini v0.37.0+, o comando 'login' é inválido. 
-		// Rodar o binário puro inicia o REPL e oferece as opções de autenticação (OAuth vs API Key).
+	} else if name == "gemini" || name == "antigravity" || name == "agy" {
+		// Antigravity CLI e Gemini iniciam REPL interativo ou login por padrão
 		args = []string{}
 	}
 
