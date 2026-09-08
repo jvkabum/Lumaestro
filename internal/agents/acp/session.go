@@ -201,6 +201,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		// Adiciona a node_modules da raiz ao NODE_PATH para que o processo no sandbox encontre as dependências
 		rootNodeModules, _ := filepath.Abs(filepath.Join(e.Workspace, "node_modules"))
 		cmd.Env = append(cmd.Env, "NODE_PATH="+rootNodeModules)
+		cmd.Env = append(cmd.Env, "GEMINI_CLI_NO_RELAUNCH=true")
 		
 		absSessionHome, _ := filepath.Abs(sessionHome)
 		_ = absSessionHome // Variável preparada para uso posterior se necessário, mas não injetada agora
@@ -222,7 +223,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		}
 
 		isUsingOAuth := true
-		if cfgLoaded != nil && cfgLoaded.UseGeminiAPIKey {
+		if cfgLoaded != nil && (cfgLoaded.UseGeminiAPIKey || cfgLoaded.GeminiAPIKey != "") {
 			isUsingOAuth = false
 		}
 
@@ -301,8 +302,8 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		}
 
 		if cfgLoaded != nil {
-			// 🔑 Injeção de Chave de API apenas se o usuário explicitamente optou por este modo
-			if isGoogleAgent && cfgLoaded.UseGeminiAPIKey && cfgLoaded.GeminiAPIKey != "" {
+			// 🔑 Injeção de Chave de API: ativada se selecionada ou se chave estiver presente (evita erro de sunset OAuth)
+			if isGoogleAgent && (cfgLoaded.UseGeminiAPIKey || cfgLoaded.GeminiAPIKey != "") && cfgLoaded.GeminiAPIKey != "" {
 				apiKey := cfgLoaded.GetActiveGeminiKey()
 				cmd.Env = append(cmd.Env, "GOOGLE_API_KEY="+apiKey)
 				cmd.Env = append(cmd.Env, "GEMINI_API_KEY="+apiKey)
@@ -460,7 +461,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 			methodId = "claude-api-key"
 		} else if agent == "lmstudio" || agent == "native" {
 			methodId = "lmstudio-local"
-		} else if cfgLoaded != nil && cfgLoaded.UseGeminiAPIKey {
+		} else if cfgLoaded != nil && (cfgLoaded.UseGeminiAPIKey || cfgLoaded.GeminiAPIKey != "") {
 			methodId = "gemini-api-key"
 		} else {
 			// 🌐 Lógica de Silêncio: Se já houver credenciais OAuth, não pede login de novo
