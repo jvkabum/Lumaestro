@@ -240,10 +240,9 @@
         </div>
       </div>
 
-      <!-- 📊 Stats Badge (linha compacta) -->
+      <!-- 📊 Stats Badge (alinhado à direita, discreto e compacto) -->
       <div v-if="orchestrator.modelStats && orchestrator.modelStats.info" class="stats-badge-row">
-        <span class="stats-badge">
-          <span class="stats-icon">💎</span>
+        <span class="stats-badge" :title="'Telemetria: ' + orchestrator.modelStats.info">
           {{ orchestrator.modelStats.info }}
         </span>
       </div>
@@ -1019,37 +1018,38 @@ const sendMessage = () => {
   background: rgba(0,0,0,0.6); color: #fff; border-radius: 50%; border: none; font-size: 12px;
 }
 
-/* Stats Badge Row (Inline Compact) */
+/* Stats Badge Row (Direita Compacto, estilo mockup) */
 .stats-badge-row {
   display: flex;
+  justify-content: flex-end;
   align-items: center;
-  padding: 2px 4px;
-  margin-bottom: 2px;
+  padding: 0 6px;
+  margin-top: 1px;
+  margin-bottom: -6px; /* Não empurra o textarea para baixo */
+  position: relative;
+  z-index: 10;
 }
 
 .stats-badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 10px;
+  gap: 4px;
+  font-size: 9px;
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   color: #64748b;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.05);
-  padding: 3px 8px;
-  border-radius: 6px;
-  letter-spacing: 0.3px;
+  padding: 1px 7px;
+  border-radius: 5px;
+  letter-spacing: 0.2px;
+  line-height: 1.4;
   transition: all 0.2s ease;
 }
 
 .stats-badge:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.07);
   color: #94a3b8;
-}
-
-.stats-icon {
-  font-size: 10px;
-  opacity: 0.85;
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
 /* Textarea Section */
