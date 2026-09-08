@@ -9,6 +9,9 @@ import PlanView from './PlanView.vue'
 import ReviewBlock from './ReviewBlock.vue'
 import SubagentPanel from './SubagentPanel.vue'
 import TerminalView from './TerminalView.vue'
+import CodeSearchModal from './CodeSearchModal.vue'
+import DiffViewerModal from './DiffViewerModal.vue'
+import PermissionsModal from './PermissionsModal.vue'
 
 // Props e Emits
 const props = defineProps({ isMinimized: { type: Boolean, default: false } })
@@ -79,6 +82,41 @@ const sendChatMessage = async (payload) => {
       return
     }
 
+    if (text === '/agents') {
+      orchestrator.toggleAgentsPanel(true)
+      return
+    }
+
+    if (text.startsWith('/codesearch') || text.startsWith('/cs') || text.startsWith('/search')) {
+      orchestrator.toggleCodeSearch(true)
+      return
+    }
+
+    if (text === '/diff') {
+      orchestrator.toggleDiffViewer(true)
+      return
+    }
+
+    if (text === '/permissions') {
+      orchestrator.togglePermissionsModal(true)
+      return
+    }
+
+    if (text === '/clear') {
+      orchestrator.messages = []
+      return
+    }
+
+    if (text === '/usage' || text === '/credits') {
+      const stats = orchestrator.modelStats?.info || 'Nenhuma telemetria registrada no momento.'
+      orchestrator.messages.push({
+        role: 'assistant',
+        text: `📊 **Consumo & Telemetria**:\n${stats}\nAgente ativo: ` + activeAgent.value,
+        mode: 'system'
+      })
+      return
+    }
+
     // Envio Padrão (Multimodal)
     const targetAgent = payload.agent || 'gemini'
     const isActMode = payload.mode === 'act'
@@ -138,6 +176,15 @@ const handleSessionEnded = (agent) => {
 
     <!-- 📋 Overlay de Plano de Execução -->
     <PlanView />
+
+    <!-- 🔎 Pesquisa de Código no Workspace (/codesearch) -->
+    <CodeSearchModal />
+
+    <!-- 📑 Visualizador de Alterações Git (/diff) -->
+    <DiffViewerModal />
+
+    <!-- 🛡️ Políticas de Segurança & Sandbox (/permissions) -->
+    <PermissionsModal />
 
     <header class="panel-header glass" :class="{ 'is-minimized': props.isMinimized }">
       <!-- 🚀 LADO ESQUERDO: Identidade e Status Compacto -->
@@ -204,6 +251,36 @@ const handleSessionEnded = (agent) => {
       </div>
 
       <div class="header-section section-right" :class="{ 'actions-vertical': props.isMinimized }">
+        <!-- 🔎 Atalho Pesquisa de Código -->
+        <button v-show="!props.isMinimized" @click="orchestrator.toggleCodeSearch()" class="action-btn" :class="{ 'btn-active': orchestrator.isCodeSearchOpen }" title="Pesquisa de Código (/codesearch)">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+        </button>
+
+        <!-- 📑 Atalho Git Diff -->
+        <button v-show="!props.isMinimized" @click="orchestrator.toggleDiffViewer()" class="action-btn" :class="{ 'btn-active': orchestrator.isDiffViewerOpen }" title="Alterações do Git (/diff)">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="12" y1="18" x2="12" y2="12"></line>
+            <line x1="9" y1="15" x2="15" y2="15"></line>
+          </svg>
+        </button>
+
+        <!-- 🐝 Atalho Agent Manager -->
+        <button v-show="!props.isMinimized" @click="orchestrator.toggleAgentsPanel()" class="action-btn" :class="{ 'btn-active': orchestrator.isAgentsPanelOpen }" title="Agent Manager (/agents)">
+          <span style="font-size: 14px; line-height: 1;">🐝</span>
+        </button>
+
+        <!-- 🛡️ Atalho Segurança & Sandbox -->
+        <button v-show="!props.isMinimized" @click="orchestrator.togglePermissionsModal()" class="action-btn" :class="{ 'btn-active': orchestrator.isPermissionsModalOpen }" title="Permissões & Sandbox (/permissions)">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+          </svg>
+        </button>
+
         <!-- Toggle Terminal View -->
         <button v-show="!props.isMinimized" @click="showRawTerminal = !showRawTerminal" class="action-btn" :class="{ 'btn-active': showRawTerminal }" title="Alternar Terminal Bruto">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">

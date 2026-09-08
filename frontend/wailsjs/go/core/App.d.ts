@@ -3,8 +3,9 @@
 import {lightning} from '../models';
 import {db} from '../models';
 import {config} from '../models';
-import {orchestration} from '../models';
 import {acp} from '../models';
+import {orchestration} from '../models';
+import {core} from '../models';
 
 export function AddComment(arg1:string,arg2:string):Promise<string>;
 
@@ -62,6 +63,8 @@ export function GetAutonomousMode():Promise<boolean>;
 
 export function GetConfig():Promise<config.Config>;
 
+export function GetCustomAgents():Promise<Array<acp.CustomAgent>>;
+
 export function GetDocuments(arg1:string):Promise<Array<db.Document>>;
 
 export function GetExecutiveSummary():Promise<orchestration.ExecSummary>;
@@ -92,17 +95,23 @@ export function GetPromptCandidates():Promise<Array<Record<string, any>>>;
 
 export function GetPromptHistory(arg1:string):Promise<Array<Record<string, any>>>;
 
+export function GetSecurityPermissions():Promise<config.SecurityConfig>;
+
 export function GetSkeletalGraph():Promise<Record<string, any>>;
 
 export function GetToolsStatus():Promise<Record<string, boolean>>;
 
 export function GetWorkspace():Promise<Record<string, string>>;
 
+export function GetWorkspaceDiff():Promise<core.WorkspaceDiffResult>;
+
 export function HandleNodeClick(arg1:string):Promise<void>;
 
 export function InstallTool(arg1:string):Promise<string>;
 
 export function IsExplorationMode():Promise<boolean>;
+
+export function KillSubagent(arg1:string):Promise<void>;
 
 export function ListAgentSessions(arg1:string):Promise<Array<acp.SessionInfo>>;
 
@@ -137,6 +146,8 @@ export function ResetQdrantDB():Promise<string>;
 export function ResizeTerminal(arg1:string,arg2:number,arg3:number):Promise<void>;
 
 export function ResolveConflict(arg1:string,arg2:string,arg3:string,arg4:number,arg5:string,arg6:string):Promise<string>;
+
+export function RunCodeSearch(arg1:string,arg2:string,arg3:boolean):Promise<core.CodeSearchResult>;
 
 export function RunInTerminal(arg1:string):Promise<string>;
 

@@ -114,6 +114,10 @@ export function GetConfig() {
   return window['go']['core']['App']['GetConfig']();
 }
 
+export function GetCustomAgents() {
+  return window['go']['core']['App']['GetCustomAgents']();
+}
+
 export function GetDocuments(arg1) {
   return window['go']['core']['App']['GetDocuments'](arg1);
 }
@@ -174,6 +178,10 @@ export function GetPromptHistory(arg1) {
   return window['go']['core']['App']['GetPromptHistory'](arg1);
 }
 
+export function GetSecurityPermissions() {
+  return window['go']['core']['App']['GetSecurityPermissions']();
+}
+
 export function GetSkeletalGraph() {
   return window['go']['core']['App']['GetSkeletalGraph']();
 }
@@ -186,6 +194,10 @@ export function GetWorkspace() {
   return window['go']['core']['App']['GetWorkspace']();
 }
 
+export function GetWorkspaceDiff() {
+  return window['go']['core']['App']['GetWorkspaceDiff']();
+}
+
 export function HandleNodeClick(arg1) {
   return window['go']['core']['App']['HandleNodeClick'](arg1);
 }
@@ -196,6 +208,10 @@ export function InstallTool(arg1) {
 
 export function IsExplorationMode() {
   return window['go']['core']['App']['IsExplorationMode']();
+}
+
+export function KillSubagent(arg1) {
+  return window['go']['core']['App']['KillSubagent'](arg1);
 }
 
 export function ListAgentSessions(arg1) {
@@ -264,6 +280,10 @@ export function ResizeTerminal(arg1, arg2, arg3) {
 
 export function ResolveConflict(arg1, arg2, arg3, arg4, arg5, arg6) {
   return window['go']['core']['App']['ResolveConflict'](arg1, arg2, arg3, arg4, arg5, arg6);
+}
+
+export function RunCodeSearch(arg1, arg2, arg3) {
+  return window['go']['core']['App']['RunCodeSearch'](arg1, arg2, arg3);
 }
 
 export function RunInTerminal(arg1) {

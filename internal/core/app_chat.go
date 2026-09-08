@@ -93,6 +93,18 @@ func (a *App) SendAgentInput(agent string, input string, images []map[string]str
 		return a.executor.SendInput(agent, "[DIRECIONAMENTO DO USUÁRIO]: "+utils.SanitizePath(input), images)
 	}
 
+	// 🚀 Suporte a Slash Commands de Alto Raciocínio (Antigravity CLI)
+	trimmedInput := strings.TrimSpace(input)
+	if strings.HasPrefix(trimmedInput, "/boost ") || trimmedInput == "/boost" {
+		task := strings.TrimSpace(strings.TrimPrefix(trimmedInput, "/boost"))
+		a.emitAgentStatus(agent, "🚀 Boost: Ativando pipeline de raciocínio profundo de 3 fases...", "status")
+		input = fmt.Sprintf("[PIPELINE DE RACIOCÍNIO PROFUNDO — BOOST ATIVO]\nSua missão é resolver o desafio a seguir utilizando raciocínio multi-etapas com verificação independente:\n\nFASE 1: FORMULAÇÃO E ESTRATÉGIA\n- Inspecione o contexto do workspace, determine a causa raiz e elabore uma estratégia executável.\n\nFASE 2: EXECUÇÃO PARALELA E VERIFICAÇÃO LOCAL\n- Construa a solução, aplique os refatoramentos necessários e execute os testes locais para validar as hipóteses.\n\nFASE 3: SÍNTESE E ENTREGA VERIFICADA\n- Valide que todos os testes passaram e entregue um resumo conciso com as mudanças validadas.\n\nTAREFA: %s", task)
+	} else if strings.HasPrefix(trimmedInput, "/teamwork-preview ") || strings.HasPrefix(trimmedInput, "/teamwork ") || trimmedInput == "/teamwork" || trimmedInput == "/teamwork-preview" {
+		task := strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(trimmedInput, "/teamwork-preview"), "/teamwork"))
+		a.emitAgentStatus(agent, "👥 Teamwork: Orquestrando equipe colaborativa com portões de verificação...", "status")
+		input = fmt.Sprintf("[EQUIPE COLABORATIVA — TEAMWORK ATIVO]\nVocê está operando como o Sentinel e Project Orchestrator de uma equipe multi-agente:\n- Sentinel: Coordena a execução, roteia tarefas e posta atualizações de progresso.\n- Project Orchestrator: Divide o escopo em marcos claros, delega unidades de trabalho e previne degradação de contexto.\n- Explorers: Investigam o repositório sem modificar arquivos.\n- Workers: Constroem e refatoram código em faixas não sobrepostas.\n- Portões de Verificação (Critic, Challenger, Auditor e Success Auditor): Validam a integridade e realizam stress-testing antes de concluir cada marco.\n\nPROJETO / OBJETIVO: %s", task)
+	}
+
 	// ⚡ Log Premium e Limpo
 	previewInput := input
 	if len(previewInput) > 60 {

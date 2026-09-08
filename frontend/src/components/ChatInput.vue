@@ -221,6 +221,22 @@
               @click="mode = 'chat'"
             >Chat</button>
           </div>
+
+          <!-- Botão Microfone / Ditado por Voz (/voice, F5) -->
+          <button 
+            type="button" 
+            class="voice-toggle-btn"
+            :class="{ recording: isListening }"
+            @click="toggleVoice"
+            :title="isListening ? 'Parar ditado por voz (F5)' : 'Ditado por voz (/voice ou F5)'"
+          >
+            <span class="voice-dot" v-if="isListening"></span>
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
+              <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+              <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+            </svg>
+            <span v-if="isListening" class="rec-label">REC</span>
+          </button>
         </div>
       </div>
 
@@ -237,13 +253,46 @@
         <span class="stats-text">{{ orchestrator.modelStats.info }}</span>
       </div>
 
+      <!-- Menu Flutuante de Autocomplete para Slash Commands (/) -->
+      <Transition name="menu-pop">
+        <div v-if="showSlashMenu && filteredSlashCommands.length > 0" class="slash-typeahead-menu glass-heavy">
+          <div class="slash-menu-header">
+            <span>⚡ COMANDOS ANTIGRAVITY (/)</span>
+            <span class="slash-hint">↑↓ navegar • Enter selecionar • Esc fechar</span>
+          </div>
+          <div class="slash-items-list">
+            <div 
+              v-for="(cmd, idx) in filteredSlashCommands" 
+              :key="cmd.command"
+              class="slash-item"
+              :class="{ highlighted: selectedSlashIndex === idx }"
+              @click="applySlashCommand(cmd)"
+              @mouseenter="selectedSlashIndex = idx"
+            >
+              <span class="slash-icon">{{ cmd.icon }}</span>
+              <div class="slash-info">
+                <span class="slash-name">{{ cmd.command }}</span>
+                <span class="slash-desc">{{ cmd.desc }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Transition>
+
+      <!-- Banner de Gravação de Voz Ativa -->
+      <div v-if="isListening" class="voice-active-banner">
+        <span class="voice-live-dot"></span>
+        <span class="voice-live-text">Ouvindo voz em tempo real... Fale seu comando ou pressione <strong>F5</strong> para concluir.</span>
+        <button class="voice-done-btn" @click="toggleVoice">Concluir</button>
+      </div>
+
       <!-- Área de Texto e Enviar -->
       <div class="textarea-section" :class="{ 'steering-mode': isThinking && messageText.trim() }">
         <textarea
           ref="textarea"
           v-model="messageText"
-          :placeholder="isThinking ? 'Direcione o Maestro (Steering hint)...' : 'Comande o Maestro para construir algo extraordinário...'"
-          @keydown.enter.prevent="handleEnter"
+          :placeholder="isThinking ? 'Direcione o Maestro (Steering hint)...' : 'Comande o Maestro para construir algo extraordinário... Digite / para comandos'"
+          @keydown="handleTextareaKeydown"
           @paste="handlePaste"
           :rows="1"
         ></textarea>
@@ -449,8 +498,204 @@ watch(messageText, () => {
   nextTick(adjustHeight);
 });
 
-const handleEnter = (e) => {
-  if (!e.shiftKey) sendMessage();
+// ==========================================
+// ⚡ SLASH COMMANDS & AUTOCOMPLETE (Antigravity)
+// ==========================================
+const slashCommands = [
+  { command: '/boost', icon: '🚀', desc: 'Raciocínio profundo estruturado em 3 fases (Decomposição, Solução, Auto-correção)', template: '/boost ' },
+  { command: '/teamwork-preview', icon: '🤝', desc: 'Enxame multi-agente colaborativo com portas de validação', template: '/teamwork-preview ' },
+  { command: '/agents', icon: '🐝', desc: 'Abrir Agent Manager (monitorar subagentes e descobrir agentes customizados)', action: 'agents' },
+  { command: '/codesearch', icon: '🔎', desc: 'Pesquisa avançada de símbolos e código no workspace (ou /cs)', action: 'codesearch' },
+  { command: '/diff', icon: '📑', desc: 'Visualizar status do Git e diff unificado de alterações', action: 'diff' },
+  { command: '/permissions', icon: '🛡️', desc: 'Inspecionar políticas de segurança, sandbox e ferramentas', action: 'permissions' },
+  { command: '/voice', icon: '🎙️', desc: 'Alternar ditado por voz em tempo real (atalho F5)', action: 'voice' },
+  { command: '/plan', icon: '🔒', desc: 'Alternar Modo Plano de Execução (somente leitura)', action: 'plan' },
+  { command: '/usage', icon: '📊', desc: 'Exibir telemetria de consumo de tokens, contexto e cotas', action: 'usage' },
+  { command: '/clear', icon: '🧹', desc: 'Limpar mensagens da janela de chat atual', action: 'clear' },
+];
+
+const showSlashMenu = ref(false);
+const selectedSlashIndex = ref(0);
+
+const filteredSlashCommands = computed(() => {
+  const text = messageText.value.trim().toLowerCase();
+  if (!text.startsWith('/')) return [];
+  const query = text.substring(1);
+  return slashCommands.filter(c => c.command.toLowerCase().includes(query));
+});
+
+watch(messageText, (newVal) => {
+  if (newVal.startsWith('/') && !newVal.includes(' ') && !newVal.includes('\n')) {
+    showSlashMenu.value = true;
+    selectedSlashIndex.value = 0;
+  } else {
+    showSlashMenu.value = false;
+  }
+});
+
+const applySlashCommand = (cmd) => {
+  if (cmd.action) {
+    if (cmd.action === 'agents') orchestrator.toggleAgentsPanel(true);
+    else if (cmd.action === 'codesearch') orchestrator.toggleCodeSearch(true);
+    else if (cmd.action === 'diff') orchestrator.toggleDiffViewer(true);
+    else if (cmd.action === 'permissions') orchestrator.togglePermissionsModal(true);
+    else if (cmd.action === 'voice') toggleVoice();
+    else if (cmd.action === 'plan') orchestrator.togglePlanMode(selectedAgent.value);
+    else if (cmd.action === 'clear') orchestrator.messages = [];
+    else if (cmd.action === 'usage') {
+      const stats = orchestrator.modelStats?.info || 'Nenhuma estatística de telemetria registrada no momento.';
+      orchestrator.messages.push({
+        role: 'assistant',
+        text: `📊 **Consumo & Telemetria**:\n${stats}\nAgente ativo: ` + selectedAgent.value,
+        mode: 'system'
+      });
+    }
+    messageText.value = '';
+  } else if (cmd.template) {
+    messageText.value = cmd.template;
+  }
+  showSlashMenu.value = false;
+  nextTick(() => {
+    if (textarea.value) {
+      textarea.value.focus();
+      adjustHeight();
+    }
+  });
+};
+
+// ==========================================
+// 🎙️ VOICE DICTATION (Speech Recognition)
+// ==========================================
+let recognition = null;
+const isListening = ref(false);
+
+const initSpeech = () => {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    console.warn('[Voice] SpeechRecognition não suportado neste navegador/ambiente WebView2.');
+    return null;
+  }
+  const recog = new SpeechRecognition();
+  recog.continuous = true;
+  recog.interimResults = true;
+  recog.lang = 'pt-BR';
+
+  recog.onresult = (event) => {
+    let finalTranscript = '';
+    for (let i = event.resultIndex; i < event.results.length; ++i) {
+      if (event.results[i].isFinal) {
+        finalTranscript += event.results[i][0].transcript;
+      }
+    }
+    if (finalTranscript) {
+      const trimmed = finalTranscript.trim();
+      messageText.value = messageText.value 
+        ? messageText.value + ' ' + trimmed 
+        : trimmed;
+      nextTick(adjustHeight);
+    }
+  };
+
+  recog.onerror = (event) => {
+    console.warn('[Voice] Erro de reconhecimento:', event.error);
+    if (event.error !== 'no-speech') {
+      isListening.value = false;
+    }
+  };
+
+  recog.onend = () => {
+    if (isListening.value) {
+      try {
+        recog.start();
+      } catch (e) {
+        isListening.value = false;
+      }
+    }
+  };
+
+  return recog;
+};
+
+const toggleVoice = () => {
+  if (!recognition) {
+    recognition = initSpeech();
+  }
+  if (!recognition) {
+    orchestrator.pushStatus("Reconhecimento de voz não suportado pelo WebView2 do sistema.", "error");
+    return;
+  }
+
+  if (isListening.value) {
+    isListening.value = false;
+    try { recognition.stop(); } catch (e) {}
+    orchestrator.pushStatus("Ditado por voz finalizado.", "status");
+  } else {
+    try {
+      recognition.start();
+      isListening.value = true;
+      orchestrator.pushStatus("🎙️ Gravando voz... Fale agora ou pressione F5 para parar.", "status");
+    } catch (e) {
+      console.error("[Voice] Erro ao iniciar:", e);
+      isListening.value = false;
+    }
+  }
+};
+
+// Global Listeners (F5 e Inserção de Prompt)
+onMounted(() => {
+  const handleGlobalKeydown = (e) => {
+    if (e.key === 'F5') {
+      e.preventDefault();
+      toggleVoice();
+    }
+  };
+  window.addEventListener('keydown', handleGlobalKeydown);
+
+  const handleInsertPrompt = (e) => {
+    if (e.detail) {
+      messageText.value = e.detail;
+      nextTick(() => {
+        if (textarea.value) {
+          textarea.value.focus();
+          adjustHeight();
+        }
+      });
+    }
+  };
+  window.addEventListener('insert:prompt', handleInsertPrompt);
+});
+
+const handleTextareaKeydown = (e) => {
+  if (showSlashMenu.value && filteredSlashCommands.value.length > 0) {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      selectedSlashIndex.value = (selectedSlashIndex.value + 1) % filteredSlashCommands.value.length;
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      selectedSlashIndex.value = (selectedSlashIndex.value - 1 + filteredSlashCommands.value.length) % filteredSlashCommands.value.length;
+      return;
+    }
+    if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault();
+      const cmd = filteredSlashCommands.value[selectedSlashIndex.value];
+      if (cmd) {
+        applySlashCommand(cmd);
+      }
+      return;
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      showSlashMenu.value = false;
+      return;
+    }
+  }
+
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
 };
 
 const sendMessage = () => {
@@ -461,6 +706,53 @@ const sendMessage = () => {
     orchestrator.sendSteeringHint(selectedAgent.value, text);
     messageText.value = '';
     nextTick(() => { if (textarea.value) textarea.value.style.height = 'auto'; });
+    return;
+  }
+
+  // Interceptadores diretos de comandos no envio
+  if (text === '/diff') {
+    orchestrator.toggleDiffViewer(true);
+    messageText.value = '';
+    return;
+  }
+  if (text === '/agents') {
+    orchestrator.toggleAgentsPanel(true);
+    messageText.value = '';
+    return;
+  }
+  if (text === '/codesearch' || text === '/cs' || text === '/search') {
+    orchestrator.toggleCodeSearch(true);
+    messageText.value = '';
+    return;
+  }
+  if (text === '/permissions') {
+    orchestrator.togglePermissionsModal(true);
+    messageText.value = '';
+    return;
+  }
+  if (text === '/voice') {
+    toggleVoice();
+    messageText.value = '';
+    return;
+  }
+  if (text === '/plan') {
+    orchestrator.togglePlanMode(selectedAgent.value);
+    messageText.value = '';
+    return;
+  }
+  if (text === '/clear') {
+    orchestrator.messages = [];
+    messageText.value = '';
+    return;
+  }
+  if (text === '/usage' || text === '/credits') {
+    const stats = orchestrator.modelStats?.info || 'Nenhuma telemetria registrada no momento.';
+    orchestrator.messages.push({
+      role: 'assistant',
+      text: `📊 **Consumo & Telemetria**:\n${stats}\nAgente ativo: ` + selectedAgent.value,
+      mode: 'system'
+    });
+    messageText.value = '';
     return;
   }
 
@@ -756,5 +1048,173 @@ textarea::placeholder { color: #475569; }
   color: rgba(255, 255, 255, 0.4);
   font-family: 'JetBrains Mono', monospace;
   letter-spacing: 0.5px;
+}
+
+/* Slash Commands Typeahead Menu */
+.slash-typeahead-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 12px;
+  right: 12px;
+  max-width: 620px;
+  background: rgba(15, 23, 42, 0.96);
+  backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.75);
+  overflow: hidden;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+}
+
+.slash-menu-header {
+  padding: 8px 14px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: #64748b;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.slash-hint {
+  font-size: 9px;
+  color: #475569;
+}
+
+.slash-items-list {
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.slash-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.slash-item:hover, .slash-item.highlighted {
+  background: rgba(59, 130, 246, 0.18);
+}
+
+.slash-icon {
+  font-size: 16px;
+  width: 24px;
+  text-align: center;
+}
+
+.slash-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.slash-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #60a5fa;
+  font-family: monospace;
+}
+
+.slash-desc {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+/* Voice Dictation & Recording Indicator */
+.voice-toggle-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #94a3b8;
+  border-radius: 8px;
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.voice-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f1f5f9;
+}
+
+.voice-toggle-btn.recording {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+  animation: pulse-border 1.5s infinite;
+}
+
+.voice-dot {
+  width: 6px;
+  height: 6px;
+  background: #ef4444;
+  border-radius: 50%;
+  box-shadow: 0 0 8px #ef4444;
+  animation: pulse 1s infinite;
+}
+
+.rec-label {
+  font-size: 9px;
+  letter-spacing: 0.5px;
+}
+
+.voice-active-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  margin-bottom: 6px;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 8px;
+  font-size: 11px;
+  color: #fca5a5;
+}
+
+.voice-live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+  box-shadow: 0 0 8px #ef4444;
+  animation: pulse 1s infinite;
+}
+
+.voice-live-text {
+  flex: 1;
+}
+
+.voice-done-btn {
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+@keyframes pulse-border {
+  0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+  70% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
 }
 </style>

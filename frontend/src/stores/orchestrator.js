@@ -42,6 +42,11 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   const showPlanOverlay = ref(false); // 🖼️ Overlay dedicado para visualização de planos
   const subagents = ref(new Map()); // 🌳 Árvore de subagentes ativos {sessionId: {agentName, goal, status}}
   const workspace = ref({ path: '', name: 'Lumaestro (Padrão)' }); // 📂 Workspace ativo
+  const customAgents = ref([]); // 🤖 Lista de agentes customizados descobertos (.agents/)
+  const isAgentsPanelOpen = ref(false); // 🐝 Visibilidade explícita do painel de agentes
+  const isCodeSearchOpen = ref(false); // 🔎 Modal de pesquisa de código (/codesearch)
+  const isDiffViewerOpen = ref(false); // 📑 Modal de visualização de git diff (/diff)
+  const isPermissionsModalOpen = ref(false); // 🛡️ Modal de políticas de segurança (/permissions)
   
   // 🛡️ Motor de Confirmação Modal Premium
   const confirmModal = ref({
@@ -680,13 +685,92 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     }
   };
 
+  // 🤖 Descoberta e Gerenciamento de Agentes Customizados (/agents)
+  const fetchCustomAgents = async () => {
+    try {
+      const list = await safeCall('core', 'GetCustomAgents');
+      if (Array.isArray(list)) {
+        customAgents.value = list;
+      }
+      return customAgents.value;
+    } catch (err) {
+      console.error('[Store] Falha ao buscar custom agents:', err);
+      return [];
+    }
+  };
+
+  const killSubagent = async (sessionId) => {
+    try {
+      console.log(`[Store] Encerrando subagente ${sessionId}...`);
+      await safeCall('core', 'KillSubagent', sessionId);
+      subagents.value.delete(sessionId);
+      pushStatus(`Subagente encerrado: ${sessionId}`, 'status');
+      return true;
+    } catch (err) {
+      console.error(`[Store] Erro ao matar subagente ${sessionId}:`, err);
+      return false;
+    }
+  };
+
+  // 🔎 Pesquisa de Código no Workspace (/codesearch)
+  const runCodeSearch = async (query, pathFilter = '', isLiteral = false) => {
+    try {
+      const results = await safeCall('core', 'RunCodeSearch', query, pathFilter, isLiteral);
+      return results || [];
+    } catch (err) {
+      console.error('[Store] Erro na busca de código:', err);
+      return [];
+    }
+  };
+
+  // 📑 Diff do Workspace (/diff)
+  const getWorkspaceDiff = async () => {
+    try {
+      const diffResult = await safeCall('core', 'GetWorkspaceDiff');
+      return diffResult || { status: '', files: [], diff: '' };
+    } catch (err) {
+      console.error('[Store] Erro ao obter diff do workspace:', err);
+      return { status: '', files: [], diff: '' };
+    }
+  };
+
+  // 🛡️ Permissões e Sandbox (/permissions)
+  const getSecurityPermissions = async () => {
+    try {
+      const perms = await safeCall('core', 'GetSecurityPermissions');
+      return perms || { allowed_tools: [], denied_commands: [], auto_approve: false, sandbox_mode: 'standard' };
+    } catch (err) {
+      console.error('[Store] Erro ao obter permissões:', err);
+      return null;
+    }
+  };
+
+  const toggleAgentsPanel = (state) => {
+    isAgentsPanelOpen.value = (typeof state === 'boolean') ? state : !isAgentsPanelOpen.value;
+  };
+
+  const toggleCodeSearch = (state) => {
+    isCodeSearchOpen.value = (typeof state === 'boolean') ? state : !isCodeSearchOpen.value;
+  };
+
+  const toggleDiffViewer = (state) => {
+    isDiffViewerOpen.value = (typeof state === 'boolean') ? state : !isDiffViewerOpen.value;
+  };
+
+  const togglePermissionsModal = (state) => {
+    isPermissionsModalOpen.value = (typeof state === 'boolean') ? state : !isPermissionsModalOpen.value;
+  };
+
   return {
     messages, isThinking, isTerminalMode, isWeaving, activeAgent, runningSessions, pendingReview, modelStats,
     sessions, currentACPID, isSidebarOpen, currentStatus, isNavigating, currentStatusKind, statusTimeline, statusFilter,
     isPlanMode, togglePlanMode, subagents, showPlanOverlay, workspace,
+    customAgents, isAgentsPanelOpen, isCodeSearchOpen, isDiffViewerOpen, isPermissionsModalOpen,
     initListeners, ask, startSession, sendInput, submitReview, switchAgent, stopSession, forceUnlock,
     fetchSessions, loadSession, newSession, toggleSidebar, clearStatusTimeline, sendSteeringHint,
     selectWorkspace, clearWorkspace, loadWorkspace,
+    fetchCustomAgents, killSubagent, runCodeSearch, getWorkspaceDiff, getSecurityPermissions,
+    toggleAgentsPanel, toggleCodeSearch, toggleDiffViewer, togglePermissionsModal,
     confirm, confirmModal
   };
 });
