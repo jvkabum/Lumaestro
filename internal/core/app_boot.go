@@ -57,13 +57,7 @@ func (a *App) bootSequence() {
 			}
 		}
 
-		if a.crawler != nil && a.config.ObsidianVaultPath != "" {
-			a.emitBoot("scan", "🚀", "Sincronizando conhecimento...")
-			go func() {
-				a.ScanVault()
-				a.emitBoot("complete", "✅", "Sincronização concluída.")
-			}()
-		}
+		a.emitBoot("complete", "✅", "Sistema pronto.")
 	} else {
 		fmt.Println("[Boot] ⚠️ Erro: Configuração nula ao tentar iniciar agentes.")
 	}

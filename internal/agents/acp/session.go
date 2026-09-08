@@ -709,18 +709,13 @@ func (e *ACPExecutor) ListSessions(s *ACPSession) ([]SessionInfo, error) {
 	var rawList []SessionInfo
 	visited := make(map[string]bool)
 
-	fmt.Printf("[ListSessions] 🛰️ Iniciando varredura global em %d diretórios base...\n", len(sessionHomes))
-	fmt.Printf("[ListSessions] 🎯 Workspace Ativo: %s | ProjectID Sugerido: %s\n", cwd, projectID)
-
 	for _, dirPath := range sessionsDirs {
 		if _, err := os.Stat(dirPath); err != nil {
 			continue
 		}
 
-		fmt.Printf("[ListSessions] 📂 Varrendo: %s\n", dirPath)
 		files, err := os.ReadDir(dirPath)
 		if err != nil {
-			fmt.Printf("[ListSessions] ❌ Erro ao ler diretório %s: %v\n", dirPath, err)
 			continue
 		}
 
@@ -788,9 +783,6 @@ func (e *ACPExecutor) ListSessions(s *ACPSession) ([]SessionInfo, error) {
 				}
 			}
 		}
-		if foundInDir > 0 {
-			fmt.Printf("[ListSessions] ✅ Encontradas %d Sinfonias em %s\n", foundInDir, dirPath)
-		}
 	}
 
 	// 🛡️ DEDUPLICAÇÃO AGRESSIVA: O Gemini CLI cria múltiplos checkpoints.
@@ -822,7 +814,9 @@ func (e *ACPExecutor) ListSessions(s *ACPSession) ([]SessionInfo, error) {
 		return finalList[i].UpdatedAt > finalList[j].UpdatedAt
 	})
 
-	fmt.Printf("[ListSessions] ✨ Varredura completa. Total unificado: %d Sinfonias.\n", len(finalList))
+	if len(finalList) > 0 {
+		fmt.Printf("[ListSessions] 📜 %d sessões anteriores carregadas.\n", len(finalList))
+	}
 	return finalList, nil
 }
 
