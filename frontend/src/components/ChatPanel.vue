@@ -475,11 +475,12 @@ const handleSessionEnded = (agent) => {
 }
 
 .panel-header {
-  height: 70px;
-  display: grid;
-  grid-template-columns: 1fr 2fr 1fr;
+  height: 64px;
+  display: flex;
+  justify-content: space-between;
   align-items: center;
-  padding: 0 20px;
+  gap: 8px;
+  padding: 0 14px;
   background: rgba(15, 23, 42, 0.5);
   backdrop-filter: blur(20px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
@@ -503,13 +504,20 @@ const handleSessionEnded = (agent) => {
   align-items: center;
 }
 
+.section-left {
+  flex-shrink: 0;
+}
+
 .section-center {
+  flex: 1;
+  min-width: 0;
   justify-content: center;
 }
 
 .section-right {
+  flex-shrink: 0;
   justify-content: flex-end;
-  gap: 12px;
+  gap: 4px;
 }
 
 /* 🎻 LADO ESQUERDO: Estilo Compacto */
@@ -751,44 +759,17 @@ const handleSessionEnded = (agent) => {
 
 .identity-badges { display: flex; align-items: center; gap: 6px; margin-left: 10px; padding-left: 10px; border-left: 1px solid rgba(255, 255, 255, 0.05); }
 
-.header-section.section-right { display: flex; align-items: center; gap: 10px; }
-
-/* 📊 Monitor de Cotas Badge */
-.quota-badge {
+.action-btn {
+  background: transparent; 
+  border: none; 
+  color: #64748b; 
+  cursor: pointer;
+  padding: 5px 6px; 
+  border-radius: 6px; 
+  transition: all 0.2s;
   display: flex;
   align-items: center;
-  gap: 6px;
-  background: rgba(255, 255, 255, 0.03);
-  padding: 2px 10px;
-  border-radius: 100px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  margin-left: 8px;
-  transition: all 0.3s;
-}
-
-.quota-badge:hover {
-  background: rgba(59, 130, 246, 0.1);
-  border-color: rgba(59, 130, 246, 0.2);
-}
-
-.quota-icon { font-size: 10px; color: #fbbf24; }
-.quota-value { font-size: 10px; font-weight: 800; color: #94a3b8; letter-spacing: 0.5px; }
-
-.header-actions { display: flex; align-items: center; gap: 10px; }
-
-.actions-vertical {
-  flex-direction: column;
-  justify-content: flex-start;
-  gap: 8px;
-  padding-top: 4px;
-  width: 100%;
-  align-items: center;
-}
-
-
-.action-btn {
-  background: transparent; border: none; color: #64748b; cursor: pointer;
-  padding: 8px; border-radius: 8px; transition: all 0.2s;
+  justify-content: center;
 }
 .action-btn:hover { background: rgba(255, 255, 255, 0.05); color: #fff; }
 .action-btn.btn-active-history { color: #38bdf8; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.2); }

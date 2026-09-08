@@ -111,23 +111,23 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   // Estado para revisões de segurança pendentes
   const pendingReview = ref(null);
 
-  // 🛡️ Monitor de Silêncio (Watchdog) para evitar timeouts prematuros
+  // 🛡️ Monitor de Silêncio (Watchdog) para evitar timeouts prematuros (300s para Antigravity CLI)
   let safetyTimer = null;
   const resetSafetyTimeout = () => {
     if (safetyTimer) clearTimeout(safetyTimer);
     
     safetyTimer = setTimeout(() => {
       if (isThinking.value) {
-        console.warn("[Store] Silence Timeout (90s) - A Sinfonia parece travada. Destravando UI.");
-        forcedUnlock.value = true; // 🔓 Bloqueia qualquer agent:status de re-ligar o spinner
+        console.warn("[Store] Silence Timeout (300s) - A Sinfonia parece travada. Destravando UI.");
+        forcedUnlock.value = true;
         isThinking.value = false;
         messages.value.push({ 
           role: 'assistant', 
-          text: "⚠️ A Sinfonia está demorando para responder (mais de 90s). Verifique sua conexão ou se o motor local está processando muitas tarefas.", 
+          text: "⚠️ A Sinfonia está demorando para responder (mais de 5 min). Verifique sua conexão ou se o motor local está processando muitas tarefas.", 
           mode: 'system' 
         });
       }
-    }, 90000);
+    }, 300000); // 5 minutos para permitir raciocínio profundo e execução de ferramentas
   };
 
   const stopSafetyTimeout = () => {
@@ -352,6 +352,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
         if (lowered.includes('memória') || lowered.includes('memoria') || lowered.includes('grafo') || lowered.includes('contexto')) kind = 'memory';
       }
       pushStatus(actionStr, kind);
+      resetSafetyTimeout();
       // 🔓 Se o watchdog ou o usuário já desbloqueou a UI, NÃO re-ligar o spinner.
       // Status de memória também não deve religar.
       if (kind !== 'memory' && !forcedUnlock.value) {
