@@ -523,21 +523,9 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 			}
 		}()
 
-		// 🚀 Inicialização rápida do Antigravity CLI (dispensa RPC initialize/authenticate)
+		// 🚀 Inicialização instantânea do Antigravity CLI (dispensa RPC initialize/authenticate)
 		if isAntigravity {
-			select {
-			case <-session.initDone:
-				fmt.Printf("[AGY] ✅ Sessão Antigravity pronta (Conversation ID: %s)\n", session.ACPSessID)
-			case <-time.After(15 * time.Second):
-				fmt.Println("[AGY] ⚠️ Timeout aguardando init do Antigravity CLI, prosseguindo...")
-			}
-
-			if session.ACPSessID != "" {
-				lastSessionPath := filepath.Join(e.Workspace, ".lumaestro", "last_session.json")
-				_ = os.MkdirAll(filepath.Dir(lastSessionPath), 0755)
-				_ = os.WriteFile(lastSessionPath, []byte(fmt.Sprintf(`{"sessionId":"%s"}`, session.ACPSessID)), 0644)
-			}
-
+			fmt.Printf("[AGY] ⚡ Processo Antigravity CLI online e pronto para receber prompts!\n")
 			return nil
 		}
 

@@ -64,3 +64,41 @@ func TestSendRPC(t *testing.T) {
 		t.Errorf("A mensagem NÃO deve conter headers 'Content-Length' no protocolo ACP do Gemini")
 	}
 }
+
+func TestAntigravitySendInput(t *testing.T) {
+	e := NewACPExecutor(".", ".")
+	mockStdin := &MockWriteCloser{}
+
+	session := &ACPSession{
+		ID:            "gemini",
+		AgentName:     "gemini",
+		Stdin:         mockStdin,
+		IsAntigravity: true,
+		ACPSessID:     "", // O Antigravity não requer ACPSessID prévio!
+	}
+	e.ActiveSessions["gemini"] = session
+
+	err := e.SendInput("gemini", "Olá Antigravity", nil)
+	if err != nil {
+		t.Fatalf("SendInput para Antigravity falhou: %v", err)
+	}
+
+	output := mockStdin.Bytes()
+	if len(output) == 0 || output[len(output)-1] != '\n' {
+		t.Errorf("Mensagem Antigravity deve terminar com '\\n'")
+	}
+
+	var parsed struct {
+		Event   string `json:"event"`
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
+	}
+	if err := json.Unmarshal(output[:len(output)-1], &parsed); err != nil {
+		t.Fatalf("JSON inválido: %v", err)
+	}
+	if parsed.Event != "user" || parsed.Message.Content != "Olá Antigravity" {
+		t.Errorf("Conteúdo inesperado do evento: %+v", parsed)
+	}
+}
+

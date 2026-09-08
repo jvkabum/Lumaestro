@@ -103,6 +103,31 @@ func (i *Installer) CheckClaudeAuth() bool {
 
 // CheckGeminiAuth verifica silenciosamente se existe uma sessão configurada do Gemini no sistema.
 func (i *Installer) CheckGeminiAuth() bool {
+	// 0. 💎 Antigravity CLI oficial (agy.exe): autenticação nativa gerida pelo ecossistema Antigravity
+	home, _ := os.UserHomeDir()
+	if os.Getenv("AGY_BIN") != "" {
+		if _, err := os.Stat(os.Getenv("AGY_BIN")); err == nil {
+			return true
+		}
+	}
+	if runtime.GOOS == "windows" {
+		agyPaths := []string{
+			filepath.Join(home, "AppData", "Local", "agy", "bin", "agy.exe"),
+			filepath.Join(home, ".gemini", "antigravity-cli", "bin", "agy.exe"),
+		}
+		for _, p := range agyPaths {
+			if _, err := os.Stat(p); err == nil {
+				return true
+			}
+		}
+	}
+	if _, err := exec.LookPath("agy"); err == nil {
+		return true
+	}
+	if _, err := exec.LookPath("agy.exe"); err == nil {
+		return true
+	}
+
 	// 🌟 NOVO SISTEMA DE IDENTIDADES (Prioridade)
 	cfg, err := config.Load()
 	if err == nil && cfg != nil {
@@ -137,7 +162,7 @@ func (i *Installer) CheckGeminiAuth() bool {
 	}
 
 	// Verifica o ADC no Unix/Linux/macOS
-	home, err := os.UserHomeDir()
+	home, err = os.UserHomeDir()
 	if err == nil {
 		// Padrão GCloud ADC
 		adcPathUnix := filepath.Join(home, ".config", "gcloud", "application_default_credentials.json")

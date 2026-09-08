@@ -27,19 +27,7 @@ func (e *ACPExecutor) SendInput(sessionID string, input string, images []map[str
 		return fmt.Errorf("sessão %s não encontrada", sessionID)
 	}
 
-	// ⏳ Aguarda o Handshake terminar se ele ainda estiver rolando em background
-	if session.ACPSessID == "" {
-		fmt.Printf("[ACP] ⏳ Sessão %s ainda sem ID ACP. Aguardando estabilização...\n", sessionID)
-		for i := 0; i < 10; i++ {
-			time.Sleep(500 * time.Millisecond)
-			if session.ACPSessID != "" { break }
-		}
-		if session.ACPSessID == "" {
-			return fmt.Errorf("sessão não initializada completamente (sem ACP sessionId)")
-		}
-	}
-
-	// 🚀 Antigravity CLI: Envia evento stream-json diretamente pelo stdin
+	// 🚀 Antigravity CLI: Envia evento stream-json diretamente pelo stdin (dispensa ACP sessionId prévio)
 	if session.IsAntigravity {
 		userEvt := map[string]interface{}{
 			"event": "user",
@@ -59,6 +47,13 @@ func (e *ACPExecutor) SendInput(sessionID string, input string, images []map[str
 		if err != nil {
 			return err
 		}
+
+		// Registra canal de turno para IsTurnPending
+		e.turnMu.Lock()
+		if _, exists := e.turnChannels[sessionID]; !exists {
+			e.turnChannels[sessionID] = make(chan string, 100)
+		}
+		e.turnMu.Unlock()
 
 		// 🐕 WATCHDOG DE TURNO: Se o Antigravity não responder em 45s, destrava o frontend
 		go func() {
@@ -88,6 +83,18 @@ func (e *ACPExecutor) SendInput(sessionID string, input string, images []map[str
 		}()
 
 		return nil
+	}
+
+	// ⏳ Aguarda o Handshake terminar se ele ainda estiver rolando em background (apenas JSON-RPC clássico)
+	if session.ACPSessID == "" {
+		fmt.Printf("[ACP] ⏳ Sessão %s ainda sem ID ACP. Aguardando estabilização...\n", sessionID)
+		for i := 0; i < 10; i++ {
+			time.Sleep(500 * time.Millisecond)
+			if session.ACPSessID != "" { break }
+		}
+		if session.ACPSessID == "" {
+			return fmt.Errorf("sessão não initializada completamente (sem ACP sessionId)")
+		}
 	}
 
 	// 🧠 Construção do Prompt Multimodal (Texto + Imagens)
