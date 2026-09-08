@@ -34,6 +34,17 @@ func (a *App) StartLoginSession(agent string) string {
 
 // StartAgentSession inicia a CLI do Antigravity/Gemini em modo seguro ACP (JSON RPC 2.0).
 func (a *App) StartAgentSession(agent string) error {
+	sessionID := agent // 🚨 Unificação de ID: Usar o nome do agente diretamente para sessão ACP
+
+	// 🕵️⚡ Trava Imediata: Se já houver uma sessão ativa para este agente, retorna instantaneamente (0ms!)
+	a.executor.Mu.Lock()
+	_, exists := a.executor.ActiveSessions[sessionID]
+	a.executor.Mu.Unlock()
+
+	if exists {
+		return nil
+	}
+
 	// 🛡️ Gatekeeper de Autenticação: Bloqueia inicialização de instâncias "zumbis" se não houver credenciais.
 	if (agent == "gemini" || agent == "antigravity" || agent == "agy") && a.config != nil && !a.config.UseGeminiAPIKey && !a.installer.CheckGeminiAuth() {
 		return fmt.Errorf("falha de Autenticação: O motor Antigravity/Gemini requer uma API Key ou Login OAuth (GCloud ADC) para iniciar o processo ACP")
@@ -42,28 +53,15 @@ func (a *App) StartAgentSession(agent string) error {
 		return fmt.Errorf("falha de Autenticação: Claude Code requer setup de credenciais antes de operar via ACP")
 	}
 
-	// ⏳ RESILIÊNCIA DE BOOT: Aguarda os motores estarem prontos antes do Fast-Track
-	// Se for o início do app, os motores nativos podem levar alguns segundos para subir.
-	if !a.NLPReady {
-		fmt.Printf("[App] ⏳ Aguardando motores ficarem ONLINE antes de iniciar %s...\n", agent)
-		for i := 0; i < 30; i++ { // Espera até 30 segundos
+	// ⏳ RESILIÊNCIA DE BOOT: Apenas motores locais (native) dependem de NLP local pré-carregado
+	if agent == "native" && !a.NLPReady {
+		fmt.Printf("[App] ⏳ Aguardando motores locais ficarem ONLINE antes de iniciar %s...\n", agent)
+		for i := 0; i < 5; i++ { // Espera até 2.5s no máximo
 			if a.NLPReady {
 				break
 			}
-			time.Sleep(1 * time.Second)
+			time.Sleep(500 * time.Millisecond)
 		}
-	}
-
-	sessionID := agent // 🚨 Unificação de ID: Usar o nome do agente diretamente para sessão ACP
-
-	// 🕵️⚡ Trava de Segurança: Não inicia se já houver uma sessão ativa ou iniciando para este agente.
-	a.executor.Mu.Lock()
-	_, exists := a.executor.ActiveSessions[sessionID]
-	a.executor.Mu.Unlock()
-
-	if exists {
-		fmt.Printf("[App] Agente %s já está no Ar. Orquestra pronta.\n", agent)
-		return nil
 	}
 
 	fmt.Printf("[App] Iniciando agente: %s\n", agent)

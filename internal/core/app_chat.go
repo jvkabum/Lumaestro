@@ -167,11 +167,17 @@ func (a *App) SendAgentInput(agent string, input string, images []map[string]str
 	})
 	a.emitAgentStatus(displayEngine, "Perfil ativo definido. Preparando execução", "status")
 
-	// 🚀 Disparo ACP via Protocolo ndJSON: Garante que o motor está online (Auto-Start)
-	a.emitAgentStatus(displayEngine, "Garantindo que o motor '"+displayEngine+"' está online", "status")
-	if err := a.StartAgentSession(agentName); err != nil {
-		fmt.Printf("[App] ERRO ao iniciar sessão ACP do motor %s: %v\n", agentName, err)
-		return fmt.Errorf("erro ao iniciar motor %s em modo ACP: %v", agentName, err)
+	// 🚀 Disparo ACP via Protocolo ndJSON: Garante que o motor está online (Auto-Start apenas se offline)
+	a.executor.Mu.Lock()
+	_, isOnline := a.executor.ActiveSessions[agentName]
+	a.executor.Mu.Unlock()
+
+	if !isOnline {
+		a.emitAgentStatus(displayEngine, "Iniciando motor '"+displayEngine+"'...", "status")
+		if err := a.StartAgentSession(agentName); err != nil {
+			fmt.Printf("[App] ERRO ao iniciar sessão ACP do motor %s: %v\n", agentName, err)
+			return fmt.Errorf("erro ao iniciar motor %s em modo ACP: %v", agentName, err)
+		}
 	}
 
 	a.emitAgentStatus(displayEngine, "Enviando instruções para o agente", "status")
