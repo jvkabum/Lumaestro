@@ -24,7 +24,7 @@ const { handleAddAccount, handleLoginAccount, handleSwitchAccount, handleRemoveA
 const selectedAccountProvider = ref('google')
 const showQuickSwitch = ref(false)
 const accountProviders = [
-  { id: 'google', label: 'Google (Gemini)', icon: '💎', color: '#3b82f6' },
+  { id: 'google', label: 'Google (Antigravity)', icon: '💎', color: '#3b82f6' },
   { id: 'claude', label: 'Claude', icon: '🟠', color: '#f97316' },
   { id: 'openai', label: 'OpenAI (GPT)', icon: '🟢', color: '#10b981' },
   { id: 'qwen', label: 'Qwen', icon: '🟣', color: '#8b5cf6' }
@@ -596,9 +596,9 @@ runtime.EventsOn("native:progress", (data) => {
         <button @click="save" class="btn-glow-blue" style="width: 100%;">SALVAR CHAVES MANUAIS</button>
       </section>
 
-      <!-- ABA GOOGLE (GEMINI NEXUS) -->
+      <!-- ABA GOOGLE (ANTIGRAVITY NEXUS) -->
       <section v-if="store.activeTab === 'google'" class="glass-panel animate-slide-up" style="border-color: rgba(59, 130, 246, 0.2);">
-        <h2 class="section-title" style="color: #60a5fa;">Google Gemini Nexus 💎</h2>
+        <h2 class="section-title" style="color: #60a5fa;">Google Antigravity Nexus 💎</h2>
         <p style="color: var(--p-text-dim); margin-bottom: 2rem; font-size: 0.9rem;">
           Infraestrutura nativa do Google. Gerencie pools de chaves e o sistema de failover automático.
         </p>
@@ -785,7 +785,7 @@ runtime.EventsOn("native:progress", (data) => {
                          {{ tool === 'gemini' ? '⚡' : tool === 'claude' ? '🦾' : tool === 'groq' ? '🏎️' : '🤖' }}
                       </div>
                       <div>
-                        <h4 style="margin: 0; font-weight: 900; color: #fff; font-size: 1.3rem; letter-spacing: 2px;">{{ tool === 'lmstudio' ? 'LM STUDIO' : tool.toUpperCase() }}</h4>
+                        <h4 style="margin: 0; font-weight: 900; color: #fff; font-size: 1.3rem; letter-spacing: 2px;">{{ tool === 'gemini' ? 'ANTIGRAVITY' : tool === 'lmstudio' ? 'LM STUDIO' : tool.toUpperCase() }}</h4>
                         <div v-if="tool === 'gemini' || tool === 'claude'" class="engine-status-badge" :style="store.status.tools[tool] ? (store.config[`use_${tool}_api_key`] || store.status.tools[tool + '_auth'] ? '' : 'border-color: rgba(245, 158, 11, 0.3); background: rgba(245, 158, 11, 0.05); color: #f59e0b;') : 'border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.05);'">
                           <span class="status-dot" :style="store.status.tools[tool] ? (store.config[`use_${tool}_api_key`] || store.status.tools[tool + '_auth'] ? '' : 'background: #f59e0b; box-shadow: none;') : 'background: #ef4444; box-shadow: none;'"></span> 
                           {{ store.status.tools[tool] ? (store.config[`use_${tool}_api_key`] || store.status.tools[tool + '_auth'] ? 'SISTEMA PRONTO' : 'NÃO AUTENTICADO') : 'NÃO INSTALADO' }}
@@ -820,7 +820,7 @@ runtime.EventsOn("native:progress", (data) => {
                 
                 <p style="color: #cbd5e1; font-size: 0.85rem; margin-bottom: 2.5rem; line-height: 1.6; font-weight: 300; flex-grow: 1;">
                    <template v-if="tool === 'gemini'">
-                     Motor de Inteligência Central. Responsável pela execução de rotinas autônomas e retenção de contexto contínuo (ACP) em background.
+                     Motor de Inteligência Central (Google Antigravity). Responsável pela execução de rotinas autônomas e retenção de contexto contínuo (ACP) em background.
                    </template>
                    <template v-else-if="tool === 'claude'">
                      Motor Analítico Avançado. Infraestrutura secundária focada em modelagem pesada, testes lógicos e geração de códigos complexos.
