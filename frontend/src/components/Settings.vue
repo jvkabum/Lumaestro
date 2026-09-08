@@ -106,7 +106,7 @@ const testLMStudio = async () => {
 const providerLabel = (provider) => {
   if (provider === 'lmstudio') return 'LM Studio'
   if (provider === 'claude') return 'Claude'
-  return 'Gemini'
+  return 'Antigravity'
 }
 
 const isProviderActive = (provider) => {

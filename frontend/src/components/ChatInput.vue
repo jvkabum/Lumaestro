@@ -5,10 +5,10 @@
       <div class="input-toolbar">
         <div class="toolbar-left">
           <div class="agent-switcher">
-            <!-- Gemini Wrapper -->
+            <!-- Antigravity Wrapper -->
             <div 
               class="agent-pill gemini-pill" 
-              :class="{ active: selectedAgent === 'gemini', 'menu-open': showModelMenu }"
+              :class="{ active: selectedAgent === 'antigravity' || selectedAgent === 'gemini', 'menu-open': showModelMenu }"
               @click.stop="toggleModelMenu"
             >
               <span class="dot gemini"></span>
@@ -28,7 +28,7 @@
                       <span class="item-icon">✨</span>
                       <div class="item-info">
                         <div class="item-header">
-                          <span class="item-name">Auto (Gemini 3)</span>
+                          <span class="item-name">Antigravity (Auto)</span>
                           <span class="item-badge auto">Inteligente</span>
                         </div>
                         <span class="item-desc">Roteamento dinâmico para 3.8 / 3.1</span>
@@ -46,7 +46,7 @@
                       <span class="item-icon">⚡</span>
                       <div class="item-info">
                         <div class="item-header">
-                          <span class="item-name">Gemini 3.8 Flash</span>
+                          <span class="item-name">Antigravity (3.8 Flash)</span>
                           <span class="item-badge high">High</span>
                           <span class="item-badge fast">Fast</span>
                         </div>
@@ -62,7 +62,7 @@
                       <span class="item-icon">🚀</span>
                       <div class="item-info">
                         <div class="item-header">
-                          <span class="item-name">Gemini 3.7 Flash</span>
+                          <span class="item-name">Antigravity (3.7 Flash)</span>
                           <span class="item-badge med">Medium</span>
                           <span class="item-badge fast">Fast</span>
                         </div>
@@ -78,7 +78,7 @@
                       <span class="item-icon">⚡</span>
                       <div class="item-info">
                         <div class="item-header">
-                          <span class="item-name">Gemini 3.6 Flash</span>
+                          <span class="item-name">Antigravity (3.6 Flash)</span>
                           <span class="item-badge med">Medium</span>
                           <span class="item-badge fast">Fast</span>
                         </div>
@@ -94,7 +94,7 @@
                       <span class="item-icon">🏎️</span>
                       <div class="item-info">
                         <div class="item-header">
-                          <span class="item-name">Gemini 3.1 Flash Lite</span>
+                          <span class="item-name">Antigravity (3.1 Lite)</span>
                           <span class="item-badge zero">Zero Latency</span>
                         </div>
                         <span class="item-desc">Eficiência máxima / Latência zero</span>
@@ -112,7 +112,7 @@
                       <span class="item-icon">🧠</span>
                       <div class="item-info">
                         <div class="item-header">
-                          <span class="item-name">Gemini 3.1 Pro</span>
+                          <span class="item-name">Antigravity (3.1 Pro)</span>
                           <span class="item-badge pro">Low / Pro</span>
                         </div>
                         <span class="item-desc">Máxima lógica, refatoração e arquitetura</span>
@@ -357,16 +357,16 @@ const activeGeminiModel = ref('gemini-3.8-flash-high');
 
 const currentModelLabel = computed(() => {
   const m = activeGeminiModel.value;
-  if (m === 'gemini-3.8-flash-high' || m === 'gemini-3.8-flash') return 'Gemini 3.8 Flash';
-  if (m === 'gemini-3.7-flash-medium' || m === 'gemini-3.7-flash') return 'Gemini 3.7 Flash';
-  if (m === 'gemini-3.6-flash-medium' || m === 'gemini-3.6-flash') return 'Gemini 3.6 Flash';
-  if (m === 'gemini-3.1-pro-preview' || m === 'gemini-3.1-pro' || m === 'gemini-3.1-pro-low') return 'Gemini 3.1 Pro';
-  if (m === 'gemini-3.1-flash-lite' || m === 'gemini-3.1-flash-lite-preview') return 'Flash 3.1 Lite';
+  if (m === 'gemini-3.8-flash-high' || m === 'gemini-3.8-flash') return 'Antigravity (3.8 Flash)';
+  if (m === 'gemini-3.7-flash-medium' || m === 'gemini-3.7-flash') return 'Antigravity (3.7 Flash)';
+  if (m === 'gemini-3.6-flash-medium' || m === 'gemini-3.6-flash') return 'Antigravity (3.6 Flash)';
+  if (m === 'gemini-3.1-pro-preview' || m === 'gemini-3.1-pro' || m === 'gemini-3.1-pro-low') return 'Antigravity (3.1 Pro)';
+  if (m === 'gemini-3.1-flash-lite' || m === 'gemini-3.1-flash-lite-preview') return 'Antigravity (3.1 Lite)';
   if (m === 'claude-sonnet-4-6') return 'Claude Sonnet 4.6';
   if (m === 'claude-opus-4-6') return 'Claude Opus 4.6';
   if (m === 'openai/gpt-oss-120b' || m === 'gpt-oss-120b') return 'GPT-OSS 120B';
-  if (m === 'auto-gemini-3') return 'Auto (Gemini 3)';
-  return 'Gemini';
+  if (m === 'auto-gemini-3') return 'Antigravity (Auto)';
+  return 'Antigravity';
 });
 
 onMounted(() => {
@@ -378,8 +378,8 @@ onMounted(() => {
 const showModelMenu = ref(false);
 
 const toggleModelMenu = () => {
-  if (selectedAgent.value !== 'gemini' && !activeGeminiModel.value.startsWith('claude-')) {
-    selectedAgent.value = 'gemini';
+  if (selectedAgent.value !== 'antigravity' && selectedAgent.value !== 'gemini' && !activeGeminiModel.value.startsWith('claude-')) {
+    selectedAgent.value = 'antigravity';
     showModelMenu.value = true;
   } else {
     showModelMenu.value = !showModelMenu.value;
@@ -393,7 +393,7 @@ const updateGeminiModel = async () => {
     // 🚀 Chama o backend para mudar o modelo e reiniciar a sessão se necessário
     const bridge = window.go?.core?.App || window.go?.main?.App;
     if (bridge && bridge.SetAgentModel) {
-      const targetAgent = activeGeminiModel.value.startsWith('claude-') ? 'claude' : 'gemini';
+      const targetAgent = activeGeminiModel.value.startsWith('claude-') ? 'claude' : 'antigravity';
       await bridge.SetAgentModel(targetAgent, activeGeminiModel.value);
     }
   } catch (e) {
@@ -408,7 +408,7 @@ const selectModel = async (modelId) => {
   if (modelId.startsWith('claude-')) {
     selectedAgent.value = 'claude';
   } else {
-    selectedAgent.value = 'gemini';
+    selectedAgent.value = 'antigravity';
   }
   
   await updateGeminiModel();
@@ -429,7 +429,7 @@ onMounted(() => {
 });
 
 const messageText = ref('');
-const selectedAgent = ref('gemini');
+const selectedAgent = ref('antigravity');
 const mode = ref('act');
 const textarea = ref(null);
 const isAutonomous = ref(false);
@@ -457,7 +457,7 @@ const handlePaste = async (e) => {
       if (isLocalMode) {
         orchestrator.messages.push({
           role: 'assistant',
-          text: `⚠️ **Multimídia Desativada**: Motores Locais (LM Studio / Native Embeddings) suportam apenas processamento semântico de código e texto. Para visão computacional, mude para Nuvem (Gemini/Claude).`,
+          text: `⚠️ **Multimídia Desativada**: Motores Locais (LM Studio / Native Embeddings) suportam apenas processamento semântico de código e texto. Para visão computacional, mude para Nuvem (Antigravity/Claude).`,
           mode: 'system'
         });
         return;

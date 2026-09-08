@@ -34,6 +34,16 @@ const getAgentStatusLabel = () => {
   }
 
   // Checa instalação e autenticação via status centralizado
+  if (agent === 'antigravity' || agent === 'agy' || agent === 'gemini') {
+    const isInstalled = settingsStore.status.tools['antigravity'] || settingsStore.status.tools['agy'] || settingsStore.status.tools['gemini']
+    const isAuthed = settingsStore.status.tools['antigravity_auth'] || settingsStore.status.tools['agy_auth'] || settingsStore.status.tools['gemini_auth']
+    const useKey = settingsStore.config.use_gemini_api_key
+
+    if (!isInstalled) return 'NÃO INSTALADO'
+    if (!useKey && !isAuthed) return 'ERRO AUTH'
+    return 'PRONTO'
+  }
+
   const toolStatus = settingsStore.status.tools[agent]
   const authStatus = settingsStore.status.tools[agent + '_auth']
   const useKey = settingsStore.config[`use_${agent}_api_key`]

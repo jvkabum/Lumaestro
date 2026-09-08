@@ -181,7 +181,7 @@ const getIconClass = (msg) => {
   if (msg.role === 'user') return 'user-icon';
   if (msg.agent === 'Terminal') return 'terminal-icon';
   if (msg.agent === 'Claude') return 'claude-icon';
-  return 'gemini-icon';
+  return 'gemini-icon'; // Antigravity / Gemini use same visual identity
 };
 
 const getMessageClasses = (msg) => {

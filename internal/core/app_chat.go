@@ -137,42 +137,51 @@ func (a *App) SendAgentInput(agent string, input string, images []map[string]str
 
 	// Se o usuário escolheu explicitamente um motor no chat, respeita a escolha.
 	forcedAgent := strings.ToLower(strings.TrimSpace(agent))
-	if forcedAgent == "gemini" || forcedAgent == "claude" || forcedAgent == "lmstudio" {
+	if forcedAgent == "gemini" || forcedAgent == "antigravity" || forcedAgent == "agy" || forcedAgent == "claude" || forcedAgent == "lmstudio" {
 		agentName = forcedAgent
 	}
 
-	// 📡 Identidade Visual: Avisa o Frontend qual Perfil assumiu a palavra
-	fmt.Printf("[App] 🎭 Identidade Visual EMITIDA: %s (%s)\n", profile.Name, agentName)
-	profileName := profile.Name
+	// 💎 Nomenclatura Oficial: Se for o motor do Google/Antigravity CLI (agy.exe), exibe 'Antigravity'
+	displayEngine := "Antigravity"
 	if forcedAgent == "lmstudio" {
-		profileName = "LM Studio"
+		displayEngine = "LM Studio"
+	} else if forcedAgent == "claude" {
+		displayEngine = "Claude"
+	}
+
+	profileName := profile.Name
+	if forcedAgent == "gemini" || forcedAgent == "antigravity" || forcedAgent == "agy" {
+		profileName = "Antigravity"
 	} else if forcedAgent == "claude" {
 		profileName = "Claude"
-	} else if forcedAgent == "gemini" {
-		profileName = "Gemini"
+	} else if forcedAgent == "lmstudio" {
+		profileName = "LM Studio"
 	}
+
+	// 📡 Identidade Visual: Avisa o Frontend qual Perfil assumiu a palavra
+	fmt.Printf("[App] 🎭 Identidade Visual EMITIDA: %s (%s)\n", profileName, displayEngine)
 
 	a.emitEvent("agent:profile", map[string]string{
 		"name":   profileName,
-		"engine": agentName,
+		"engine": displayEngine,
 	})
-	a.emitAgentStatus(agentName, "Perfil ativo definido. Preparando execução", "status")
+	a.emitAgentStatus(displayEngine, "Perfil ativo definido. Preparando execução", "status")
 
 	// 🚀 Disparo ACP via Protocolo ndJSON: Garante que o motor está online (Auto-Start)
-	a.emitAgentStatus(agentName, "Garantindo que o motor '"+agentName+"' está online", "status")
+	a.emitAgentStatus(displayEngine, "Garantindo que o motor '"+displayEngine+"' está online", "status")
 	if err := a.StartAgentSession(agentName); err != nil {
 		fmt.Printf("[App] ERRO ao iniciar sessão ACP do motor %s: %v\n", agentName, err)
 		return fmt.Errorf("erro ao iniciar motor %s em modo ACP: %v", agentName, err)
 	}
 
-	a.emitAgentStatus(agentName, "Enviando instruções para o agente", "status")
+	a.emitAgentStatus(displayEngine, "Enviando instruções para o agente", "status")
 	err = a.executor.SendInput(agentName, finalPrompt, images)
 	if err != nil {
 		fmt.Printf("[App] ERRO no SendAgentInput: %v\n", err)
 		return fmt.Errorf("erro ao enviar input para ACP: %v", err)
 	}
 
-	fmt.Printf("[App] ✅ Sinfonia roteada para %s com sucesso via JSON-RPC!\n", agent)
+	fmt.Printf("[App] ✅ Sinfonia roteada para %s (%s) com sucesso via streaming NDJSON!\n", agent, displayEngine)
 
 	// 📡 Feedback Imediato: Reseta o timer do frontend e avisa que o processamento começou
 	a.emitEvent("agent:log", map[string]string{
@@ -317,7 +326,7 @@ func (a *App) SetAgentModel(agent string, model string) error {
 	fmt.Printf("[App] ⚙️ Iniciando troca de modelo do motor %s para: %s\n", agent, model)
 
 	cfg, _ := config.Load()
-	if agent == "gemini" {
+	if agent == "gemini" || agent == "antigravity" || agent == "agy" {
 		cfg.GeminiModel = model
 	}
 	err := config.Save(*cfg)

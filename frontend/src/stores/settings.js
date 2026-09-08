@@ -64,10 +64,14 @@ export const useSettingsStore = defineStore('settings', () => {
     qdrant: false,
     tools: {
       gemini: false,
+      antigravity: false,
+      agy: false,
       claude: false,
       obsidian: false,
       claude_auth: false,
       gemini_auth: false,
+      antigravity_auth: false,
+      agy_auth: false,
       groq: false
     }
   })

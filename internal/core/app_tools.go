@@ -21,9 +21,11 @@ func (a *App) GetToolsStatus() map[string]bool {
 		"agy":         a.installer.CheckStatus("agy"),
 		"claude":      a.installer.CheckStatus("claude"),
 		"obsidian":    a.installer.CheckStatus("obsidian"),
-		"claude_auth": a.installer.CheckClaudeAuth(),
-		"gemini_auth": a.installer.CheckGeminiAuth(),
-		"groq":        a.config != nil && a.config.GroqAPIKey != "",
+		"claude_auth":      a.installer.CheckClaudeAuth(),
+		"gemini_auth":      a.installer.CheckGeminiAuth(),
+		"antigravity_auth": a.installer.CheckGeminiAuth(),
+		"agy_auth":         a.installer.CheckGeminiAuth(),
+		"groq":             a.config != nil && a.config.GroqAPIKey != "",
 	}
 }
 

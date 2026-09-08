@@ -26,7 +26,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   const isNavigating = ref(false); // 🔍 Inteligência de Navegação em Tempo Real
   const isTerminalMode = ref(false);
   const isWeaving = ref(false); // 🧶 Teccelagem de Conhecimento em Background
-  const activeAgent = ref('gemini');
+  const activeAgent = ref('antigravity'); // 🚀 Motor Soberano Antigravity CLI
   const activeProfile = ref(null); // 🎭 Perfil de Agente (Doc-Master, etc) - Começa limpo
   const currentStatus = ref(""); // 📡 Status de Ação em Tempo Real
   const currentStatusKind = ref('status');
@@ -83,7 +83,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
 
   const togglePlanMode = async (agent) => {
     isPlanMode.value = !isPlanMode.value;
-    await safeCall('core', 'SetPlanMode', agent || activeAgent.value || 'gemini', isPlanMode.value);
+    await safeCall('core', 'SetPlanMode', agent || activeAgent.value || 'antigravity', isPlanMode.value);
   };
 
   const pushStatus = (text, kind = 'status') => {
@@ -177,7 +177,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
       return;
     }
     // 🚀 AUTO-START: Dispara a varredura de Sinfonias logo após inicializar os listeners
-    fetchSessions('gemini');
+    fetchSessions(activeAgent.value || 'antigravity');
 
     listenersInitialized.value = true;
 
@@ -215,7 +215,8 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
 
       if (!log || (!log.content && !log.Content)) return;
       const content = log.content || log.Content || "";
-      const source = log.source || log.Source || "Gemini";
+      const rawSource = log.source || log.Source || "Antigravity";
+      const source = (rawSource.toLowerCase() === 'gemini') ? 'Antigravity' : rawSource;
       const type = log.type || log.Type || "message";
 
       if (type === 'thought') {
