@@ -224,23 +224,40 @@ const handleSessionEnded = (agent) => {
         </div>
       </div>
 
-      <!-- 🪐 CENTRO: Ilha Flutuante de Órbita (Vermelho - Mixer) -->
+      <!-- 🪐 CENTRO: Botão de Pasta / Órbita Compacto -->
       <div class="header-section section-center" v-show="!props.isMinimized">
-        <div class="workspace-island glass">
-          <span class="ws-icon" @click="orchestrator.selectWorkspace()" title="Escolher Nova Pasta...">📂</span>
-          <div class="ws-selector" @click="showProjectDropdown = !showProjectDropdown" title="Alternar entre Sistemas Solares">
-            <span class="ws-name">{{ orchestrator.workspace?.path ? orchestrator.workspace.path.split(/[/\\]/).pop() : 'Nenhuma Órbita Ativa' }}</span>
-            <span class="ws-arrow">▼</span>
-            
-            <Transition name="slide-up">
-              <div v-if="showProjectDropdown" class="orbit-dropdown glass" @click.stop>
-                <div class="dropdown-header">SISTEMAS EM ÓRBITA</div>
+        <div class="workspace-folder-wrapper">
+          <button 
+            type="button"
+            class="workspace-folder-btn glass" 
+            :class="{ 'has-workspace': !!orchestrator.workspace?.path, 'menu-open': showProjectDropdown }"
+            @click="showProjectDropdown = !showProjectDropdown"
+            :title="orchestrator.workspace?.path ? 'Órbita: ' + orchestrator.workspace.path + ' (Clique para alternar)' : 'Nenhuma Órbita Ativa (Clique para escolher pasta)'"
+          >
+            <span class="folder-glyph">📂</span>
+            <span class="folder-dot" :class="{ online: !!orchestrator.workspace?.path }"></span>
+          </button>
+          
+          <Transition name="slide-up">
+            <div v-if="showProjectDropdown" class="orbit-dropdown glass" @click.stop>
+              <div class="dropdown-header-row">
+                <span class="dropdown-title">SISTEMAS EM ÓRBITA</span>
+                <button 
+                  class="open-folder-btn" 
+                  @click.stop="orchestrator.selectWorkspace(); showProjectDropdown = false" 
+                  title="Escolher nova pasta no computador"
+                >
+                  📁 Abrir Pasta...
+                </button>
+              </div>
+
+              <div class="orbit-projects-list">
                 <div 
                   v-for="proj in settingsStore.config.external_projects" 
                   :key="proj.path" 
                   class="orbit-item"
                   :class="{ 'is-active': proj.path === orchestrator.workspace.path }"
-                  @click="handleSwitchProject(proj)"
+                  @click="handleSwitchProject(proj); showProjectDropdown = false"
                 >
                   <span class="item-icon">🪐</span>
                   <div class="item-info">
@@ -248,12 +265,13 @@ const handleSessionEnded = (agent) => {
                     <span class="item-path">{{ proj.path }}</span>
                   </div>
                 </div>
-                <div class="dropdown-footer" @click="orchestrator.setView('repos'); showProjectDropdown = false">
-                  + GERENCIAR PROJETOS
-                </div>
               </div>
-            </Transition>
-          </div>
+
+              <div class="dropdown-footer" @click="orchestrator.setView('repos'); showProjectDropdown = false">
+                + GERENCIAR PROJETOS
+              </div>
+            </div>
+          </Transition>
         </div>
       </div>
 
@@ -594,64 +612,115 @@ const handleSessionEnded = (agent) => {
   pointer-events: none; /* Deixa cliques passarem para o grafo se necessário, mas os filhos reativam */
 }
 
-.workspace-island {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 6px 14px;
-  background: rgba(15, 23, 42, 0.4);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-radius: 100px;
-  border: 1px solid rgba(139, 92, 246, 0.15); /* Purple hint */
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.05);
-  pointer-events: auto;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.workspace-island:hover {
-  background: rgba(139, 92, 246, 0.1);
-  border-color: rgba(168, 85, 247, 0.4);
-  box-shadow: 0 6px 24px rgba(168, 85, 247, 0.15), inset 0 1px 1px rgba(255, 255, 255, 0.1);
-  transform: translateY(-1px);
-}
-
-.ws-icon {
-  font-size: 13px;
-  cursor: pointer;
-  opacity: 0.8;
-  transition: all 0.3s;
-  padding-right: 12px;
-  border-right: 1px solid rgba(255, 255, 255, 0.1);
-}
-.workspace-island:hover .ws-icon { opacity: 1; filter: drop-shadow(0 0 6px rgba(168,85,247,0.5)); }
-
-.ws-selector {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
+/* 📂 Botão de Pasta / Órbita Compacto */
+.workspace-folder-wrapper {
   position: relative;
-  padding: 2px 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
 }
 
-.ws-name {
-  font-size: 11px;
+.workspace-folder-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  padding: 0;
+}
+
+.workspace-folder-btn:hover {
+  background: rgba(139, 92, 246, 0.15);
+  border-color: rgba(168, 85, 247, 0.4);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(139, 92, 246, 0.25);
+}
+
+.workspace-folder-btn.has-workspace {
+  border-color: rgba(139, 92, 246, 0.3);
+}
+
+.workspace-folder-btn.menu-open {
+  background: rgba(139, 92, 246, 0.2);
+  border-color: rgba(168, 85, 247, 0.5);
+}
+
+.folder-glyph {
+  font-size: 16px;
+  transition: transform 0.2s ease;
+  line-height: 1;
+}
+
+.workspace-folder-btn:hover .folder-glyph {
+  transform: scale(1.1);
+}
+
+.folder-dot {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #64748b;
+  transition: all 0.3s ease;
+}
+
+.folder-dot.online {
+  background: #10b981;
+  box-shadow: 0 0 6px #10b981;
+}
+
+.dropdown-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px 8px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: 4px;
+}
+
+.dropdown-title {
+  font-size: 10px;
   font-weight: 800;
-  color: #f8fafc;
-  letter-spacing: 0.5px;
-  max-width: 180px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  color: #c084fc;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
 }
 
-.ws-arrow {
-  font-size: 9px;
-  color: #a78bfa;
-  transition: transform 0.3s;
+.open-folder-btn {
+  background: rgba(139, 92, 246, 0.15);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  color: #d8b4fe;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
-.workspace-island:hover .ws-arrow { color: #d8b4fe; }
+
+.open-folder-btn:hover {
+  background: rgba(139, 92, 246, 0.3);
+  color: #fff;
+  border-color: #c084fc;
+}
+
+.orbit-projects-list {
+  max-height: 240px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
 
 /* Dropdown de Órbita */
 .orbit-dropdown {
