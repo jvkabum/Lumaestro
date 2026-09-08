@@ -73,9 +73,22 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 
 	cfgLoaded, _ := config.Load()
 
+	appRoot, _ := os.Getwd()
+	sandboxPath := filepath.Join(appRoot, ".lumaestro", "sandbox")
+	_ = os.MkdirAll(sandboxPath, 0755)
+
 	// 📂 Workspace: Usa o diretório de projeto ativo
 	if e.Workspace == "" && cfgLoaded != nil && cfgLoaded.ActiveWorkspace != "" {
 		e.Workspace = cfgLoaded.ActiveWorkspace
+	}
+
+	normWs := strings.ToLower(filepath.Clean(e.Workspace))
+	normAppRoot := strings.ToLower(filepath.Clean(appRoot))
+
+	// 🛡️ SEGURANÇA: Se o workspace está vazio ou aponta para a raiz do próprio Lumaestro, isola na Sandbox
+	if e.Workspace == "" || e.Workspace == "." || normWs == normAppRoot {
+		e.Workspace = sandboxPath
+		fmt.Printf("[ACP] 🛡️ MODO HERMÉTICO: Workspace redirecionado para Sandbox limpa: %s\n", sandboxPath)
 	}
 	cwd := e.Workspace
 
@@ -84,17 +97,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 	e.Proxy.CPI = e.CPI
 	fmt.Printf("[ACP] Protocolo CPI Sincronizado: %s\n", e.CPI.ActiveOrbit)
 
-	// 🛡️ ISOLAMENTO FÍSICO: Define a Célula de Isolamento (Sandbox)
-	sandboxPath := filepath.Join(e.Workspace, ".lumaestro", "sandbox")
-	_ = os.MkdirAll(sandboxPath, 0755)
-
-	// 🛡️ SEGURANÇA: Se o workspace está vazio, usamos a Célula fixa
 	sessionHome := cwd
-	if cwd == "" || cwd == "." {
-		cwd = sandboxPath
-		sessionHome = sandboxPath
-		fmt.Printf("[ACP] 🛡️ MODO HERMÉTICO: Agente isolado na Célula: %s\n", sandboxPath)
-	}
 
 	if !isHotSwap {
 		cmdCtx, cancel := context.WithCancel(ctx)

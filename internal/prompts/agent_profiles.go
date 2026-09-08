@@ -2,6 +2,8 @@ package prompts
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 )
@@ -25,12 +27,12 @@ func GetEnvironmentDirective() string {
 	return "[AMBIENTE] Linux. Use sintaxe POSIX/bash."
 }
 
-// GetAutonomyDirective retorna a diretriz de autonomia do agente.
+// GetAutonomyDirective retorna a diretriz de autonomia para o agente.
 func GetAutonomyDirective(autonomous bool) string {
 	if autonomous {
-		return "[AUTONOMIA:ATIVO] Execute sem confirmação. Confirme apenas em bloqueio de segurança."
+		return "[AUTONOMIA:ON] Execute sem pedir confirmação. Avance até o objetivo."
 	}
-	return "[AUTONOMIA:INATIVO] Confirme antes de ações em arquivos/comandos críticos."
+	return "[AUTONOMIA:OFF] Planeje primeiro. Peça confirmação antes de executar."
 }
 
 // GetLightningDirective retorna a diretriz de memória coletiva (Lightning/APO).
@@ -45,8 +47,13 @@ func GetNavigationDirective() string {
 
 // GetCPIDirective retorna a diretriz de isolamento de consciência (CPI).
 func GetCPIDirective(orbit string) string {
-	if orbit == "" || orbit == "." {
-		return "[CPI:DESARMADO] Bloqueio total de arquivos. Responda apenas com conhecimento teórico. Não tente acessar o repositório."
+	appRoot, _ := os.Getwd()
+	normOrbit := strings.ToLower(filepath.Clean(orbit))
+	normAppRoot := strings.ToLower(filepath.Clean(appRoot))
+
+	isSandbox := orbit == "" || orbit == "." || strings.Contains(normOrbit, "sandbox") || normOrbit == normAppRoot
+	if isSandbox {
+		return "[CPI:SANDBOX] ÓRBITA: Célula Sandbox Isolada (.lumaestro/sandbox) | REGRAS: (1)Nenhum projeto de usuário selecionado. (2)Confinamento total dentro da Sandbox limpa. (3)Acesso fora da sandbox=PROIBIDO."
 	}
 
 	return fmt.Sprintf("[CPI:ARMADO] ÓRBITA:%s | REGRAS: (1)Confinamento total. (2)Acesso fora do workspace=PROIBIDO. (3)Erro CPI→PARE e reporte.", orbit)

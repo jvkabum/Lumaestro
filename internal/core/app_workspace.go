@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
+	"Lumaestro/internal/agents/acp"
 	"Lumaestro/internal/config"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -17,17 +19,22 @@ import (
 // SetWorkspace define o diretório de trabalho ativo da IA.
 // Todas as sessões ACP criadas após esta chamada usarão este diretório como CWD.
 func (a *App) SetWorkspace(path string) error {
+	appRoot, _ := os.Getwd()
+	sandboxDir := filepath.Join(appRoot, ".lumaestro", "sandbox")
+	_ = os.MkdirAll(sandboxDir, 0755)
+
 	if path == "" {
-		// Limpar workspace = voltar para o diretório do Lumaestro
-		a.executor.Workspace = ""
+		// Limpar workspace = voltar para a sandbox isolada
+		a.executor.Workspace = sandboxDir
+		a.executor.CPI = acp.NewCPIValidator(sandboxDir, a.config.ObsidianVaultPath)
 		if a.config != nil {
 			a.config.ActiveWorkspace = ""
 			config.Save(*a.config)
 		}
-		fmt.Println("[Cosmos] 🏛️ Retornando ao ponto zero do Universo.")
+		fmt.Printf("[Cosmos] 🏛️ Retornando para a Sandbox isolada: %s\n", sandboxDir)
 		a.emitEvent("workspace:changed", map[string]string{
 			"path": "",
-			"name": "Universo Lumaestro",
+			"name": "Nenhuma Órbita (Sandbox)",
 		})
 		return nil
 	}
@@ -42,7 +49,25 @@ func (a *App) SetWorkspace(path string) error {
 	}
 
 	absPath, _ := filepath.Abs(path)
+
+	// Se o usuário selecionou a própria raiz do Lumaestro, confina na sandbox por segurança
+	if strings.EqualFold(filepath.Clean(absPath), filepath.Clean(appRoot)) {
+		a.executor.Workspace = sandboxDir
+		a.executor.CPI = acp.NewCPIValidator(sandboxDir, a.config.ObsidianVaultPath)
+		if a.config != nil {
+			a.config.ActiveWorkspace = ""
+			config.Save(*a.config)
+		}
+		fmt.Printf("[Cosmos] 🛡️ Raiz do Lumaestro selecionada: confinando na Sandbox: %s\n", sandboxDir)
+		a.emitEvent("workspace:changed", map[string]string{
+			"path": "",
+			"name": "Nenhuma Órbita (Sandbox)",
+		})
+		return nil
+	}
+
 	a.executor.Workspace = absPath
+	a.executor.CPI = acp.NewCPIValidator(absPath, a.config.ObsidianVaultPath)
 
 	if a.config != nil {
 		a.config.ActiveWorkspace = absPath
@@ -69,11 +94,17 @@ func (a *App) SetWorkspace(path string) error {
 // GetWorkspace retorna o workspace ativo atual.
 func (a *App) GetWorkspace() map[string]string {
 	ws := a.executor.Workspace
-	if ws == "" {
-		cwd, _ := os.Getwd()
+	appRoot, _ := os.Getwd()
+	sandboxDir := filepath.Join(appRoot, ".lumaestro", "sandbox")
+
+	normWs := strings.ToLower(filepath.Clean(ws))
+	normAppRoot := strings.ToLower(filepath.Clean(appRoot))
+	normSandbox := strings.ToLower(filepath.Clean(sandboxDir))
+
+	if ws == "" || normWs == normAppRoot || normWs == normSandbox {
 		return map[string]string{
 			"path": "",
-			"name": filepath.Base(cwd) + " (Padrão)",
+			"name": "Nenhuma Órbita (Sandbox)",
 		}
 	}
 	return map[string]string{

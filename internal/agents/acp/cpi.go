@@ -234,11 +234,13 @@ func (c *CPIValidator) ValidateCommand(command string, args []string) error {
 // GetOrbitCWD retorna o diretório de trabalho que deve ser usado para execução de comandos.
 // Sempre retorna a ÓRBITA_ATIVA para garantir isolamento.
 func (c *CPIValidator) GetOrbitCWD() string {
-	if c.IsArmed() {
+	if c.IsArmed() && c.ActiveOrbit != "" {
 		return c.ActiveOrbit
 	}
 	cwd, _ := os.Getwd()
-	return cwd
+	sandbox := filepath.Join(cwd, ".lumaestro", "sandbox")
+	_ = os.MkdirAll(sandbox, 0755)
+	return sandbox
 }
 
 // String retorna uma representação textual do estado do CPI.

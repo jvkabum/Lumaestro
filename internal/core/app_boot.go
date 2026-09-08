@@ -1,12 +1,15 @@
 package core
 
 import (
-	"Lumaestro/internal/config"
-	"Lumaestro/internal/provider"
-	"Lumaestro/internal/obsidian"
 	"Lumaestro/internal/agents/acp"
+	"Lumaestro/internal/config"
+	"Lumaestro/internal/obsidian"
+	"Lumaestro/internal/provider"
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -90,7 +93,18 @@ func (a *App) initServices() error {
 	a.config = cfg
 
 	// 🛡️ RE-ARMAMENTO TARDIO: Agora que temos a config, armamos o CPI com as órbitas reais
-	a.executor.CPI = acp.NewCPIValidator(cfg.ActiveWorkspace, cfg.ObsidianVaultPath)
+	appRoot, _ := os.Getwd()
+	activeWs := cfg.ActiveWorkspace
+	normWs := strings.ToLower(filepath.Clean(activeWs))
+	normAppRoot := strings.ToLower(filepath.Clean(appRoot))
+
+	if activeWs == "" || normWs == normAppRoot {
+		activeWs = filepath.Join(appRoot, ".lumaestro", "sandbox")
+		_ = os.MkdirAll(activeWs, 0755)
+		fmt.Printf("[Boot] 🛡️ Segurança: Nenhuma órbita externa configurada. Redirecionando para Sandbox limpa: %s\n", activeWs)
+	}
+
+	a.executor.CPI = acp.NewCPIValidator(activeWs, cfg.ObsidianVaultPath)
 	a.executor.Workspace = a.executor.CPI.ActiveOrbit
 
 	if a.executor.CPI.IsArmed() {

@@ -222,7 +222,7 @@ const handleSessionEnded = (agent) => {
             class="workspace-folder-btn glass" 
             :class="{ 'has-workspace': !!orchestrator.workspace?.path, 'menu-open': showProjectDropdown }"
             @click="showProjectDropdown = !showProjectDropdown"
-            :title="orchestrator.workspace?.path ? 'Órbita: ' + orchestrator.workspace.path + ' (Clique para alternar)' : 'Nenhuma Órbita Ativa (Clique para escolher pasta)'"
+            :title="orchestrator.workspace?.path ? 'Órbita: ' + orchestrator.workspace.path + ' (Clique para alternar)' : 'Nenhuma Órbita Ativa (Modo Sandbox Isolado - Clique para escolher pasta)'"
           >
             <span class="folder-glyph">📂</span>
             <span v-if="orchestrator.workspace?.path" class="folder-name">{{ orchestrator.workspace.path.split(/[/\\]/).pop() }}</span>
@@ -258,8 +258,18 @@ const handleSessionEnded = (agent) => {
                 </div>
               </div>
 
-              <div class="dropdown-footer" @click="orchestrator.setView('repos'); showProjectDropdown = false">
-                + GERENCIAR PROJETOS
+              <div class="dropdown-footer-row">
+                <button 
+                  v-if="orchestrator.workspace?.path" 
+                  class="clear-workspace-btn" 
+                  @click="orchestrator.clearWorkspace(); showProjectDropdown = false" 
+                  title="Desconectar da órbita e voltar para o modo Sandbox isolado"
+                >
+                  🧹 Desconectar (Sandbox)
+                </button>
+                <div class="dropdown-footer" @click="orchestrator.setView('repos'); showProjectDropdown = false">
+                  + GERENCIAR PROJETOS
+                </div>
               </div>
             </div>
           </Transition>
@@ -788,9 +798,37 @@ const handleSessionEnded = (agent) => {
 .item-path { display: block; font-size: 10px; color: #94a3b8; margin-top: 4px; font-family: 'Fira Code', monospace; }
 .item-icon { font-size: 20px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3)); }
 
-.dropdown-footer {
+.dropdown-footer-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   margin-top: 4px;
-  padding: 12px;
+}
+
+.clear-workspace-btn {
+  padding: 8px 12px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.clear-workspace-btn:hover {
+  background: rgba(239, 68, 68, 0.18);
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+.dropdown-footer {
+  padding: 10px;
   text-align: center;
   font-size: 11px;
   font-weight: 800;

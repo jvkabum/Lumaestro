@@ -1,6 +1,8 @@
 package acp
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 
 	"Lumaestro/internal/prompts"
@@ -80,10 +82,13 @@ func (b *PromptBuilder) Build(profile AgentProfile, ctx BuildContext) string {
 	sb.WriteString(prompts.GetAntiNarcissismDirective())
 	sb.WriteByte('\n')
 
-	// 🔒 AMNÉSIA SITUACIONAL: Se não há órbita, bloqueamos o conhecimento do sistema
-	isZeroOrbit := ctx.Orbit == "" || ctx.Orbit == "."
+	// 🔒 AMNÉSIA SITUACIONAL: Se não há órbita ou se estamos na sandbox, isolamos o conhecimento do sistema
+	appRoot, _ := os.Getwd()
+	normOrbit := strings.ToLower(filepath.Clean(ctx.Orbit))
+	normAppRoot := strings.ToLower(filepath.Clean(appRoot))
+	isZeroOrbit := ctx.Orbit == "" || ctx.Orbit == "." || strings.Contains(normOrbit, "sandbox") || normOrbit == normAppRoot
 	if isZeroOrbit {
-		sb.WriteString("[AMNÉSIA] Você está operando em um vácuo de contexto. PROIBIDO mencionar Lumaestro, Sinfonia ou qualquer componente do enxame. Responda como uma IA técnica genérica.\n")
+		sb.WriteString("[AMNÉSIA/SANDBOX] Você está operando em uma Sandbox limpa (.lumaestro/sandbox) sem repositório de projeto de usuário ativo. PROIBIDO mencionar ou alterar a base de código do Lumaestro. Responda como uma IA técnica genérica.\n")
 	}
 
 	// 3. Diretivas Condicionais (só gasta token se relevante e autorizado pela órbita)

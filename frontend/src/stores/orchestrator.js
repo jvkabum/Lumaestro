@@ -155,7 +155,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
       const result = await safeCall('main', 'ClearWorkspace');
       if (result) {
         workspace.value = result;
-        pushStatus('📂 Workspace limpo. IA no modo Lumaestro.', 'status');
+        pushStatus('📂 Workspace limpo. IA operando em Sandbox segura.', 'status');
       }
     } catch (err) {
       console.error('[Workspace] Erro ao limpar:', err);
@@ -187,7 +187,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     // 📂 Listener de mudança de Workspace
     EventsOn('workspace:changed', (data) => {
       if (data) {
-        workspace.value = { path: data.path || '', name: data.name || 'Lumaestro (Padrão)' };
+        workspace.value = { path: data.path || '', name: data.name || 'Nenhuma Órbita (Sandbox)' };
       }
     });
 
