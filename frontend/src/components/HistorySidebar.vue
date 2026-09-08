@@ -1,9 +1,56 @@
 <script setup>
-import { computed, onMounted, watch, ref } from 'vue';
+import { computed, onMounted, watch, ref, nextTick } from 'vue';
 import { useOrchestratorStore } from '../stores/orchestrator';
 import { ListAgentSessions } from '../../wailsjs/go/core/App'; // Import the correct function
 
 const store = useOrchestratorStore();
+
+// Estados para renomear e gerar título com IA
+const editingSessionId = ref(null);
+const editingTitleText = ref('');
+const editInputRef = ref(null);
+const generatingSessionId = ref(null);
+
+const startRename = async (session) => {
+  editingSessionId.value = session.sessionId;
+  editingTitleText.value = session.title || '';
+  await nextTick();
+  if (editInputRef.value) {
+    const el = Array.isArray(editInputRef.value) ? editInputRef.value[0] : editInputRef.value;
+    el?.focus();
+    el?.select();
+  }
+};
+
+const cancelRename = () => {
+  editingSessionId.value = null;
+  editingTitleText.value = '';
+};
+
+const saveRename = async (session) => {
+  if (!editingSessionId.value) return;
+  const newTitle = editingTitleText.value.trim();
+  editingSessionId.value = null;
+  if (!newTitle || newTitle === session.title) return;
+
+  try {
+    await store.renameSession(session.sessionId, newTitle);
+  } catch (err) {
+    console.error("Erro ao renomear sessão:", err);
+  }
+};
+
+const handleAutoName = async (session) => {
+  if (generatingSessionId.value) return;
+  generatingSessionId.value = session.sessionId;
+  try {
+    await store.autoNameSession(session.sessionId);
+  } catch (err) {
+    console.error("Erro ao gerar nome com IA:", err);
+  } finally {
+    generatingSessionId.value = null;
+  }
+};
 
 const formatRelativeTime = (dateStr) => {
   if (!dateStr) return 'Sem data';
@@ -132,28 +179,82 @@ watch(() => store.activeAgent, async (newAgent) => {
         v-for="session in store.sessions" 
         :key="session.sessionId"
         class="session-item"
-        :class="{ active: store.currentACPID === session.sessionId }"
+        :class="{ 
+          active: store.currentACPID === session.sessionId,
+          editing: editingSessionId === session.sessionId
+        }"
         @click="handleLoadSession(session.sessionId)"
       >
         <div class="session-info">
-          <div class="session-title">{{ session.title || 'Conversa sem título' }}</div>
+          <!-- Input Inline para Renomear -->
+          <input
+            v-if="editingSessionId === session.sessionId"
+            ref="editInputRef"
+            v-model="editingTitleText"
+            class="session-title-input"
+            placeholder="Nome da Sinfonia..."
+            @keydown.enter.stop="saveRename(session)"
+            @keydown.esc.stop="cancelRename"
+            @blur="saveRename(session)"
+            @click.stop
+          />
+          <!-- Título com duplo clique para renomear -->
+          <div 
+            v-else 
+            class="session-title" 
+            :title="session.title || 'Conversa sem título'"
+            @dblclick.stop="startRename(session)"
+          >
+            {{ session.title || 'Conversa sem título' }}
+          </div>
           <div class="session-meta">
             <span class="id-badge">{{ session.sessionId.substring(0, 8) }}</span>
             <span class="time">{{ formatRelativeTime(session.updatedAt) }}</span>
           </div>
         </div>
         
-        <!-- Botão de Apagar (Lixeira Premium) -->
-        <button 
-          class="delete-btn" 
-          @click.stop="handleDelete(session)"
-          title="Apagar Sinfonia Permanente"
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="3 6 5 6 21 6"></polyline>
-            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-          </svg>
-        </button>
+        <!-- Ações da Sessão (IA ✨, Editar ✏️, Lixeira 🗑️) -->
+        <div class="session-actions" @click.stop>
+          <!-- Gerar Título Inteligente com IA -->
+          <button 
+            class="action-btn ai-btn" 
+            :class="{ loading: generatingSessionId === session.sessionId }"
+            :disabled="generatingSessionId === session.sessionId"
+            @click.stop="handleAutoName(session)"
+            title="Gerar título inteligente com IA"
+          >
+            <svg v-if="generatingSessionId === session.sessionId" class="spin-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
+            </svg>
+            <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3z"></path>
+            </svg>
+          </button>
+
+          <!-- Renomear Manualmente -->
+          <button 
+            class="action-btn edit-btn" 
+            @click.stop="startRename(session)"
+            title="Renomear título"
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+            </svg>
+          </button>
+
+          <!-- Apagar Sinfonia -->
+          <button 
+            class="action-btn delete-btn" 
+            @click.stop="handleDelete(session)"
+            title="Apagar Sinfonia Permanente"
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
 
@@ -264,7 +365,7 @@ watch(() => store.activeAgent, async (newAgent) => {
 }
 
 .session-item {
-  position: relative; /* 📌 Ancora o botão de delete para cada chat individualmente */
+  position: relative;
   padding: 10px 12px;
   margin-bottom: 4px;
   border-radius: 6px;
@@ -283,6 +384,16 @@ watch(() => store.activeAgent, async (newAgent) => {
   border-color: rgba(56, 189, 248, 0.1);
 }
 
+.session-info {
+  width: 100%;
+  min-width: 0;
+  transition: padding-right 0.15s ease;
+}
+
+.session-item:hover .session-info {
+  padding-right: 76px;
+}
+
 .session-title {
   font-size: 13px;
   font-weight: 400;
@@ -291,6 +402,21 @@ watch(() => store.activeAgent, async (newAgent) => {
   overflow: hidden;
   text-overflow: ellipsis;
   margin-bottom: 2px;
+  user-select: none;
+}
+
+.session-title-input {
+  width: 100%;
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid #38bdf8;
+  border-radius: 4px;
+  color: #f0f6fc;
+  font-size: 12px;
+  font-family: inherit;
+  padding: 2px 6px;
+  margin-bottom: 2px;
+  outline: none;
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.25);
 }
 
 .session-item.active .session-title {
@@ -317,36 +443,93 @@ watch(() => store.activeAgent, async (newAgent) => {
   color: rgba(139, 148, 158, 0.5);
 }
 
-/* --- Botão Delete Premium --- */
-.delete-btn {
+/* --- Container de Ações da Sinfonia --- */
+.session-actions {
   position: absolute;
-  right: 12px;
+  right: 6px;
   top: 50%;
   transform: translateY(-50%);
-  width: 26px;
-  height: 26px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  background: rgba(13, 17, 23, 0.92);
+  backdrop-filter: blur(8px);
+  padding: 3px 4px;
   border-radius: 6px;
-  background: rgba(244, 63, 94, 0.1);
-  border: 1px solid rgba(244, 63, 94, 0.2);
-  color: #f43f5e;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.session-item:hover .session-actions,
+.session-item.editing .session-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.action-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  background: transparent;
+  border: 1px solid transparent;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  opacity: 0;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  backdrop-filter: blur(4px);
+  transition: all 0.15s ease;
+  padding: 0;
 }
 
-.session-item:hover .delete-btn {
-  opacity: 1;
+/* Botão IA (Roxo Neon / Estrela) */
+.action-btn.ai-btn {
+  color: #c084fc;
+}
+.action-btn.ai-btn:hover {
+  background: rgba(168, 85, 247, 0.18);
+  border-color: rgba(168, 85, 247, 0.35);
+  color: #e9d5ff;
+  transform: scale(1.1);
+  box-shadow: 0 0 8px rgba(168, 85, 247, 0.3);
+}
+.action-btn.ai-btn.loading {
+  cursor: wait;
 }
 
-.delete-btn:hover {
-  background: #f43f5e;
-  color: #fff;
-  transform: translateY(-50%) scale(1.1);
-  box-shadow: 0 0 15px rgba(244, 63, 94, 0.4);
+/* Botão Renomear */
+.action-btn.edit-btn {
+  color: #38bdf8;
+}
+.action-btn.edit-btn:hover {
+  background: rgba(56, 189, 248, 0.18);
+  border-color: rgba(56, 189, 248, 0.35);
+  color: #7dd3fc;
+  transform: scale(1.1);
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.3);
+}
+
+/* Botão Lixeira */
+.action-btn.delete-btn {
+  color: #f43f5e;
+}
+.action-btn.delete-btn:hover {
+  background: rgba(244, 63, 94, 0.18);
+  border-color: rgba(244, 63, 94, 0.35);
+  color: #fb7185;
+  transform: scale(1.1);
+  box-shadow: 0 0 8px rgba(244, 63, 94, 0.3);
+}
+
+/* Ícone de rotação para IA processando */
+.spin-icon {
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .sidebar-footer {

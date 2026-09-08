@@ -25,6 +25,8 @@ export function ApprovePromptVariant(arg1:string):Promise<string>;
 
 export function AskAgent(arg1:string,arg2:string):Promise<string>;
 
+export function AutoNameSession(arg1:string):Promise<string>;
+
 export function BindLightning(arg1:lightning.DuckDBStore):Promise<void>;
 
 export function CheckConnection():Promise<boolean>;
@@ -140,6 +142,8 @@ export function ReadGeminiConfig():Promise<string>;
 export function RejectAction(arg1:string,arg2:string):Promise<string>;
 
 export function RemoveIdentity(arg1:string,arg2:string):Promise<void>;
+
+export function RenameSession(arg1:string,arg2:string):Promise<void>;
 
 export function ResetQdrantDB():Promise<string>;
 

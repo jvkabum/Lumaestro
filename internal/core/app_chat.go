@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"Lumaestro/internal/agents/acp"
 	"Lumaestro/internal/config"
 	"Lumaestro/internal/utils"
 )
@@ -188,6 +189,21 @@ func (a *App) SendAgentInput(agent string, input string, images []map[string]str
 	}
 
 	fmt.Printf("[App] ✅ Sinfonia roteada para %s (%s) com sucesso via streaming NDJSON!\n", agent, displayEngine)
+
+	// ✨ Auto-Naming de Sinfonia: Se a sessão atual ainda não tem título, a IA a batiza em background
+	go func(targetAgent string, userMsg string) {
+		time.Sleep(3 * time.Second)
+		if a.executor == nil {
+			return
+		}
+		acpSessID := a.executor.GetActiveACPSessionID(targetAgent)
+		if acpSessID != "" {
+			titles := acp.LoadSessionTitles()
+			if _, hasTitle := titles[acpSessID]; !hasTitle {
+				_, _ = a.AutoNameSession(acpSessID)
+			}
+		}
+	}(agentName, input)
 
 	// 📡 Feedback Imediato: Reseta o timer do frontend e avisa que o processamento começou
 	a.emitEvent("agent:log", map[string]string{

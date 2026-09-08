@@ -850,17 +850,22 @@ func (e *ACPExecutor) ListSessions(s *ACPSession) ([]SessionInfo, error) {
 						finalID = meta.SessID
 					}
 
+					info, _ := f.Info()
+					modTime := time.Time{}
+					if info != nil {
+						modTime = info.ModTime()
+					}
+
 					title := meta.Title
 					if title == "" {
 						title = meta.DispName
 					}
-					if title == "" {
-						title = strings.TrimSuffix(f.Name(), ".json")
+					if title == "" || strings.HasPrefix(title, "session-20") {
+						title = ResolveSessionTitle(finalID, f.Name(), path, modTime)
 					}
 
-					info, _ := f.Info()
 					updatedAt := meta.UpdatedAt
-					if updatedAt == "" {
+					if updatedAt == "" && info != nil {
 						updatedAt = info.ModTime().Format(time.RFC3339)
 					}
 
@@ -969,4 +974,14 @@ func (e *ACPExecutor) DeleteSession(filePath string) error {
 	}
 
 	return os.Remove(filePath)
+}
+
+// GetActiveACPSessionID retorna o ID interno real da sessão ativa no momento.
+func (e *ACPExecutor) GetActiveACPSessionID(agentName string) string {
+	e.Mu.Lock()
+	defer e.Mu.Unlock()
+	if s, ok := e.ActiveSessions[agentName]; ok {
+		return s.ACPSessID
+	}
+	return ""
 }

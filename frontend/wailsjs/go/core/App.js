@@ -38,6 +38,10 @@ export function AskAgent(arg1, arg2) {
   return window['go']['core']['App']['AskAgent'](arg1, arg2);
 }
 
+export function AutoNameSession(arg1) {
+  return window['go']['core']['App']['AutoNameSession'](arg1);
+}
+
 export function BindLightning(arg1) {
   return window['go']['core']['App']['BindLightning'](arg1);
 }
@@ -268,6 +272,10 @@ export function RejectAction(arg1, arg2) {
 
 export function RemoveIdentity(arg1, arg2) {
   return window['go']['core']['App']['RemoveIdentity'](arg1, arg2);
+}
+
+export function RenameSession(arg1, arg2) {
+  return window['go']['core']['App']['RenameSession'](arg1, arg2);
 }
 
 export function ResetQdrantDB() {

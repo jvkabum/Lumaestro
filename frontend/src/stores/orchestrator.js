@@ -458,6 +458,16 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
       }
     });
 
+    // 🏷️ Atualização em tempo real de título de Sinfonia (Manual ou IA)
+    EventsOn('session:renamed', (data) => {
+      if (!data || !data.sessionId) return;
+      console.log("[Store] 🏷️ Sessão renomeada:", data);
+      const target = sessions.value.find(s => s.sessionId === data.sessionId);
+      if (target) {
+        target.title = data.title;
+      }
+    });
+
     // 4. Watcher de Resiliência: Mantém a UI síncrona com a realidade do Backend
     watch(runningSessions, (sessions) => {
       console.log("[Store] Resiliência: Sessões Ativas:", sessions);
@@ -578,6 +588,35 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     } catch (err) {
       messages.value.push({ role: 'assistant', text: `❌ Erro ao criar: ${err}`, mode: 'system' });
       isThinking.value = false;
+    }
+  };
+
+  const renameSession = async (sessionId, newTitle) => {
+    try {
+      await safeCall('core', 'RenameSession', sessionId, newTitle);
+      const target = sessions.value.find(s => s.sessionId === sessionId);
+      if (target) {
+        target.title = newTitle;
+      }
+    } catch (err) {
+      console.error("[Store] Erro ao renomear sessão:", err);
+      throw err;
+    }
+  };
+
+  const autoNameSession = async (sessionId) => {
+    try {
+      const title = await safeCall('core', 'AutoNameSession', sessionId);
+      if (title) {
+        const target = sessions.value.find(s => s.sessionId === sessionId);
+        if (target) {
+          target.title = title;
+        }
+        return title;
+      }
+    } catch (err) {
+      console.error("[Store] Erro ao auto-nomear sessão com IA:", err);
+      throw err;
     }
   };
 
@@ -769,7 +808,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     isPlanMode, togglePlanMode, subagents, showPlanOverlay, workspace,
     customAgents, isAgentsPanelOpen, isCodeSearchOpen, isDiffViewerOpen, isPermissionsModalOpen,
     initListeners, ask, startSession, sendInput, submitReview, switchAgent, stopSession, forceUnlock,
-    fetchSessions, loadSession, newSession, toggleSidebar, clearStatusTimeline, sendSteeringHint,
+    fetchSessions, loadSession, newSession, renameSession, autoNameSession, toggleSidebar, clearStatusTimeline, sendSteeringHint,
     selectWorkspace, clearWorkspace, loadWorkspace,
     fetchCustomAgents, killSubagent, runCodeSearch, getWorkspaceDiff, getSecurityPermissions,
     toggleAgentsPanel, toggleCodeSearch, toggleDiffViewer, togglePermissionsModal,
