@@ -14,8 +14,11 @@ import DiffViewerModal from './DiffViewerModal.vue'
 import PermissionsModal from './PermissionsModal.vue'
 
 // Props e Emits
-const props = defineProps({ isMinimized: { type: Boolean, default: false } })
-const emit = defineEmits(['toggle-minimize'])
+const props = defineProps({ 
+  isMinimized: { type: Boolean, default: false },
+  isMaximized: { type: Boolean, default: false }
+})
+const emit = defineEmits(['toggle-minimize', 'toggle-maximize'])
 
 // --- Uso da Store (Pinia) ---
 const orchestrator = useOrchestratorStore()
@@ -324,6 +327,28 @@ const handleSessionEnded = (agent) => {
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="12 8 12 12 14 14"></polyline>
             <path d="M3.05 11a9 9 0 1 1 .5 4m-.5 5v-5h5"></path>
+          </svg>
+        </button>
+        
+        <!-- ⛶ Botão Horizontal Toda (Maximizar/Restaurar) -->
+        <button 
+          v-show="!props.isMinimized" 
+          @click="emit('toggle-maximize')" 
+          class="action-btn" 
+          :class="{ 'btn-active': props.isMaximized }"
+          :title="props.isMaximized ? 'Restaurar Largura Dividida' : 'Usar Horizontal Toda (Tela Cheia)'"
+        >
+          <svg v-if="!props.isMaximized" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="15 3 21 3 21 9"></polyline>
+            <polyline points="9 21 3 21 3 15"></polyline>
+            <line x1="21" y1="3" x2="14" y2="10"></line>
+            <line x1="3" y1="21" x2="10" y2="14"></line>
+          </svg>
+          <svg v-else viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="4 14 10 14 10 20"></polyline>
+            <polyline points="20 10 14 10 14 4"></polyline>
+            <line x1="14" y1="10" x2="21" y2="3"></line>
+            <line x1="3" y1="21" x2="10" y2="14"></line>
           </svg>
         </button>
         
@@ -780,7 +805,7 @@ const handleSessionEnded = (agent) => {
 .chat-main-area { flex: 1; display: flex; flex-direction: column; min-height: 0; z-index: 5; }
 .chat-scroll-boundary { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .input-persistent-area { 
-  padding: 10px 16px 16px 16px; /* 🗜️ Mais compacto para evitar cortes em janelas menores */
+  padding: 8px 10px 14px 10px; /* 🗜️ Aproveita a largura horizontal máxima */
   background: linear-gradient(to top, #0f172a 85%, transparent); 
   z-index: 20; /* Garante que menus flutuantes fiquem visíveis */
 }

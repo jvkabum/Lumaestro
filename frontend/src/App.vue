@@ -27,14 +27,22 @@ const isBooting = ref(true)
 const bootError = ref(null)
 
 // Painel redimensionável
-const chatWidth = ref(556)
+const chatWidth = ref(680)
 const isResizing = ref(false)
-const minChatWidth = 556
-const maxChatWidth = 1400
+const minChatWidth = 460
+const maxChatWidth = 2400
 
-// Minimização do Chat
+// Minimização e Maximização do Chat (Horizontal Toda)
 const isChatMinimized = ref(false)
-const toggleChat = () => { isChatMinimized.value = !isChatMinimized.value }
+const isChatMaximized = ref(false)
+const toggleChat = () => { 
+  if (isChatMaximized.value) isChatMaximized.value = false
+  isChatMinimized.value = !isChatMinimized.value 
+}
+const toggleChatMaximize = () => {
+  if (isChatMinimized.value) isChatMinimized.value = false
+  isChatMaximized.value = !isChatMaximized.value
+}
 
 // Terminal Dock Inferior (Estilo VSCode)
 const isTerminalDockOpen = ref(true)
@@ -272,7 +280,7 @@ onMounted(async () => {
 
     <main id="lumaestro-main" :class="{ 'is-orchestrator': currentView === 'orchestrator' }">
       <template v-if="currentView === 'orchestrator'">
-        <div class="left-workspace">
+        <div class="left-workspace" v-show="!isChatMaximized">
           <div class="graph-area">
             <GraphVisualizer :nodes="state.nodes" :edges="state.edges" :graphLogs="state.graphLogs" :activeNode="state.activeNode" />
           </div>
@@ -299,6 +307,7 @@ onMounted(async () => {
 
         <!-- Resize Handle (arrastável) -->
         <div 
+          v-show="!isChatMaximized && !isChatMinimized"
           class="resize-handle"
           @mousedown="startResize"
           :class="{ 'is-dragging': isResizing }"
@@ -315,10 +324,15 @@ onMounted(async () => {
 
         <aside 
           class="glass chat-area" 
-          :class="{ 'chat-minimized': isChatMinimized }"
-          :style="isChatMinimized ? {} : { width: chatWidth + 'px', minWidth: chatWidth + 'px' }"
+          :class="{ 'chat-minimized': isChatMinimized, 'chat-maximized': isChatMaximized }"
+          :style="isChatMinimized ? {} : isChatMaximized ? { width: '100%', minWidth: '0', flex: '1', margin: '0' } : { width: chatWidth + 'px', minWidth: chatWidth + 'px' }"
         >
-          <ChatPanel :is-minimized="isChatMinimized" @toggle-minimize="toggleChat" />
+          <ChatPanel 
+            :is-minimized="isChatMinimized" 
+            :is-maximized="isChatMaximized"
+            @toggle-minimize="toggleChat" 
+            @toggle-maximize="toggleChatMaximize"
+          />
 
           <!-- 🚀 Overlay de Boot — Diagnóstico Visual (Movido para o Chat) -->
           <Transition name="boot-fade">
@@ -585,6 +599,15 @@ nav button.active {
   width: 52px !important;
   min-width: 52px !important;
   margin: 10px 6px 0 6px;
+}
+
+.chat-area.chat-maximized {
+  width: 100% !important;
+  min-width: 0 !important;
+  flex: 1 !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  border-left: none !important;
 }
 
 /* ── Resize Handle ── */

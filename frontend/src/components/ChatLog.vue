@@ -239,7 +239,7 @@ onMounted(scrollToBottom);
 .message-row.assistant { justify-content: flex-start; }
 
 .message-bubble {
-  max-width: 96%;
+  max-width: 98%;
   display: flex;
   gap: 16px;
   align-items: flex-start;
