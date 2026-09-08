@@ -128,7 +128,7 @@ const sendChatMessage = async (payload) => {
     }
 
     // Envio Padrão (Multimodal)
-    const targetAgent = payload.agent || 'gemini'
+    const targetAgent = payload.agent || 'antigravity'
     const isActMode = payload.mode === 'act'
     const images = payload.images || []
 
@@ -210,20 +210,14 @@ const handleSessionEnded = (agent) => {
           </div>
         </div>
 
-        <!-- 🚀 [Verde] Identidade de Perfil e Telemetria -->
-        <div class="identity-badges">
+        <!-- 🚀 [Verde] Identidade de Perfil -->
+        <div v-if="orchestrator.activeProfile" class="identity-badges">
           <span 
-            v-if="orchestrator.activeProfile" 
             class="active-agent-badge" 
             :class="orchestrator.activeProfile.name.toLowerCase()"
           >
             {{ orchestrator.activeProfile.name.toUpperCase() }}
           </span>
-          
-          <div v-if="activeAgent && modelStats.agent === activeAgent && modelStats.info" class="quota-badge glass" title="Performance e Uso do Modelo">
-             <span class="quota-icon">⚡</span>
-             <span class="quota-value">{{ modelStats.info }}</span>
-          </div>
         </div>
       </div>
 
@@ -291,6 +285,20 @@ const handleSessionEnded = (agent) => {
           </svg>
         </button>
 
+        <!-- 📊 Telemetria / Consumo (/usage) -->
+        <button 
+          v-show="!props.isMinimized" 
+          @click="orchestrator.messages.push({ role: 'assistant', text: '📊 **Consumo & Telemetria**:\n' + (modelStats.info || 'Nenhuma telemetria registrada no momento.') + '\nAgente ativo: ' + activeAgent, mode: 'system' })" 
+          class="action-btn" 
+          :title="modelStats.info ? 'Telemetria: ' + modelStats.info : 'Telemetria e Cotas (/usage)'"
+        >
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="20" x2="18" y2="10"></line>
+            <line x1="12" y1="20" x2="12" y2="4"></line>
+            <line x1="6" y1="20" x2="6" y2="14"></line>
+          </svg>
+        </button>
+
         <!-- Toggle Terminal View -->
         <button v-show="!props.isMinimized" @click="showRawTerminal = !showRawTerminal" class="action-btn" :class="{ 'btn-active': showRawTerminal }" title="Alternar Terminal Bruto">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
@@ -350,7 +358,7 @@ const handleSessionEnded = (agent) => {
               <div class="pulsing-icon">🎻</div>
               <div class="loader-text">
                 <h3>Afinando instrumentos...</h3>
-                <p>O Maestro está sintonizando com o Gemini.</p>
+                <p>O Maestro está sintonizando com o Antigravity.</p>
               </div>
               <div class="loader-bars">
                 <span></span><span></span><span></span><span></span><span></span>
