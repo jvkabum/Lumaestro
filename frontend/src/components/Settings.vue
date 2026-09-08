@@ -151,7 +151,11 @@ const toggleGroqModel = (modelId) => {
 
 // ── GOOGLE FLEET MANAGER ──
 const availableGoogleModels = [
-  { id: 'gemini-3.1-flash-lite-preview', label: 'Flash 3.1 (Lite)', icon: '🚀', tier: 'Speed' },
+  { id: 'gemini-3.8-flash-high', label: 'Gemini 3.8 Flash (High/Fast)', icon: '⚡', tier: 'Fleet 3.8' },
+  { id: 'gemini-3.7-flash-medium', label: 'Gemini 3.7 Flash (Medium/Fast)', icon: '🚀', tier: 'Fleet 3.7' },
+  { id: 'gemini-3.6-flash-medium', label: 'Gemini 3.6 Flash (Medium/Fast)', icon: '⚡', tier: 'Fleet 3.6' },
+  { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro (Low/Pro)', icon: '🧠', tier: 'Pro' },
+  { id: 'gemini-3.1-flash-lite-preview', label: 'Flash 3.1 (Lite)', icon: '🏎️', tier: 'Speed' },
   { id: 'gemini-2.5-flash', label: 'Capitão Flash 2.5', icon: '🏆', tier: 'Premium' },
   { id: 'gemini-3-flash-preview', label: 'Modern Flash 3', icon: '⚖️', tier: 'Preview' },
   { id: 'gemini-2.5-flash-lite', label: 'Escala de Volume', icon: '📦', tier: 'Quota' },

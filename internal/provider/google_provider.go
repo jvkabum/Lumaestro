@@ -62,6 +62,10 @@ func (p *GoogleProvider) GenerateContentWithRetry(ctx context.Context, contents 
 	// Fallback de Segurança caso a lista esteja vazia
 	if len(models) == 0 {
 		models = []string{
+			"gemini-3.8-flash-high",
+			"gemini-3.7-flash-medium",
+			"gemini-3.6-flash-medium",
+			"gemini-3.1-pro-preview",
 			"gemini-3.1-flash-lite-preview", // 🚀 Velocidade de Triplas (Lite 3.1)
 			"gemini-2.5-flash",              // 🏆 Capitão Confirmado (Flash 2.5)
 			"gemini-3-flash-preview",        // ⚖️ Moderno (Flash 3)

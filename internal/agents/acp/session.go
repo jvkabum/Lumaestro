@@ -177,8 +177,8 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 
 			if jsTarget != "" {
 				binaryPath = "node"
-				args = []string{jsTarget, "--acp", "--approval-mode=" + approvalMode, "--skip-trust"}
-				fmt.Printf("[ACP] 🚀 Bypass Windows: Rodando via Node com caminho absoluto: %s\n", jsTarget)
+				args = append([]string{jsTarget}, args...)
+				fmt.Printf("[ACP] 🚀 Bypass Windows: Rodando via Node com caminho absoluto: %s (args: %v)\n", jsTarget, args)
 			}
 		}
 

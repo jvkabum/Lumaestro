@@ -12,10 +12,10 @@
               @click.stop="toggleModelMenu"
             >
               <span class="dot gemini"></span>
-              <span class="agent-label">Gemini</span>
+              <span class="agent-label">{{ currentModelLabel }}</span>
               <span class="chevron-icon" :class="{ rotate: showModelMenu }">▾</span>
 
-              <!-- Dropdown List Premium (Geração 3) -->
+              <!-- Dropdown List Premium (Geração 3 & Antigravity) -->
               <Transition name="menu-pop">
                 <div v-if="showModelMenu" class="model-dropdown-menu glass" @click.stop>
                   <div class="menu-section">
@@ -27,49 +27,146 @@
                     >
                       <span class="item-icon">✨</span>
                       <div class="item-info">
-                        <span class="item-name">Auto (Gemini 3)</span>
-                        <span class="item-desc">Roteamento inteligente para 3.1</span>
+                        <div class="item-header">
+                          <span class="item-name">Auto (Gemini 3)</span>
+                          <span class="item-badge auto">Inteligente</span>
+                        </div>
+                        <span class="item-desc">Roteamento dinâmico para 3.8 / 3.1</span>
                       </div>
                     </div>
                   </div>
 
                   <div class="menu-section">
-                    <label>🧠 RACIOCÍNIO AVANÇADO</label>
+                    <label>⚡ GERAÇÃO 3 (FLASH & SPEED)</label>
                     <div 
                       class="menu-item" 
-                      :class="{ selected: activeGeminiModel === 'gemini-3.1-pro-preview' }"
+                      :class="{ selected: activeGeminiModel === 'gemini-3.8-flash-high' || activeGeminiModel === 'gemini-3.8-flash' }"
+                      @click="selectModel('gemini-3.8-flash-high')"
+                    >
+                      <span class="item-icon">⚡</span>
+                      <div class="item-info">
+                        <div class="item-header">
+                          <span class="item-name">Gemini 3.8 Flash</span>
+                          <span class="item-badge high">High</span>
+                          <span class="item-badge fast">Fast</span>
+                        </div>
+                        <span class="item-desc">Raciocínio profundo ultrarrápido</span>
+                      </div>
+                    </div>
+
+                    <div 
+                      class="menu-item" 
+                      :class="{ selected: activeGeminiModel === 'gemini-3.7-flash-medium' || activeGeminiModel === 'gemini-3.7-flash' }"
+                      @click="selectModel('gemini-3.7-flash-medium')"
+                    >
+                      <span class="item-icon">🚀</span>
+                      <div class="item-info">
+                        <div class="item-header">
+                          <span class="item-name">Gemini 3.7 Flash</span>
+                          <span class="item-badge med">Medium</span>
+                          <span class="item-badge fast">Fast</span>
+                        </div>
+                        <span class="item-desc">Equilíbrio perfeito de contexto e lógica</span>
+                      </div>
+                    </div>
+
+                    <div 
+                      class="menu-item" 
+                      :class="{ selected: activeGeminiModel === 'gemini-3.6-flash-medium' || activeGeminiModel === 'gemini-3.6-flash' }"
+                      @click="selectModel('gemini-3.6-flash-medium')"
+                    >
+                      <span class="item-icon">⚡</span>
+                      <div class="item-info">
+                        <div class="item-header">
+                          <span class="item-name">Gemini 3.6 Flash</span>
+                          <span class="item-badge med">Medium</span>
+                          <span class="item-badge fast">Fast</span>
+                        </div>
+                        <span class="item-desc">Desempenho estável e ágil</span>
+                      </div>
+                    </div>
+
+                    <div 
+                      class="menu-item" 
+                      :class="{ selected: activeGeminiModel === 'gemini-3.1-flash-lite' || activeGeminiModel === 'gemini-3.1-flash-lite-preview' }"
+                      @click="selectModel('gemini-3.1-flash-lite')"
+                    >
+                      <span class="item-icon">🏎️</span>
+                      <div class="item-info">
+                        <div class="item-header">
+                          <span class="item-name">Gemini 3.1 Flash Lite</span>
+                          <span class="item-badge zero">Zero Latency</span>
+                        </div>
+                        <span class="item-desc">Eficiência máxima / Latência zero</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="menu-section">
+                    <label>🧠 RACIOCÍNIO AVANÇADO & PRO</label>
+                    <div 
+                      class="menu-item" 
+                      :class="{ selected: activeGeminiModel === 'gemini-3.1-pro-preview' || activeGeminiModel === 'gemini-3.1-pro' || activeGeminiModel === 'gemini-3.1-pro-low' }"
                       @click="selectModel('gemini-3.1-pro-preview')"
                     >
                       <span class="item-icon">🧠</span>
                       <div class="item-info">
-                        <span class="item-name">3.1 Pro</span>
-                        <span class="item-desc">Máxima lógica e codificação</span>
+                        <div class="item-header">
+                          <span class="item-name">Gemini 3.1 Pro</span>
+                          <span class="item-badge pro">Low / Pro</span>
+                        </div>
+                        <span class="item-desc">Máxima lógica, refatoração e arquitetura</span>
                       </div>
                     </div>
                   </div>
 
                   <div class="menu-section">
-                    <label>🚀 ALTA VELOCIDADE</label>
+                    <label>🎭 CLAUDE (ANTHROPIC THINKING)</label>
                     <div 
                       class="menu-item" 
-                      :class="{ selected: activeGeminiModel === 'gemini-3.1-flash' }"
-                      @click="selectModel('gemini-3.1-flash')"
+                      :class="{ selected: activeGeminiModel === 'claude-sonnet-4-6' }"
+                      @click="selectModel('claude-sonnet-4-6')"
                     >
-                      <span class="item-icon">🚀</span>
+                      <span class="item-icon">✨</span>
                       <div class="item-info">
-                        <span class="item-name">3.1 Flash</span>
-                        <span class="item-desc">Respostas em milissegundos</span>
+                        <div class="item-header">
+                          <span class="item-name">Claude Sonnet 4.6</span>
+                          <span class="item-badge claude">Thinking</span>
+                        </div>
+                        <span class="item-desc">Engenharia fina e raciocínio profundo</span>
                       </div>
                     </div>
+
                     <div 
                       class="menu-item" 
-                      :class="{ selected: activeGeminiModel === 'gemini-3.1-flash-lite' }"
-                      @click="selectModel('gemini-3.1-flash-lite')"
+                      :class="{ selected: activeGeminiModel === 'claude-opus-4-6' }"
+                      @click="selectModel('claude-opus-4-6')"
                     >
-                      <span class="item-icon">⚡</span>
+                      <span class="item-icon">👑</span>
                       <div class="item-info">
-                        <span class="item-name">3.1 Flash Lite</span>
-                        <span class="item-desc">Eficiência máxima / Latência zero</span>
+                        <div class="item-header">
+                          <span class="item-name">Claude Opus 4.6</span>
+                          <span class="item-badge claude">Thinking</span>
+                        </div>
+                        <span class="item-desc">Máxima profundidade e auditoria de código</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="menu-section">
+                    <label>🌐 OPEN SOURCE (GROQ / OSS)</label>
+                    <div 
+                      class="menu-item" 
+                      :class="{ selected: activeGeminiModel === 'openai/gpt-oss-120b' || activeGeminiModel === 'gpt-oss-120b' }"
+                      @click="selectModel('openai/gpt-oss-120b')"
+                    >
+                      <span class="item-icon">🔮</span>
+                      <div class="item-info">
+                        <div class="item-header">
+                          <span class="item-name">GPT-OSS 120B</span>
+                          <span class="item-badge oss">Medium</span>
+                        </div>
+                        <span class="item-desc">Potência open-source de 120 bilhões</span>
                       </div>
                     </div>
                   </div>
@@ -201,13 +298,27 @@
 </template>
 
 <script setup>
-import { nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useOrchestratorStore } from '../stores/orchestrator';
 import { useSettingsStore } from '../stores/settings';
 
 const settings = useSettingsStore();
 const orchestrator = useOrchestratorStore();
-const activeGeminiModel = ref('auto-gemini-3');
+const activeGeminiModel = ref('gemini-3.8-flash-high');
+
+const currentModelLabel = computed(() => {
+  const m = activeGeminiModel.value;
+  if (m === 'gemini-3.8-flash-high' || m === 'gemini-3.8-flash') return 'Gemini 3.8 Flash';
+  if (m === 'gemini-3.7-flash-medium' || m === 'gemini-3.7-flash') return 'Gemini 3.7 Flash';
+  if (m === 'gemini-3.6-flash-medium' || m === 'gemini-3.6-flash') return 'Gemini 3.6 Flash';
+  if (m === 'gemini-3.1-pro-preview' || m === 'gemini-3.1-pro' || m === 'gemini-3.1-pro-low') return 'Gemini 3.1 Pro';
+  if (m === 'gemini-3.1-flash-lite' || m === 'gemini-3.1-flash-lite-preview') return 'Flash 3.1 Lite';
+  if (m === 'claude-sonnet-4-6') return 'Claude Sonnet 4.6';
+  if (m === 'claude-opus-4-6') return 'Claude Opus 4.6';
+  if (m === 'openai/gpt-oss-120b' || m === 'gpt-oss-120b') return 'GPT-OSS 120B';
+  if (m === 'auto-gemini-3') return 'Auto (Gemini 3)';
+  return 'Gemini';
+});
 
 onMounted(() => {
   if (settings.config.gemini_model) {
@@ -218,7 +329,7 @@ onMounted(() => {
 const showModelMenu = ref(false);
 
 const toggleModelMenu = () => {
-  if (selectedAgent.value !== 'gemini') {
+  if (selectedAgent.value !== 'gemini' && !activeGeminiModel.value.startsWith('claude-')) {
     selectedAgent.value = 'gemini';
     showModelMenu.value = true;
   } else {
@@ -233,7 +344,8 @@ const updateGeminiModel = async () => {
     // 🚀 Chama o backend para mudar o modelo e reiniciar a sessão se necessário
     const bridge = window.go?.core?.App || window.go?.main?.App;
     if (bridge && bridge.SetAgentModel) {
-      await bridge.SetAgentModel('gemini', activeGeminiModel.value);
+      const targetAgent = activeGeminiModel.value.startsWith('claude-') ? 'claude' : 'gemini';
+      await bridge.SetAgentModel(targetAgent, activeGeminiModel.value);
     }
   } catch (e) {
     console.error("[ChatInput] Erro ao trocar modelo no backend:", e);
@@ -243,13 +355,20 @@ const updateGeminiModel = async () => {
 const selectModel = async (modelId) => {
   activeGeminiModel.value = modelId;
   showModelMenu.value = false;
+  
+  if (modelId.startsWith('claude-')) {
+    selectedAgent.value = 'claude';
+  } else {
+    selectedAgent.value = 'gemini';
+  }
+  
   await updateGeminiModel();
 };
 
 // Fecha o menu ao clicar fora
 onMounted(() => {
   window.addEventListener('click', (e) => {
-    if (!e.target.closest('.agent-btn-wrapper')) {
+    if (!e.target.closest('.agent-pill')) {
       showModelMenu.value = false;
     }
   });
@@ -465,14 +584,23 @@ const sendMessage = () => {
   position: absolute;
   bottom: calc(100% + 12px);
   left: 0;
-  width: 240px;
+  width: 310px;
+  max-height: 440px;
+  overflow-y: auto;
   padding: 12px;
   border-radius: 16px;
-  background: rgba(15, 23, 42, 0.85);
-  backdrop-filter: blur(20px);
+  background: rgba(13, 20, 36, 0.95);
+  backdrop-filter: blur(25px);
   z-index: 1000;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+.model-dropdown-menu::-webkit-scrollbar {
+  width: 5px;
+}
+.model-dropdown-menu::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
 }
 
 .menu-section { margin-bottom: 12px; }
@@ -489,21 +617,41 @@ const sendMessage = () => {
 
 .menu-item {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  align-items: flex-start;
+  gap: 10px;
   padding: 8px 10px;
   border-radius: 10px;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
-.menu-item:hover { background: rgba(59, 130, 246, 0.1); }
-.menu-item.selected { background: rgba(59, 130, 246, 0.2); }
+.menu-item:hover { background: rgba(59, 130, 246, 0.12); }
+.menu-item.selected { background: rgba(59, 130, 246, 0.22); border-left: 3px solid #60a5fa; }
 
-.item-icon { font-size: 1.1rem; }
-.item-info { display: flex; flex-direction: column; }
+.item-icon { font-size: 1.1rem; margin-top: 1px; }
+.item-info { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.item-header { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 .item-name { font-size: 12px; font-weight: 700; color: #f1f5f9; }
-.item-desc { font-size: 10px; color: #94a3b8; }
+.item-desc { font-size: 10px; color: #94a3b8; line-height: 1.3; }
+
+/* Badges estilo Antigravity */
+.item-badge {
+  font-size: 8px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  line-height: 1.3;
+}
+.item-badge.high { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(96, 165, 250, 0.3); }
+.item-badge.med { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.25); }
+.item-badge.fast { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.25); }
+.item-badge.pro { background: rgba(168, 85, 247, 0.2); color: #c084fc; border: 1px solid rgba(192, 132, 252, 0.3); }
+.item-badge.claude { background: rgba(234, 88, 12, 0.2); color: #fb923c; border: 1px solid rgba(251, 146, 60, 0.3); }
+.item-badge.oss { background: rgba(14, 165, 233, 0.2); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); }
+.item-badge.zero { background: rgba(236, 72, 153, 0.15); color: #f472b6; border: 1px solid rgba(244, 114, 182, 0.25); }
+.item-badge.auto { background: rgba(139, 92, 246, 0.18); color: #a78bfa; border: 1px solid rgba(167, 139, 250, 0.3); }
 
 /* Transição de Menu */
 .menu-pop-enter-active, .menu-pop-leave-active {

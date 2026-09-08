@@ -184,9 +184,10 @@ func (e *ACPExecutor) SetSessionModel(sessionID string, model string) error {
 	// 🧪 Conforme bundle/gemini.js: método é 'unstable_setSessionModel' e exige 'modelId'
 	// Mapeia aliases "Auto" para modelos técnicos reais antes de enviar via RPC
 	targetModel := model
-	if model == "auto-gemini-3" {
-		targetModel = "gemini-3.1-pro-preview"
-	} else if model == "auto-gemini-2.5" {
+	switch model {
+	case "auto-gemini-3":
+		targetModel = "gemini-3.8-flash-high"
+	case "auto-gemini-2.5":
 		targetModel = "gemini-2.5-pro"
 	}
 
