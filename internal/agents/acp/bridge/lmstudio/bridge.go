@@ -145,8 +145,8 @@ func (b *bridge) fetchContextSize() {
 		Data []struct {
 			ID            string        `json:"id"`
 			Object        string        `json:"object"`
-			owned_by      string        `json:"owned_by"`
-			permission    []interface{} `json:"permission"`
+			OwnedBy       string        `json:"owned_by"`
+			Permission    []interface{} `json:"permission"`
 			ContextLength *int          `json:"context_length,omitempty"`
 		} `json:"data"`
 	}

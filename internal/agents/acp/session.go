@@ -373,6 +373,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		}
 
 		if agent == "native" {
+			cancel()
 			return fmt.Errorf("o motor de chat nativo (8087) foi desativado em favor do modo Híbrido Cloud-Local. Use Gemini ou Claude")
 		}
 
