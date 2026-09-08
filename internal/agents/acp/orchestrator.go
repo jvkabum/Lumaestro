@@ -3,6 +3,8 @@ package acp
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -122,6 +124,14 @@ func (o *Orchestrator) Execute(ctx context.Context, sessionID string, goal strin
 	// 3. Construir o Prompt com RAG + Histórico
 	// 🛡️ SEGURANÇA: Nunca injetar a ActiveOrbit real no prompt. Usamos o Workspace higienizado.
 	// ⚡ TOKEN-OPT: BuildContext permite injeção condicional de diretivas.
+	hasLessons := false
+	if o.executor.Workspace != "" {
+		lessonsDir := filepath.Join(o.executor.Workspace, ".lumaestro", "lessons")
+		if info, err := os.Stat(lessonsDir); err == nil && info.IsDir() {
+			hasLessons = true
+		}
+	}
+
 	finalPrompt := o.builder.Build(profile, BuildContext{
 		RAGContext: contextData,
 		History:    history,
@@ -129,7 +139,7 @@ func (o *Orchestrator) Execute(ctx context.Context, sessionID string, goal strin
 		Autonomous: o.executor.AutonomousMode,
 		Orbit:      o.executor.Workspace,
 		HasGraph:   true, // TODO: plugar ao estado real do grafo 3D
-		HasLessons: true, // TODO: plugar ao estado real do Lightning/APO
+		HasLessons: hasLessons,
 	})
 
 	// 4. Execução via ACP (Modo YOLO incluído no executor)
