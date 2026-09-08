@@ -213,19 +213,9 @@ const handleSessionEnded = (agent) => {
           </div>
         </div>
 
-        <!-- 🚀 [Verde] Identidade de Perfil -->
-        <div v-if="orchestrator.activeProfile" class="identity-badges">
-          <span 
-            class="active-agent-badge" 
-            :class="orchestrator.activeProfile.name.toLowerCase()"
-          >
-            {{ orchestrator.activeProfile.name.toUpperCase() }}
-          </span>
-        </div>
-      </div>
+        <div class="header-separator"></div>
 
-      <!-- 🪐 CENTRO: Botão de Pasta / Órbita Compacto -->
-      <div class="header-section section-center" v-show="!props.isMinimized">
+        <!-- 📂 Botão de Pasta / Órbita agrupado com a marca -->
         <div class="workspace-folder-wrapper">
           <button 
             type="button"
@@ -235,6 +225,7 @@ const handleSessionEnded = (agent) => {
             :title="orchestrator.workspace?.path ? 'Órbita: ' + orchestrator.workspace.path + ' (Clique para alternar)' : 'Nenhuma Órbita Ativa (Clique para escolher pasta)'"
           >
             <span class="folder-glyph">📂</span>
+            <span v-if="orchestrator.workspace?.path" class="folder-name">{{ orchestrator.workspace.path.split(/[/\\]/).pop() }}</span>
             <span class="folder-dot" :class="{ online: !!orchestrator.workspace?.path }"></span>
           </button>
           
@@ -272,6 +263,16 @@ const handleSessionEnded = (agent) => {
               </div>
             </div>
           </Transition>
+        </div>
+
+        <!-- 🚀 [Verde] Identidade de Perfil -->
+        <div v-if="orchestrator.activeProfile" class="identity-badges">
+          <span 
+            class="active-agent-badge" 
+            :class="orchestrator.activeProfile.name.toLowerCase()"
+          >
+            {{ orchestrator.activeProfile.name.toUpperCase() }}
+          </span>
         </div>
       </div>
 
@@ -524,12 +525,9 @@ const handleSessionEnded = (agent) => {
 
 .section-left {
   flex-shrink: 0;
-}
-
-.section-center {
-  flex: 1;
-  min-width: 0;
-  justify-content: center;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .section-right {
@@ -604,12 +602,12 @@ const handleSessionEnded = (agent) => {
 .active-agent-badge.standby { background: rgba(148, 163, 184, 0.1); color: #94a3b8; }
 
 
-/* 🪐 Mixer: Ilha de Workspace (Floating Island) */
-.header-section.section-center {
-  flex: 1;
-  display: flex;
-  justify-content: center;
-  pointer-events: none; /* Deixa cliques passarem para o grafo se necessário, mas os filhos reativam */
+
+.header-separator {
+  width: 1px;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 0 6px;
 }
 
 /* 📂 Botão de Pasta / Órbita Compacto */
@@ -617,8 +615,6 @@ const handleSessionEnded = (agent) => {
   position: relative;
   display: flex;
   align-items: center;
-  justify-content: center;
-  pointer-events: auto;
 }
 
 .workspace-folder-btn {
@@ -626,26 +622,25 @@ const handleSessionEnded = (agent) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  background: rgba(15, 23, 42, 0.5);
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
   cursor: pointer;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-  padding: 0;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .workspace-folder-btn:hover {
-  background: rgba(139, 92, 246, 0.15);
-  border-color: rgba(168, 85, 247, 0.4);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
   transform: translateY(-1px);
-  box-shadow: 0 6px 18px rgba(139, 92, 246, 0.25);
 }
 
 .workspace-folder-btn.has-workspace {
   border-color: rgba(139, 92, 246, 0.3);
+  background: rgba(139, 92, 246, 0.08);
 }
 
 .workspace-folder-btn.menu-open {
@@ -654,23 +649,28 @@ const handleSessionEnded = (agent) => {
 }
 
 .folder-glyph {
-  font-size: 16px;
-  transition: transform 0.2s ease;
+  font-size: 14px;
   line-height: 1;
 }
 
-.workspace-folder-btn:hover .folder-glyph {
-  transform: scale(1.1);
+.folder-name {
+  font-size: 11px;
+  font-weight: 700;
+  color: #e2e8f0;
+  max-width: 130px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-left: 5px;
+  margin-right: 3px;
 }
 
 .folder-dot {
-  position: absolute;
-  top: 5px;
-  right: 5px;
   width: 5px;
   height: 5px;
   border-radius: 50%;
   background: #64748b;
+  margin-left: 2px;
   transition: all 0.3s ease;
 }
 
@@ -725,15 +725,14 @@ const handleSessionEnded = (agent) => {
 /* Dropdown de Órbita */
 .orbit-dropdown {
   position: absolute;
-  top: calc(100% + 15px);
-  left: 50%;
-  transform: translateX(-50%);
-  width: 340px;
-  background: rgba(15, 23, 42, 0.95);
+  top: calc(100% + 8px);
+  left: 0;
+  width: 320px;
+  background: rgba(15, 23, 42, 0.96);
   backdrop-filter: blur(20px);
-  border-radius: 16px;
-  border: 1px solid rgba(139, 92, 246, 0.15); /* Soft purple border */
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.05) inset;
+  border-radius: 14px;
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
   padding: 8px;
   z-index: 1000;
   display: flex;
