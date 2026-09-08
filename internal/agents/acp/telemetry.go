@@ -36,9 +36,14 @@ func (h *ACPRpcHandler) logNetworkActivity() {
 
 // reportTurnCost calcula e registra o custo fixo por turno enquanto o CLI não expõe usage.usage.
 func (h *ACPRpcHandler) reportTurnCost() {
-	if h.Session.AgentID != uuid.Nil {
-		pt := h.Session.LastPromptTokens
-		ct := h.Session.LastCandidatesTokens
+	h.Session.ReportTurnCost(h.Executor)
+}
+
+// ReportTurnCost calcula e registra o custo fixo por turno e telemetria de tokens.
+func (s *ACPSession) ReportTurnCost(exec *ACPExecutor) {
+	if s.AgentID != uuid.Nil {
+		pt := s.LastPromptTokens
+		ct := s.LastCandidatesTokens
 		
 		// Fallback para valores padrão caso a telemetria tenha falhado
 		if pt == 0 { pt = 500 }
@@ -63,26 +68,26 @@ func (h *ACPRpcHandler) reportTurnCost() {
 		// RegistrarCusto espera costCents em INT
 		costCents := int(costUSD * 100)
 		
-		_ = orchestration.RegistrarCusto(h.Session.AgentID, h.Session.CurrentIssueID, "google", modelName, pt, ct, costCents)
+		_ = orchestration.RegistrarCusto(s.AgentID, s.CurrentIssueID, "google", modelName, pt, ct, costCents)
 		
 		// 📈 Acumular economia de cache
-		h.Session.TotalCacheTokens += h.Session.LastCacheTokens
+		s.TotalCacheTokens += s.LastCacheTokens
 
 		// Emitir evento de telemetria para o Dashboard (Wails)
-		if h.Executor.Ctx != nil {
-			utils.SafeEmit(h.Executor.Ctx, "agent:tokens", map[string]interface{}{
-				"agent":          h.Session.AgentName,
-				"prompt":         h.Session.LastPromptTokens,
-				"candidates":     h.Session.LastCandidatesTokens,
-				"cacheCurrent":   h.Session.LastCacheTokens,
-				"cacheTotal":     h.Session.TotalCacheTokens,
+		if exec != nil && exec.Ctx != nil {
+			utils.SafeEmit(exec.Ctx, "agent:tokens", map[string]interface{}{
+				"agent":          s.AgentName,
+				"prompt":         s.LastPromptTokens,
+				"candidates":     s.LastCandidatesTokens,
+				"cacheCurrent":   s.LastCacheTokens,
+				"cacheTotal":     s.TotalCacheTokens,
 				"costCentsTotal": costCents,
 			})
 		}
 
 		// Reseta para o próximo turno
-		h.Session.LastPromptTokens = 0
-		h.Session.LastCandidatesTokens = 0
-		h.Session.LastCacheTokens = 0
+		s.LastPromptTokens = 0
+		s.LastCandidatesTokens = 0
+		s.LastCacheTokens = 0
 	}
 }

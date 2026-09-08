@@ -105,6 +105,9 @@ type ACPSession struct {
 	// 🔒 Security & Policy (Plan Mode)
 	PlanMode bool
 
+	// 🚀 Antigravity Native Engine (agy.exe)
+	IsAntigravity bool
+
 	// 🌳 Session Hierarchy (Subagents)
 	ParentSessionID string                   `json:"parentSessionId,omitempty"`
 	Subagents       map[string]*ACPSession   `json:"-"`

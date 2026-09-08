@@ -19,6 +19,31 @@ import (
 	"github.com/google/uuid"
 )
 
+// findAntigravityBinary busca o executável oficial Antigravity CLI (agy / agy.exe).
+func findAntigravityBinary(workspace string) string {
+	userHome, _ := os.UserHomeDir()
+	candidates := []string{
+		os.Getenv("AGY_BIN"),
+		"agy",
+		"agy.exe",
+		filepath.Join(userHome, "AppData", "Local", "agy", "bin", "agy.exe"),
+		filepath.Join(userHome, ".gemini", "antigravity-cli", "bin", "agy.exe"),
+		filepath.Join(workspace, "bin", "agy.exe"),
+	}
+	for _, c := range candidates {
+		if c == "" {
+			continue
+		}
+		if p, err := exec.LookPath(c); err == nil {
+			return p
+		}
+		if _, err := os.Stat(c); err == nil {
+			return c
+		}
+	}
+	return ""
+}
+
 // StartSession inicia o Gemini CLI com a flag --acp. Se loadSessionID for fornecido, tenta restaurar essa sessão em vez de criar uma nova.
 func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID string, loadSessionID string, agentID uuid.UUID, issueID *uuid.UUID, planMode bool, parent *ACPSession) error {
 	e.Mu.Lock()
@@ -33,6 +58,10 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 			isHotSwap = true
 			session = s
 			fmt.Printf("[ACP] ♻️ Hot Swap: Reutilizando processo CLI nativo para o agente: %s\n", sessionID)
+			if s.IsAntigravity {
+				e.Mu.Unlock()
+				return nil
+			}
 		} else {
 			if s.Cancel != nil {
 				s.Cancel()
@@ -81,56 +110,96 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 		// 🚀 Resolução do Google Antigravity CLI / Servidor ACP Oficial
 		userHome, _ := os.UserHomeDir()
 		isGoogleAgent := (agent == "gemini" || agent == "antigravity" || agent == "agy")
+		isAntigravity := false
 		if isGoogleAgent {
-			// 1. Variável de ambiente explícita AGY_BIN
-			agyBinEnv := os.Getenv("AGY_BIN")
-			if agyBinEnv != "" {
-				if _, err := os.Stat(agyBinEnv); err == nil {
-					binaryPath = agyBinEnv
-					fmt.Printf("[ACP] 🚀 Usando AGY_BIN: %s\n", binaryPath)
-				}
-			}
+			agyPath := findAntigravityBinary(e.Workspace)
+			if agyPath != "" {
+				binaryPath = agyPath
+				isAntigravity = true
+				fmt.Printf("[ACP] 💎 Motor Nativo Antigravity CLI detectado: %s\n", binaryPath)
+				args = []string{"--input-format", "stream-json", "--output-format", "stream-json"}
 
-			// 2. Servidor ACP oficial de primeira entidade (agy_acp_server / agy_acp_server.exe)
-			if binaryPath == agent {
-				possibleServers := []string{
-					"agy_acp_server",
-					filepath.Join(userHome, "AppData", "Local", "agy", "bin", "agy_acp_server.exe"),
-					filepath.Join(userHome, ".gemini", "antigravity-cli", "bin", "agy_acp_server.exe"),
-					filepath.Join(e.Workspace, "bin", "agy_acp_server.exe"),
+				// Modo de Operação (Accept Edits / Plan)
+				if planMode {
+					args = append(args, "--mode=plan")
+				} else if e.AutonomousMode {
+					args = append(args, "--mode=accept-edits", "--dangerously-skip-permissions")
+				} else {
+					args = append(args, "--mode=accept-edits")
 				}
-				for _, srv := range possibleServers {
-					if path, err := exec.LookPath(srv); err == nil {
-						binaryPath = path
-						args = []string{} // Servidor autônomo já opera nativamente em JSON-RPC sobre stdio
-						fmt.Printf("[ACP] 💎 Servidor oficial Antigravity ACP detectado: %s\n", binaryPath)
-						break
-					} else if _, errStat := os.Stat(srv); errStat == nil {
-						binaryPath = srv
-						args = []string{}
-						fmt.Printf("[ACP] 💎 Servidor oficial Antigravity ACP detectado: %s\n", binaryPath)
-						break
+
+				// Isolamento Sandbox de Terminal
+				if cfgLoaded != nil && !cfgLoaded.Security.FullMachineAccess {
+					args = append(args, "--sandbox")
+				}
+
+				// Modelo Técnico
+				if cfgLoaded != nil && cfgLoaded.GeminiModel != "" && !strings.HasPrefix(cfgLoaded.GeminiModel, "auto-") {
+					args = append(args, "--model="+cfgLoaded.GeminiModel)
+					fmt.Printf("[ACP] 🎯 Modelo Antigravity: %s\n", cfgLoaded.GeminiModel)
+				}
+
+				// Continuação de Conversa
+				if loadSessionID != "" && loadSessionID != "LATEST" {
+					args = append(args, "--conversation="+loadSessionID)
+					fmt.Printf("[ACP] 🕰️ Resumindo conversa Antigravity: %s\n", loadSessionID)
+				}
+
+				// Diretório de Projeto
+				if e.Workspace != "" && e.Workspace != "." {
+					args = append(args, "--add-dir="+e.Workspace)
+				}
+			} else {
+				// Fallback para agy_acp_server ou gemini CLI clássico
+				agyBinEnv := os.Getenv("AGY_BIN")
+				if agyBinEnv != "" {
+					if _, err := os.Stat(agyBinEnv); err == nil {
+						binaryPath = agyBinEnv
+						fmt.Printf("[ACP] 🚀 Usando AGY_BIN: %s\n", binaryPath)
 					}
 				}
-			}
 
-			// 3. Se for 'antigravity' ou 'agy' e não tiver agy_acp_server, usa o fallback estável para gemini (com ACP)
-			if binaryPath == "antigravity" || binaryPath == "agy" {
-				binaryPath = "gemini"
-				fmt.Println("[ACP] 🔄 Modo ACP do Antigravity chaveado para motor compatível Gemini CLI")
+				if binaryPath == agent {
+					possibleServers := []string{
+						"agy_acp_server",
+						filepath.Join(userHome, "AppData", "Local", "agy", "bin", "agy_acp_server.exe"),
+						filepath.Join(userHome, ".gemini", "antigravity-cli", "bin", "agy_acp_server.exe"),
+						filepath.Join(e.Workspace, "bin", "agy_acp_server.exe"),
+					}
+					for _, srv := range possibleServers {
+						if path, err := exec.LookPath(srv); err == nil {
+							binaryPath = path
+							args = []string{}
+							fmt.Printf("[ACP] 💎 Servidor oficial Antigravity ACP detectado: %s\n", binaryPath)
+							break
+						} else if _, errStat := os.Stat(srv); errStat == nil {
+							binaryPath = srv
+							args = []string{}
+							fmt.Printf("[ACP] 💎 Servidor oficial Antigravity ACP detectado: %s\n", binaryPath)
+							break
+						}
+					}
+				}
+
+				if binaryPath == "antigravity" || binaryPath == "agy" {
+					binaryPath = "gemini"
+					fmt.Println("[ACP] 🔄 Modo ACP do Antigravity chaveado para motor compatível Gemini CLI")
+				}
 			}
 		}
 
-		// Injeção de argumentos adicionais via AGY_EXTRA_ARGS
-		if extraArgs := os.Getenv("AGY_EXTRA_ARGS"); extraArgs != "" {
-			args = append(args, strings.Fields(extraArgs)...)
-		}
+		if !isAntigravity {
+			// Injeção de argumentos adicionais via AGY_EXTRA_ARGS
+			if extraArgs := os.Getenv("AGY_EXTRA_ARGS"); extraArgs != "" {
+				args = append(args, strings.Fields(extraArgs)...)
+			}
 
-		// 💎 Injeção Dinâmica de Modelo (Gemini / Antigravity)
-		if isGoogleAgent && cfgLoaded != nil && cfgLoaded.GeminiModel != "" {
-			if !strings.HasPrefix(cfgLoaded.GeminiModel, "auto-") {
-				args = append(args, "--model="+cfgLoaded.GeminiModel)
-				fmt.Printf("[ACP] 🎯 Forçando modelo: %s\n", cfgLoaded.GeminiModel)
+			// 💎 Injeção Dinâmica de Modelo (Gemini clássico)
+			if isGoogleAgent && cfgLoaded != nil && cfgLoaded.GeminiModel != "" {
+				if !strings.HasPrefix(cfgLoaded.GeminiModel, "auto-") {
+					args = append(args, "--model="+cfgLoaded.GeminiModel)
+					fmt.Printf("[ACP] 🎯 Forçando modelo: %s\n", cfgLoaded.GeminiModel)
+				}
 			}
 		}
 
@@ -144,41 +213,43 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 			args = []string{"run", "./cmd/lmstudio-acp"}
 		}
 
-		// 1. Tenta binário global (LookPath)
-		if globalPath, errGL := exec.LookPath(binaryPath); errGL == nil {
-			binaryPath = globalPath
-		} else {
-			// 2. Fallback para node_modules local (estilo dev)
-			// IMPORTANTE: Busca no e.Workspace (root real)
-			binaryPath = filepath.Join(e.Workspace, "node_modules", ".bin", binaryPath+".cmd")
-		}
-
-		// [TRUQUE DE SINFONIA] Se estivermos no Windows e for o Gemini, o .cmd (tanto local quanto global)
-		// costuma engolir o Stdin em Pipes IPC, quebrando o JSON-RPC. Precisamos bypassar rodando via 'node'.
-		jsTarget := ""
-		if agent == "gemini" && strings.HasSuffix(binaryPath, ".cmd") {
-			baseDir := filepath.Dir(binaryPath)
-			// Tenta localizar o index.js ou gemini.js real
-			pathsToTry := []string{
-				filepath.Join(baseDir, "node_modules", "@google", "gemini-cli", "bundle", "gemini.js"),
-				filepath.Join(baseDir, "..", "@google", "gemini-cli", "bundle", "gemini.js"),
-				filepath.Join(baseDir, "node_modules", "@google", "gemini-cli", "dist", "index.js"),
-				filepath.Join(baseDir, "..", "@google", "gemini-cli", "dist", "index.js"),
+		if !isAntigravity {
+			// 1. Tenta binário global (LookPath)
+			if globalPath, errGL := exec.LookPath(binaryPath); errGL == nil {
+				binaryPath = globalPath
+			} else {
+				// 2. Fallback para node_modules local (estilo dev)
+				// IMPORTANTE: Busca no e.Workspace (root real)
+				binaryPath = filepath.Join(e.Workspace, "node_modules", ".bin", binaryPath+".cmd")
 			}
 
-			for _, p := range pathsToTry {
-				if _, err := os.Stat(p); err == nil {
-					if abs, errAbs := filepath.Abs(p); errAbs == nil {
-						jsTarget = abs
-						break
+			// [TRUQUE DE SINFONIA] Se estivermos no Windows e for o Gemini, o .cmd (tanto local quanto global)
+			// costuma engolir o Stdin em Pipes IPC, quebrando o JSON-RPC. Precisamos bypassar rodando via 'node'.
+			jsTarget := ""
+			if agent == "gemini" && strings.HasSuffix(binaryPath, ".cmd") {
+				baseDir := filepath.Dir(binaryPath)
+				// Tenta localizar o index.js ou gemini.js real
+				pathsToTry := []string{
+					filepath.Join(baseDir, "node_modules", "@google", "gemini-cli", "bundle", "gemini.js"),
+					filepath.Join(baseDir, "..", "@google", "gemini-cli", "bundle", "gemini.js"),
+					filepath.Join(baseDir, "node_modules", "@google", "gemini-cli", "dist", "index.js"),
+					filepath.Join(baseDir, "..", "@google", "gemini-cli", "dist", "index.js"),
+				}
+
+				for _, p := range pathsToTry {
+					if _, err := os.Stat(p); err == nil {
+						if abs, errAbs := filepath.Abs(p); errAbs == nil {
+							jsTarget = abs
+							break
+						}
 					}
 				}
-			}
 
-			if jsTarget != "" {
-				binaryPath = "node"
-				args = append([]string{jsTarget}, args...)
-				fmt.Printf("[ACP] 🚀 Bypass Windows: Rodando via Node com caminho absoluto: %s (args: %v)\n", jsTarget, args)
+				if jsTarget != "" {
+					binaryPath = "node"
+					args = append([]string{jsTarget}, args...)
+					fmt.Printf("[ACP] 🚀 Bypass Windows: Rodando via Node com caminho absoluto: %s (args: %v)\n", jsTarget, args)
+				}
 			}
 		}
 
@@ -190,10 +261,14 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 
 		cmd := exec.CommandContext(cmdCtx, binaryPath, args...)
 		
-		// 🛡️ ISOLAMENTO FÍSICO REAL: Agora o processo inicia dentro do Sandbox.
-		// Como usamos caminhos absolutos acima, ele não se perderá mais.
-		cmd.Dir = sandboxPath
-		fmt.Printf("[ACP] 🛡️ MODO HERMÉTICO: Processo iniciado na Célula: %s\n", sandboxPath)
+		// Diretório de trabalho do processo
+		if isAntigravity && e.Workspace != "" && e.Workspace != "." {
+			cmd.Dir = e.Workspace
+			fmt.Printf("[ACP] 🚀 Antigravity iniciado no Workspace: %s\n", e.Workspace)
+		} else {
+			cmd.Dir = sandboxPath
+			fmt.Printf("[ACP] 🛡️ MODO HERMÉTICO: Processo iniciado na Célula: %s\n", sandboxPath)
+		}
 
 		// 🛡️ HERANÇA E AJUSTE DE MÓDULOS: Mantém o ambiente e garante que o Node ache as bibliotecas
 		cmd.Env = os.Environ()
@@ -352,7 +427,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 
 		session = &ACPSession{
 			ID:             sessionID,
-			ACPSessID:      "", // Aguarda o ID real retornado pelo comando 'newSession'
+			ACPSessID:      "", // Aguarda o ID real retornado pelo comando 'newSession' ou 'init' do Antigravity
 			AgentName:      agent,
 			Cmd:            cmd,
 			Stdin:          stdin,
@@ -365,6 +440,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 			RolloutID:      rolloutID,
 			AttemptID:      attemptID,
 			PlanMode:       planMode,
+			IsAntigravity:  isAntigravity,
 			Subagents:      make(map[string]*ACPSession),
 		}
 
@@ -409,7 +485,11 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 
 		utils.SafeEmit(e.Ctx, "agent:starting", agent)
 
-		go e.runRPCListener(session, stdout)
+		if isAntigravity {
+			go e.runAntigravityListener(session, stdout)
+		} else {
+			go e.runRPCListener(session, stdout)
+		}
 		go e.runStderrMonitor(session, stderr)
 
 		go func() {
@@ -441,6 +521,24 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 				}
 			}
 		}()
+
+		// 🚀 Inicialização rápida do Antigravity CLI (dispensa RPC initialize/authenticate)
+		if isAntigravity {
+			select {
+			case <-session.initDone:
+				fmt.Printf("[AGY] ✅ Sessão Antigravity pronta (Conversation ID: %s)\n", session.ACPSessID)
+			case <-time.After(15 * time.Second):
+				fmt.Println("[AGY] ⚠️ Timeout aguardando init do Antigravity CLI, prosseguindo...")
+			}
+
+			if session.ACPSessID != "" {
+				lastSessionPath := filepath.Join(e.Workspace, ".lumaestro", "last_session.json")
+				_ = os.MkdirAll(filepath.Dir(lastSessionPath), 0755)
+				_ = os.WriteFile(lastSessionPath, []byte(fmt.Sprintf(`{"sessionId":"%s"}`, session.ACPSessID)), 0644)
+			}
+
+			return nil
+		}
 
 		initID := e.getNextID()
 		e.SendRPC(session, JSONRPCMessage{

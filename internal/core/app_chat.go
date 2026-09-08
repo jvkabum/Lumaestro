@@ -420,8 +420,16 @@ func (a *App) SetPlanMode(agent string, enabled bool) bool {
 	a.executor.Mu.Unlock()
 
 	if ok {
+		prevMode := session.PlanMode
 		session.PlanMode = enabled
 		fmt.Printf("[App] 🛡️ Plan Mode alterado para %v na sessão %s\n", enabled, agent)
+
+		// Se for sessão Antigravity e o modo mudou, reinicia o processo com a nova flag de modo
+		if session.IsAntigravity && prevMode != enabled {
+			go func() {
+				_ = a.executor.StartSession(a.ctx, session.AgentName, session.ID, session.ACPSessID, session.AgentID, session.CurrentIssueID, enabled, nil)
+			}()
+		}
 
 		status := "Modo Execução (⚡) ativado"
 		if enabled {

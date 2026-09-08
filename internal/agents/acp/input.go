@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"Lumaestro/internal/utils"
 )
 
 // SendInput envia texto para uma sessão ativa da IA via RPC 'prompt', suportando imagens em base64.
@@ -35,6 +37,57 @@ func (e *ACPExecutor) SendInput(sessionID string, input string, images []map[str
 		if session.ACPSessID == "" {
 			return fmt.Errorf("sessão não initializada completamente (sem ACP sessionId)")
 		}
+	}
+
+	// 🚀 Antigravity CLI: Envia evento stream-json diretamente pelo stdin
+	if session.IsAntigravity {
+		userEvt := map[string]interface{}{
+			"event": "user",
+			"message": map[string]interface{}{
+				"content": input,
+			},
+		}
+		data, err := json.Marshal(userEvt)
+		if err != nil {
+			return err
+		}
+
+		session.WriteMu.Lock()
+		fmt.Printf(">> [AGY SEND] %s\n", string(data))
+		_, err = fmt.Fprintln(session.Stdin, string(data))
+		session.WriteMu.Unlock()
+		if err != nil {
+			return err
+		}
+
+		// 🐕 WATCHDOG DE TURNO: Se o Antigravity não responder em 45s, destrava o frontend
+		go func() {
+			time.Sleep(45 * time.Second)
+
+			e.Mu.Lock()
+			_, stillActive := e.ActiveSessions[sessionID]
+			e.Mu.Unlock()
+			if !stillActive {
+				return
+			}
+
+			e.turnMu.Lock()
+			_, turnPending := e.turnChannels[sessionID]
+			e.turnMu.Unlock()
+
+			if turnPending {
+				fmt.Printf("[AGY] ⚠️ WATCHDOG: Turno sem resposta após 45s no Antigravity.\n")
+				e.LogChan <- ExecutionLog{
+					Source:  "SYSTEM",
+					Content: "🟡 O motor Antigravity demorou mais de 45s para responder. Destravando frontend.",
+				}
+				if e.Ctx != nil {
+					utils.SafeEmit(e.Ctx, "agent:turn_complete", session.AgentName)
+				}
+			}
+		}()
+
+		return nil
 	}
 
 	// 🧠 Construção do Prompt Multimodal (Texto + Imagens)

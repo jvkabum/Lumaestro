@@ -191,6 +191,17 @@ func (e *ACPExecutor) SetSessionModel(sessionID string, model string) error {
 		targetModel = "gemini-2.5-pro"
 	}
 
+	// 🚀 Antigravity CLI: Reinicia o processo com o novo modelo preservando a conversa
+	if session.IsAntigravity {
+		cfg, _ := config.Load()
+		if cfg != nil {
+			cfg.GeminiModel = targetModel
+			_ = config.Save(*cfg)
+		}
+		fmt.Printf("[AGY] 🔄 Trocando modelo Antigravity para %s (Sessão: %s)...\n", targetModel, session.ACPSessID)
+		return e.StartSession(e.Ctx, session.AgentName, session.ID, session.ACPSessID, session.AgentID, session.CurrentIssueID, session.PlanMode, nil)
+	}
+
 	fmt.Printf("[ACP] >> Solicitando troca de modelo para: %s (Sessão: %s)\n", targetModel, session.ACPSessID)
 
 	params, _ := json.Marshal(map[string]interface{}{
