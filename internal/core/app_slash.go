@@ -43,8 +43,7 @@ type WorkspaceDiffResult struct {
 	DiffText   string   `json:"diffText"`
 }
 
-// GetCustomAgents lista os agentes customizados descobertos nos diretorios locais e globais.
-func (a *App) GetCustomAgents() ([]acp.CustomAgent, error) {
+func (a *App) getActiveWorkspace() string {
 	ws := ""
 	if a.executor != nil {
 		ws = a.executor.Workspace
@@ -52,6 +51,184 @@ func (a *App) GetCustomAgents() ([]acp.CustomAgent, error) {
 	if ws == "" && a.config != nil {
 		ws = a.config.ActiveWorkspace
 	}
+	return ws
+}
+
+// SlashCommandItem representa um item de comando slash com metadados para o autocomplete do chat.
+type SlashCommandItem struct {
+	Command  string `json:"command"`
+	Icon     string `json:"icon"`
+	Type     string `json:"type"` // "builtin", "skill", "agent"
+	Desc     string `json:"desc"`
+	Template string `json:"template,omitempty"`
+	Action   string `json:"action,omitempty"`
+	Scope    string `json:"scope,omitempty"`
+}
+
+// GetAvailableSlashCommands reúne comandos built-in, agentes customizados e skills dinâmicas do Antigravity.
+func (a *App) GetAvailableSlashCommands() ([]SlashCommandItem, error) {
+	ws := a.getActiveWorkspace()
+
+	// 1. Comandos nativos e essenciais do Lumaestro / Antigravity CLI
+	commands := []SlashCommandItem{
+		{
+			Command:  "/boost",
+			Icon:     "🚀",
+			Type:     "builtin",
+			Desc:     "Raciocínio profundo estruturado em 3 fases (Decomposição, Solução, Auto-correção)",
+			Template: "/boost ",
+			Scope:    "builtin",
+		},
+		{
+			Command:  "/teamwork-preview",
+			Icon:     "🤝",
+			Type:     "builtin",
+			Desc:     "Enxame multi-agente colaborativo com portas de validação",
+			Template: "/teamwork-preview ",
+			Scope:    "builtin",
+		},
+		{
+			Command: "/agents",
+			Icon:    "🐝",
+			Type:    "builtin",
+			Desc:    "Abrir Agent Manager (monitorar subagentes e descobrir agentes customizados)",
+			Action:  "agents",
+			Scope:   "builtin",
+		},
+		{
+			Command: "/codesearch",
+			Icon:    "🔎",
+			Type:    "builtin",
+			Desc:    "Pesquisa avançada de símbolos e código no workspace (ou /cs)",
+			Action:  "codesearch",
+			Scope:   "builtin",
+		},
+		{
+			Command: "/diff",
+			Icon:    "📑",
+			Type:    "builtin",
+			Desc:    "Visualizar status do Git e diff unificado de alterações",
+			Action:  "diff",
+			Scope:   "builtin",
+		},
+		{
+			Command: "/artifact",
+			Icon:    "📜",
+			Type:    "builtin",
+			Desc:    "Revisão e co-steering de artefatos de código (atalho Ctrl+R)",
+			Action:  "artifact",
+			Scope:   "builtin",
+		},
+		{
+			Command: "/fork",
+			Icon:    "🌿",
+			Type:    "builtin",
+			Desc:    "Ramificar sessão de chat atual em uma nova trilha independente",
+			Action:  "fork",
+			Scope:   "builtin",
+		},
+		{
+			Command:  "/rename",
+			Icon:     "✏️",
+			Type:     "builtin",
+			Desc:     "Renomear o título da sessão ativa",
+			Template: "/rename ",
+			Scope:    "builtin",
+		},
+		{
+			Command: "/permissions",
+			Icon:    "🛡️",
+			Type:    "builtin",
+			Desc:    "Inspecionar políticas de segurança, sandbox e ferramentas",
+			Action:  "permissions",
+			Scope:   "builtin",
+		},
+		{
+			Command: "/plan",
+			Icon:    "🔒",
+			Type:    "builtin",
+			Desc:    "Alternar Modo de Execução (default / accept-edits / plan)",
+			Action:  "plan",
+			Scope:   "builtin",
+		},
+		{
+			Command: "/voice",
+			Icon:    "🎙️",
+			Type:    "builtin",
+			Desc:    "Alternar ditado por voz em tempo real (atalho F5)",
+			Action:  "voice",
+			Scope:   "builtin",
+		},
+		{
+			Command: "/usage",
+			Icon:    "📊",
+			Type:    "builtin",
+			Desc:    "Exibir telemetria de consumo de tokens, contexto e cotas",
+			Action:  "usage",
+			Scope:   "builtin",
+		},
+		{
+			Command: "/clear",
+			Icon:    "🧹",
+			Type:    "builtin",
+			Desc:    "Limpar mensagens da janela de chat atual",
+			Action:  "clear",
+			Scope:   "builtin",
+		},
+	}
+
+	seen := make(map[string]bool)
+	for _, c := range commands {
+		seen[strings.ToLower(c.Command)] = true
+	}
+
+	// 2. Agentes Customizados (.agents/agents/ ou ~/.gemini/config/agents/)
+	if customAgents, err := acp.DiscoverCustomAgents(ws); err == nil {
+		for _, agent := range customAgents {
+			cmd := "/" + agent.Name
+			if !seen[strings.ToLower(cmd)] {
+				seen[strings.ToLower(cmd)] = true
+				commands = append(commands, SlashCommandItem{
+					Command:  cmd,
+					Icon:     "🤖",
+					Type:     "agent",
+					Desc:     agent.Description,
+					Template: cmd + " ",
+					Scope:    agent.Scope,
+				})
+			}
+		}
+	}
+
+	// 3. Habilidades Dinâmicas (.agents/skills/, ~/.gemini/config/skills/, etc.)
+	if skills, err := acp.DiscoverSkills(ws); err == nil {
+		for _, skill := range skills {
+			if !seen[strings.ToLower(skill.Command)] {
+				seen[strings.ToLower(skill.Command)] = true
+				commands = append(commands, SlashCommandItem{
+					Command:  skill.Command,
+					Icon:     "🛠️",
+					Type:     "skill",
+					Desc:     skill.Description,
+					Template: skill.Command + " ",
+					Scope:    skill.Scope,
+				})
+			}
+		}
+	}
+
+	return commands, nil
+}
+
+// GetDiscoveredSkills retorna a lista de todas as habilidades escaneadas.
+func (a *App) GetDiscoveredSkills() ([]acp.SkillItem, error) {
+	ws := a.getActiveWorkspace()
+	return acp.DiscoverSkills(ws)
+}
+
+// GetCustomAgents lista os agentes customizados descobertos nos diretorios locais e globais.
+func (a *App) GetCustomAgents() ([]acp.CustomAgent, error) {
+	ws := a.getActiveWorkspace()
 	return acp.DiscoverCustomAgents(ws)
 }
 

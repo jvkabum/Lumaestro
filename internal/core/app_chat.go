@@ -104,6 +104,48 @@ func (a *App) SendAgentInput(agent string, input string, images []map[string]str
 		task := strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(trimmedInput, "/teamwork-preview"), "/teamwork"))
 		a.emitAgentStatus(agent, "👥 Teamwork: Orquestrando equipe colaborativa com portões de verificação...", "status")
 		input = fmt.Sprintf("[EQUIPE COLABORATIVA — TEAMWORK ATIVO]\nVocê está operando como o Sentinel e Project Orchestrator de uma equipe multi-agente:\n- Sentinel: Coordena a execução, roteia tarefas e posta atualizações de progresso.\n- Project Orchestrator: Divide o escopo em marcos claros, delega unidades de trabalho e previne degradação de contexto.\n- Explorers: Investigam o repositório sem modificar arquivos.\n- Workers: Constroem e refatoram código em faixas não sobrepostas.\n- Portões de Verificação (Critic, Challenger, Auditor e Success Auditor): Validam a integridade e realizam stress-testing antes de concluir cada marco.\n\nPROJETO / OBJETIVO: %s", task)
+	} else if strings.HasPrefix(trimmedInput, "/") {
+		parts := strings.SplitN(trimmedInput, " ", 2)
+		cmdName := strings.TrimPrefix(parts[0], "/")
+		userArgs := ""
+		if len(parts) > 1 {
+			userArgs = strings.TrimSpace(parts[1])
+		}
+
+		ws := a.getActiveWorkspace()
+		// 1. Verifica se corresponde a uma Habilidade Dinâmica (Skill)
+		matchedSkill := false
+		if skillsList, err := acp.DiscoverSkills(ws); err == nil {
+			for _, sk := range skillsList {
+				if strings.EqualFold(sk.Name, cmdName) {
+					matchedSkill = true
+					a.emitAgentStatus(agent, fmt.Sprintf("🛠️ Habilidade: Ativando '%s'...", sk.Name), "status")
+					if userArgs == "" {
+						userArgs = "Aplique os procedimentos, ferramentas e diretrizes desta habilidade ao projeto."
+					}
+					input = fmt.Sprintf("[HABILIDADE ATIVA: %s]\n%s\n\nDIRETRIZES DA HABILIDADE:\n%s\n\nSOLICITAÇÃO DO USUÁRIO:\n%s",
+						sk.Name, sk.Description, sk.Content, userArgs)
+					break
+				}
+			}
+		}
+
+		// 2. Se não foi skill, verifica se corresponde a um Custom Agent
+		if !matchedSkill {
+			if customAgents, err := acp.DiscoverCustomAgents(ws); err == nil {
+				for _, ca := range customAgents {
+					if strings.EqualFold(ca.Name, cmdName) {
+						a.emitAgentStatus(agent, fmt.Sprintf("🤖 Agente Customizado: Ativando '%s'...", ca.Name), "status")
+						if userArgs == "" {
+							userArgs = "Atue conforme suas instruções e diretrizes de persona no workspace atual."
+						}
+						input = fmt.Sprintf("[AGENTE CUSTOMIZADO: %s]\n%s\n\nINSTRUÇÕES DO AGENTE:\n%s\n\nSOLICITAÇÃO DO USUÁRIO:\n%s",
+							ca.Name, ca.Description, ca.Prompt, userArgs)
+						break
+					}
+				}
+			}
+		}
 	}
 
 	// ⚡ Log Premium e Limpo

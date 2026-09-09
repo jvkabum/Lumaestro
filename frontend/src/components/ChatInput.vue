@@ -280,7 +280,11 @@
             >
               <span class="slash-icon">{{ cmd.icon }}</span>
               <div class="slash-info">
-                <span class="slash-name">{{ cmd.command }}</span>
+                <div class="slash-title-row">
+                  <span class="slash-name">{{ cmd.command }}</span>
+                  <span v-if="cmd.type" class="slash-badge" :class="cmd.type">{{ cmd.type }}</span>
+                  <span v-if="cmd.scope && cmd.scope !== 'builtin'" class="slash-scope">{{ cmd.scope }}</span>
+                </div>
                 <span class="slash-desc">{{ cmd.desc }}</span>
               </div>
             </div>
@@ -406,6 +410,7 @@ onMounted(() => {
   if (settings.config.gemini_model) {
     activeGeminiModel.value = settings.config.gemini_model;
   }
+  loadSlashCommands();
 });
 
 const showModelMenu = ref(false);
@@ -534,27 +539,47 @@ watch(messageText, () => {
 // ==========================================
 // ⚡ SLASH COMMANDS & AUTOCOMPLETE (Antigravity)
 // ==========================================
-const slashCommands = [
-  { command: '/boost', icon: '🚀', desc: 'Raciocínio profundo estruturado em 3 fases (Decomposição, Solução, Auto-correção)', template: '/boost ' },
-  { command: '/teamwork-preview', icon: '🤝', desc: 'Enxame multi-agente colaborativo com portas de validação', template: '/teamwork-preview ' },
-  { command: '/agents', icon: '🐝', desc: 'Abrir Agent Manager (monitorar subagentes e descobrir agentes customizados)', action: 'agents' },
-  { command: '/codesearch', icon: '🔎', desc: 'Pesquisa avançada de símbolos e código no workspace (ou /cs)', action: 'codesearch' },
-  { command: '/diff', icon: '📑', desc: 'Visualizar status do Git e diff unificado de alterações', action: 'diff' },
-  { command: '/permissions', icon: '🛡️', desc: 'Inspecionar políticas de segurança, sandbox e ferramentas', action: 'permissions' },
-  { command: '/voice', icon: '🎙️', desc: 'Alternar ditado por voz em tempo real (atalho F5)', action: 'voice' },
-  { command: '/plan', icon: '🔒', desc: 'Alternar Modo Plano de Execução (somente leitura)', action: 'plan' },
-  { command: '/usage', icon: '📊', desc: 'Exibir telemetria de consumo de tokens, contexto e cotas', action: 'usage' },
-  { command: '/clear', icon: '🧹', desc: 'Limpar mensagens da janela de chat atual', action: 'clear' },
-];
+const availableSlashCommands = ref([
+  { command: '/boost', icon: '🚀', desc: 'Raciocínio profundo estruturado em 3 fases (Decomposição, Solução, Auto-correção)', template: '/boost ', type: 'builtin' },
+  { command: '/teamwork-preview', icon: '🤝', desc: 'Enxame multi-agente colaborativo com portas de validação', template: '/teamwork-preview ', type: 'builtin' },
+  { command: '/agents', icon: '🐝', desc: 'Abrir Agent Manager (monitorar subagentes e descobrir agentes customizados)', action: 'agents', type: 'builtin' },
+  { command: '/codesearch', icon: '🔎', desc: 'Pesquisa avançada de símbolos e código no workspace (ou /cs)', action: 'codesearch', type: 'builtin' },
+  { command: '/diff', icon: '📑', desc: 'Visualizar status do Git e diff unificado de alterações', action: 'diff', type: 'builtin' },
+  { command: '/artifact', icon: '📜', desc: 'Revisão e co-steering de artefatos de código (atalho Ctrl+R)', action: 'artifact', type: 'builtin' },
+  { command: '/fork', icon: '🌿', desc: 'Ramificar sessão de chat atual em uma nova trilha independente', action: 'fork', type: 'builtin' },
+  { command: '/rename', icon: '✏️', desc: 'Renomear o título da sessão ativa', template: '/rename ', type: 'builtin' },
+  { command: '/permissions', icon: '🛡️', desc: 'Inspecionar políticas de segurança, sandbox e ferramentas', action: 'permissions', type: 'builtin' },
+  { command: '/voice', icon: '🎙️', desc: 'Alternar ditado por voz em tempo real (atalho F5)', action: 'voice', type: 'builtin' },
+  { command: '/plan', icon: '🔒', desc: 'Alternar Modo de Execução (default / accept-edits / plan)', action: 'plan', type: 'builtin' },
+  { command: '/usage', icon: '📊', desc: 'Exibir telemetria de consumo de tokens, contexto e cotas', action: 'usage', type: 'builtin' },
+  { command: '/clear', icon: '🧹', desc: 'Limpar mensagens da janela de chat atual', action: 'clear', type: 'builtin' },
+]);
 
 const showSlashMenu = ref(false);
 const selectedSlashIndex = ref(0);
+
+const loadSlashCommands = async () => {
+  try {
+    const bridge = window.go?.core?.App || window.go?.main?.App;
+    if (bridge && typeof bridge.GetAvailableSlashCommands === 'function') {
+      const cmds = await bridge.GetAvailableSlashCommands();
+      if (cmds && cmds.length > 0) {
+        availableSlashCommands.value = cmds;
+      }
+    }
+  } catch (err) {
+    console.warn('[ChatInput] Falha ao carregar slash commands dinâmicos:', err);
+  }
+};
 
 const filteredSlashCommands = computed(() => {
   const text = messageText.value.trim().toLowerCase();
   if (!text.startsWith('/')) return [];
   const query = text.substring(1);
-  return slashCommands.filter(c => c.command.toLowerCase().includes(query));
+  return availableSlashCommands.value.filter(c => 
+    c.command.toLowerCase().includes(query) || 
+    (c.desc && c.desc.toLowerCase().includes(query))
+  );
 });
 
 watch(messageText, (newVal) => {
@@ -573,7 +598,9 @@ const applySlashCommand = (cmd) => {
     else if (cmd.action === 'diff') orchestrator.toggleDiffViewer(true);
     else if (cmd.action === 'permissions') orchestrator.togglePermissionsModal(true);
     else if (cmd.action === 'voice') toggleVoice();
-    else if (cmd.action === 'plan') orchestrator.togglePlanMode(selectedAgent.value);
+    else if (cmd.action === 'plan') orchestrator.cycleExecutionMode();
+    else if (cmd.action === 'artifact') orchestrator.toggleArtifactModal(true);
+    else if (cmd.action === 'fork') orchestrator.forkSession();
     else if (cmd.action === 'clear') orchestrator.messages = [];
     else if (cmd.action === 'usage') {
       const stats = orchestrator.modelStats?.info || 'Nenhuma estatística de telemetria registrada no momento.';
@@ -586,6 +613,8 @@ const applySlashCommand = (cmd) => {
     messageText.value = '';
   } else if (cmd.template) {
     messageText.value = cmd.template;
+  } else {
+    messageText.value = cmd.command + ' ';
   }
   showSlashMenu.value = false;
   nextTick(() => {
@@ -1418,7 +1447,13 @@ textarea::placeholder {
 .slash-info {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
+}
+
+.slash-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .slash-name {
@@ -1426,6 +1461,41 @@ textarea::placeholder {
   font-weight: 700;
   color: #60a5fa;
   font-family: monospace;
+}
+
+.slash-badge {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+}
+
+.slash-badge.builtin {
+  background: rgba(59, 130, 246, 0.2);
+  color: #93c5fd;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.slash-badge.skill {
+  background: rgba(16, 185, 129, 0.2);
+  color: #6ee7b7;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.slash-badge.agent {
+  background: rgba(168, 85, 247, 0.2);
+  color: #d8b4fe;
+  border: 1px solid rgba(168, 85, 247, 0.3);
+}
+
+.slash-scope {
+  font-size: 9px;
+  color: #64748b;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 1px 5px;
+  border-radius: 3px;
 }
 
 .slash-desc {

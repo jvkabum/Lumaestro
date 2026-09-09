@@ -128,4 +128,106 @@ func TestAppSlashOperations(t *testing.T) {
 			t.Fatalf("Esperava resultado nao nulo para diff")
 		}
 	})
+
+	// Teste GetAvailableSlashCommands e Skills Dinâmicas
+	t.Run("GetAvailableSlashCommands e Skills", func(t *testing.T) {
+		// Criar uma skill temporária no workspace: .agents/skills/data-quality/SKILL.md
+		skillDir := filepath.Join(tempDir, ".agents", "skills", "data-quality")
+		_ = os.MkdirAll(skillDir, 0755)
+		skillMd := "---\nname: data-quality\ndescription: Validador de dados automatizado\n---\nRegras de qualidade de dados."
+		_ = os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMd), 0644)
+
+		cmds, err := app.GetAvailableSlashCommands()
+		if err != nil {
+			t.Fatalf("GetAvailableSlashCommands falhou: %v", err)
+		}
+
+		foundBoost := false
+		foundAgent := false
+		foundSkill := false
+
+		for _, c := range cmds {
+			if c.Command == "/boost" {
+				foundBoost = true
+			}
+			if c.Command == "/SuperAgent" {
+				foundAgent = true
+			}
+			if c.Command == "/data-quality" {
+				foundSkill = true
+				if c.Type != "skill" {
+					t.Errorf("Tipo esperado 'skill', obteve %s", c.Type)
+				}
+			}
+		}
+
+		if !foundBoost {
+			t.Errorf("Comando built-in /boost nao encontrado")
+		}
+		if !foundAgent {
+			t.Errorf("Custom Agent /SuperAgent nao encontrado nos slash commands")
+		}
+		if !foundSkill {
+			t.Errorf("Dynamic Skill /data-quality nao encontrada nos slash commands")
+		}
+	})
+
+	// Teste MCP Configuração Padronizada (Workspace & Global)
+	t.Run("MCP Configuration", func(t *testing.T) {
+		// Salva servidor MCP no workspace
+		msg, err := app.SaveMCPServerConfig("my-postgres", "npx -y @modelcontextprotocol/server-postgres", false)
+		if err != nil {
+			t.Fatalf("SaveMCPServerConfig falhou: %v", err)
+		}
+		if msg == "" {
+			t.Errorf("Mensagem vazia retornada")
+		}
+
+		// Salva servidor MCP SSE (URL) no workspace
+		_, errUrl := app.SaveMCPServerConfig("remote-mcp", "https://api.example.com/sse", false)
+		if errUrl != nil {
+			t.Fatalf("SaveMCPServerConfig para URL falhou: %v", errUrl)
+		}
+
+		list, errList := app.GetMCPServersList()
+		if errList != nil {
+			t.Fatalf("GetMCPServersList falhou: %v", errList)
+		}
+
+		foundStdio := false
+		foundSSE := false
+		for _, s := range list {
+			if s.Name == "my-postgres" {
+				foundStdio = true
+				if s.Type != "stdio" {
+					t.Errorf("Esperava tipo stdio, obteve %s", s.Type)
+				}
+			}
+			if s.Name == "remote-mcp" {
+				foundSSE = true
+				if s.Type != "sse" {
+					t.Errorf("Esperava tipo sse, obteve %s", s.Type)
+				}
+				if s.ServerURL != "https://api.example.com/sse" {
+					t.Errorf("URL incorreta: %s", s.ServerURL)
+				}
+			}
+		}
+
+		if !foundStdio {
+			t.Errorf("Servidor MCP stdio nao encontrado na lista")
+		}
+		if !foundSSE {
+			t.Errorf("Servidor MCP SSE nao encontrado na lista")
+		}
+
+		// Remove servidor MCP
+		delMsg, errDel := app.RemoveMCPServerConfig("remote-mcp", false)
+		if errDel != nil {
+			t.Fatalf("RemoveMCPServerConfig falhou: %v", errDel)
+		}
+		if delMsg == "" {
+			t.Errorf("Mensagem vazia ao deletar")
+		}
+	})
 }

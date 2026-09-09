@@ -114,12 +114,20 @@ export function GetAutonomousMode() {
   return window['go']['core']['App']['GetAutonomousMode']();
 }
 
+export function GetAvailableSlashCommands() {
+  return window['go']['core']['App']['GetAvailableSlashCommands']();
+}
+
 export function GetConfig() {
   return window['go']['core']['App']['GetConfig']();
 }
 
 export function GetCustomAgents() {
   return window['go']['core']['App']['GetCustomAgents']();
+}
+
+export function GetDiscoveredSkills() {
+  return window['go']['core']['App']['GetDiscoveredSkills']();
 }
 
 export function GetDocuments(arg1) {
@@ -160,6 +168,10 @@ export function GetLatestSpans() {
 
 export function GetLightningStats() {
   return window['go']['core']['App']['GetLightningStats']();
+}
+
+export function GetMCPServersList() {
+  return window['go']['core']['App']['GetMCPServersList']();
 }
 
 export function GetNeuralNodeContext(arg1) {
@@ -278,6 +290,10 @@ export function RemoveIdentity(arg1, arg2) {
   return window['go']['core']['App']['RemoveIdentity'](arg1, arg2);
 }
 
+export function RemoveMCPServerConfig(arg1, arg2) {
+  return window['go']['core']['App']['RemoveMCPServerConfig'](arg1, arg2);
+}
+
 export function RenameSession(arg1, arg2) {
   return window['go']['core']['App']['RenameSession'](arg1, arg2);
 }
@@ -312,6 +328,10 @@ export function RunVectorDiagnostic() {
 
 export function SaveConfig(arg1) {
   return window['go']['core']['App']['SaveConfig'](arg1);
+}
+
+export function SaveMCPServerConfig(arg1, arg2, arg3) {
+  return window['go']['core']['App']['SaveMCPServerConfig'](arg1, arg2, arg3);
 }
 
 export function ScanVault() {

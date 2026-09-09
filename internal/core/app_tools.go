@@ -1,12 +1,14 @@
 package core
 
 import (
-	"Lumaestro/internal/config"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"Lumaestro/internal/config"
 )
 
 // GetToolsStatus verifica se as IAs CLIs estão instaladas no PATH e os status de autenticação
@@ -136,26 +138,259 @@ Você agora está sendo orquestrado pelo Lumaestro (Modo ACP).
 	return "Contexto GEMINI.md gerado com sucesso no diretório atual!"
 }
 
-// AddMCPServer instala um novo servidor MCP na CLI local
-func (a *App) AddMCPServer(name string, command string) string {
-	cmd := exec.Command("cmd", "/c", "gemini", "mcp", "add", name, command)
-	output, err := cmd.CombinedOutput()
-
-	if err != nil {
-		return fmt.Sprintf("Erro ao adicionar MCP: %s\nOutput: %s", err.Error(), string(output))
-	}
-	return fmt.Sprintf("MCP '%s' adicionado com sucesso!\n%s", name, string(output))
+// MCPServerDefinition representa as configurações de um servidor MCP no mcp_config.json
+type MCPServerDefinition struct {
+	Command   string            `json:"command,omitempty"`
+	Args      []string          `json:"args,omitempty"`
+	Env       map[string]string `json:"env,omitempty"`
+	ServerURL string            `json:"serverUrl,omitempty"`
 }
 
-// ListMCPServers retorna a lista de MCPs instalados
-func (a *App) ListMCPServers() string {
-	cmd := exec.Command("cmd", "/c", "gemini", "mcp", "list")
-	output, err := cmd.CombinedOutput()
+// MCPConfigFile representa o schema oficial do mcp_config.json
+type MCPConfigFile struct {
+	MCPServers map[string]MCPServerDefinition `json:"mcpServers"`
+}
 
-	if err != nil {
-		return fmt.Sprintf("Erro ao listar MCPs: %s\nOutput: %s", err.Error(), string(output))
+// MCPServerItemInfo representa o servidor MCP formatado para a UI e inspeção
+type MCPServerItemInfo struct {
+	Name      string   `json:"name"`
+	Type      string   `json:"type"` // "stdio" ou "sse"
+	Command   string   `json:"command,omitempty"`
+	Args      []string `json:"args,omitempty"`
+	ServerURL string   `json:"serverUrl,omitempty"`
+	Scope     string   `json:"scope"` // "global" ou "workspace"
+	FilePath  string   `json:"filePath"`
+}
+
+// GetMCPServersList lê os servidores configurados tanto no nível de workspace quanto global.
+func (a *App) GetMCPServersList() ([]MCPServerItemInfo, error) {
+	var results []MCPServerItemInfo
+	seen := make(map[string]bool)
+
+	// 1. Workspace MCP config ({workspace}/.agents/mcp_config.json ou .gemini/mcp_config.json)
+	ws := a.getActiveWorkspace()
+	if ws != "" && ws != "." {
+		wsCandidates := []string{
+			filepath.Join(ws, ".agents", "mcp_config.json"),
+			filepath.Join(ws, ".gemini", "mcp_config.json"),
+		}
+		for _, path := range wsCandidates {
+			if data, err := os.ReadFile(path); err == nil {
+				var file MCPConfigFile
+				if errJson := json.Unmarshal(data, &file); errJson == nil && file.MCPServers != nil {
+					for name, def := range file.MCPServers {
+						if !seen[name] {
+							seen[name] = true
+							srvType := "stdio"
+							if def.ServerURL != "" {
+								srvType = "sse"
+							}
+							results = append(results, MCPServerItemInfo{
+								Name:      name,
+								Type:      srvType,
+								Command:   def.Command,
+								Args:      def.Args,
+								ServerURL: def.ServerURL,
+								Scope:     "workspace",
+								FilePath:  path,
+							})
+						}
+					}
+					break
+				}
+			}
+		}
 	}
-	return string(output)
+
+	// 2. Global MCP config (~/.gemini/config/mcp_config.json ou ~/.gemini/antigravity-cli/mcp_config.json)
+	userHome, errHome := os.UserHomeDir()
+	if errHome == nil {
+		globalCandidates := []string{
+			filepath.Join(userHome, ".gemini", "config", "mcp_config.json"),
+			filepath.Join(userHome, ".gemini", "antigravity", "mcp_config.json"),
+			filepath.Join(userHome, ".gemini", "antigravity-cli", "mcp_config.json"),
+		}
+		for _, path := range globalCandidates {
+			if data, err := os.ReadFile(path); err == nil {
+				var file MCPConfigFile
+				if errJson := json.Unmarshal(data, &file); errJson == nil && file.MCPServers != nil {
+					for name, def := range file.MCPServers {
+						if !seen[name] {
+							seen[name] = true
+							srvType := "stdio"
+							if def.ServerURL != "" {
+								srvType = "sse"
+							}
+							results = append(results, MCPServerItemInfo{
+								Name:      name,
+								Type:      srvType,
+								Command:   def.Command,
+								Args:      def.Args,
+								ServerURL: def.ServerURL,
+								Scope:     "global",
+								FilePath:  path,
+							})
+						}
+					}
+					break
+				}
+			}
+		}
+	}
+
+	return results, nil
+}
+
+// SaveMCPServerConfig adiciona ou atualiza um servidor MCP seguindo a especificação do Antigravity CLI e 2.0.
+func (a *App) SaveMCPServerConfig(name string, commandOrUrl string, isGlobal bool) (string, error) {
+	name = strings.TrimSpace(name)
+	commandOrUrl = strings.TrimSpace(commandOrUrl)
+	if name == "" || commandOrUrl == "" {
+		return "", fmt.Errorf("nome e comando/URL são obrigatórios")
+	}
+
+	var targetPath string
+	if isGlobal {
+		userHome, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("não foi possível identificar diretório do usuário: %w", err)
+		}
+		targetDir := filepath.Join(userHome, ".gemini", "config")
+		_ = os.MkdirAll(targetDir, 0755)
+		targetPath = filepath.Join(targetDir, "mcp_config.json")
+	} else {
+		ws := a.getActiveWorkspace()
+		if ws == "" || ws == "." {
+			return "", fmt.Errorf("nenhum workspace ativo selecionado para configuração local")
+		}
+		targetDir := filepath.Join(ws, ".agents")
+		_ = os.MkdirAll(targetDir, 0755)
+		targetPath = filepath.Join(targetDir, "mcp_config.json")
+	}
+
+	// Carrega arquivo existente ou inicia novo
+	var file MCPConfigFile
+	file.MCPServers = make(map[string]MCPServerDefinition)
+	if data, err := os.ReadFile(targetPath); err == nil {
+		_ = json.Unmarshal(data, &file)
+		if file.MCPServers == nil {
+			file.MCPServers = make(map[string]MCPServerDefinition)
+		}
+	}
+
+	// Define se é SSE (URL) ou Stdio (Comando + Argumentos)
+	var def MCPServerDefinition
+	if strings.HasPrefix(commandOrUrl, "http://") || strings.HasPrefix(commandOrUrl, "https://") {
+		def.ServerURL = commandOrUrl
+	} else {
+		fields := strings.Fields(commandOrUrl)
+		if len(fields) > 0 {
+			def.Command = fields[0]
+			if len(fields) > 1 {
+				def.Args = fields[1:]
+			}
+		}
+	}
+
+	file.MCPServers[name] = def
+
+	encoded, errEnc := json.MarshalIndent(file, "", "  ")
+	if errEnc != nil {
+		return "", fmt.Errorf("falha ao serializar mcp_config.json: %w", errEnc)
+	}
+
+	if errWrite := os.WriteFile(targetPath, encoded, 0644); errWrite != nil {
+		return "", fmt.Errorf("falha ao salvar mcp_config.json: %w", errWrite)
+	}
+
+	// Opcional: tenta registrar também no gemini CLI caso instalado
+	go func() {
+		_ = exec.Command("cmd", "/c", "gemini", "mcp", "add", name, commandOrUrl).Run()
+	}()
+
+	return fmt.Sprintf("Servidor MCP '%s' configurado com sucesso em %s", name, targetPath), nil
+}
+
+// RemoveMCPServerConfig remove um servidor MCP do arquivo correspondente.
+func (a *App) RemoveMCPServerConfig(name string, isGlobal bool) (string, error) {
+	name = strings.TrimSpace(name)
+	var targetPath string
+	if isGlobal {
+		userHome, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		targetPath = filepath.Join(userHome, ".gemini", "config", "mcp_config.json")
+	} else {
+		ws := a.getActiveWorkspace()
+		targetPath = filepath.Join(ws, ".agents", "mcp_config.json")
+	}
+
+	data, err := os.ReadFile(targetPath)
+	if err != nil {
+		return "", fmt.Errorf("arquivo de configuração não encontrado: %w", err)
+	}
+
+	var file MCPConfigFile
+	if errJson := json.Unmarshal(data, &file); errJson != nil {
+		return "", fmt.Errorf("erro ao ler arquivo de configuração: %w", errJson)
+	}
+
+	if file.MCPServers != nil {
+		delete(file.MCPServers, name)
+	}
+
+	encoded, errEnc := json.MarshalIndent(file, "", "  ")
+	if errEnc != nil {
+		return "", errEnc
+	}
+
+	if errWrite := os.WriteFile(targetPath, encoded, 0644); errWrite != nil {
+		return "", errWrite
+	}
+
+	return fmt.Sprintf("Servidor MCP '%s' removido com sucesso de %s", name, targetPath), nil
+}
+
+// AddMCPServer instala ou atualiza um servidor MCP (compatível com UI atual e CLI oficial)
+func (a *App) AddMCPServer(name string, command string) string {
+	msg, err := a.SaveMCPServerConfig(name, command, true)
+	if err != nil {
+		return "Erro ao configurar MCP: " + err.Error()
+	}
+	return msg
+}
+
+// ListMCPServers retorna a lista de MCPs instalados formatada
+func (a *App) ListMCPServers() string {
+	servers, err := a.GetMCPServersList()
+	if err == nil && len(servers) > 0 {
+		var sb strings.Builder
+		sb.WriteString("Servidores MCP Detectados (Antigravity & Workspace):\n\n")
+		for _, s := range servers {
+			sb.WriteString(fmt.Sprintf("• [%s] %s (%s)\n", strings.ToUpper(s.Scope), s.Name, s.Type))
+			if s.ServerURL != "" {
+				sb.WriteString(fmt.Sprintf("  URL: %s\n", s.ServerURL))
+			} else {
+				argsStr := strings.Join(s.Args, " ")
+				if argsStr != "" {
+					sb.WriteString(fmt.Sprintf("  Exec: %s %s\n", s.Command, argsStr))
+				} else {
+					sb.WriteString(fmt.Sprintf("  Exec: %s\n", s.Command))
+				}
+			}
+			sb.WriteString(fmt.Sprintf("  Arquivo: %s\n\n", s.FilePath))
+		}
+		return sb.String()
+	}
+
+	// Fallback para CLI
+	cmd := exec.Command("cmd", "/c", "gemini", "mcp", "list")
+	output, _ := cmd.CombinedOutput()
+	if len(output) > 0 {
+		return string(output)
+	}
+	return "Nenhum servidor MCP configurado no momento."
 }
 
 // AddIdentity adiciona uma nova identidade para o provedor especificado

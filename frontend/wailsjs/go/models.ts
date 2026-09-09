@@ -42,6 +42,28 @@ export namespace acp {
 	        this.isCurrentSession = source["isCurrentSession"];
 	    }
 	}
+	export class SkillItem {
+	    name: string;
+	    command: string;
+	    description: string;
+	    scope: string;
+	    path: string;
+	    content: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SkillItem(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.command = source["command"];
+	        this.description = source["description"];
+	        this.scope = source["scope"];
+	        this.path = source["path"];
+	        this.content = source["content"];
+	    }
+	}
 
 }
 
@@ -318,6 +340,54 @@ export namespace core {
 		    }
 		    return a;
 		}
+	}
+	export class MCPServerItemInfo {
+	    name: string;
+	    type: string;
+	    command?: string;
+	    args?: string[];
+	    serverUrl?: string;
+	    scope: string;
+	    filePath: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new MCPServerItemInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.type = source["type"];
+	        this.command = source["command"];
+	        this.args = source["args"];
+	        this.serverUrl = source["serverUrl"];
+	        this.scope = source["scope"];
+	        this.filePath = source["filePath"];
+	    }
+	}
+	export class SlashCommandItem {
+	    command: string;
+	    icon: string;
+	    type: string;
+	    desc: string;
+	    template?: string;
+	    action?: string;
+	    scope?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SlashCommandItem(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.command = source["command"];
+	        this.icon = source["icon"];
+	        this.type = source["type"];
+	        this.desc = source["desc"];
+	        this.template = source["template"];
+	        this.action = source["action"];
+	        this.scope = source["scope"];
+	    }
 	}
 	export class WorkspaceDiffResult {
 	    statusText: string;
