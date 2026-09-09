@@ -1,125 +1,137 @@
-# Lumaestro: Cognitive Operating System (COS) & Advanced Graph-RAG Orchestrator
+# Lumaestro: Cognitive Operating System (COS) & Autonomous AI Orchestrator
 
-[![Version](https://img.shields.io/badge/Lumaestro-v15.0--Quantum_Elite-8b5cf6?style=for-the-badge&logo=go)](https://github.com/lumaestro)
-[![Status](https://img.shields.io/badge/Status-Industrial_Stability-10b981?style=for-the-badge)](https://github.com/lumaestro)
-[![Build](https://img.shields.io/badge/Build-Optimized-blue?style=for-the-badge)](./build.ps1)
+[![Go Version](https://img.shields.io/badge/Go-1.24-00ADD8?style=for-the-badge&logo=go)](https://golang.org)
+[![Wails v2](https://img.shields.io/badge/Wails-v2-DF1A29?style=for-the-badge&logo=wails)](https://wails.io)
+[![DuckDB](https://img.shields.io/badge/DuckDB-v1.1.3-FFF000?style=for-the-badge&logo=duckdb&logoColor=black)](https://duckdb.org)
+[![Deck.gl 3D](https://img.shields.io/badge/Deck.gl-3D_Cosmos-4ade80?style=for-the-badge)](https://deck.gl)
+[![Antigravity](https://img.shields.io/badge/Engine-Google_Antigravity-8b5cf6?style=for-the-badge)](https://github.com/jvkabum/Lumaestro)
+[![Status](https://img.shields.io/badge/Status-Industrial_Stability-10b981?style=for-the-badge)](https://github.com/jvkabum/Lumaestro)
 
 ![Lumaestro Neural Graph Hero](./media/lumaestro_graph_hero.png)
 
-O **Lumaestro** não é apenas um chatbot; é um **Motor Cognitivo (Cognitive Engine)** projetado para transformar o conhecimento fragmentado do seu Obsidian em um ecossistema autônomo de alta performance. Utilizando uma arquitetura de orquestração **Swarm**, ele conecta agentes de elite (Gemini, Claude) a um grafo de conhecimento 3D dinâmico.
+O **Lumaestro** é um **Sistema Operacional Cognitivo (COS)** e **Orquestrador Soberano de IA** projetado para unificar o conhecimento pessoal (Obsidian vaults), bases de código de software (repositórios locais) e agentes autônomos de elite em um universo tridimensional dinâmico e navegável.
+
+Alimentado pelo motor **Google Antigravity (`agy.exe`)**, pelo protocolo **Agent Client Protocol (ACP)** e por um pipeline analítico híbrido (**DuckDB + SQLite + Qdrant**), o Lumaestro transforma arquivos estáticos em uma constelação inteligente viva capaz de raciocinar, programar, auto-otimizar e cooperar com você em tempo real.
 
 ---
 
-## 🌌 Visão Geral: O Cérebro do Enxame
+## 🌌 Pilares da Arquitetura
 
-O sistema opera em três camadas de consciência digital integradas:
+```mermaid
+graph TD
+    A["🪐 Cosmos 3D (Deck.gl / WebGL)"] --> B["🧠 Orquestrador Central (Wails v2 / Go)"]
+    B --> C["⚡ Google Antigravity (agy.exe / ACP)"]
+    B --> D["📊 Pulmão Analítico (DuckDB v1.1.3)"]
+    B --> E["🏢 Governança & Custos (SQLite / Paperclip)"]
+    B --> F["🔍 Memória Vetorial (Qdrant Cloud)"]
+    B --> G["🛡️ Zero-Noise Crawler (Obsidian / Codebases)"]
+```
 
-1. **Graph-RAG Hyper-Navigator**: Exploração profunda de conhecimento em N-Hops. O Lumaestro tece conexões semânticas entre suas notas, imagens e documentos, permitindo que a IA navegue pelo seu cérebro digital como um sistema nervoso.
-2. **Lightning Engine (Powered by DuckDB)**: Análise reflexiva e analítica de alto desempenho. O uso do **DuckDB v1.1.3** permite que o enxame processe trilhas de pensamento e métricas de grafo em milissegundos, agindo como a memória de curto prazo ultrarrápida da IA.
-3. **Córtex Autônomo ACP**: Orquestração via protocolo **JSON-RPC 2.0**. Os agentes operam em um ambiente seguro (Subagents), podendo executar ferramentas, ler arquivos e evoluir prompts através de **Beam Search** metacognitivo.
+### 1. 🪐 Motor Cósmico 3D (Deck.gl & WebGL)
+- **Hierarquia Celestial Fiel**: Pastas e repositórios orbitam como **Galáxias** e **Sistemas Solares**, arquivos como **Planetas** e blocos lógicos como **Luas**.
+- **Fótons Neurais Animados**: Shaders acelerados por GPU exibem o tráfego de dados e sinapses semânticas em tempo real.
+- **Modos de Conexão Inteligentes**: Alternância rápida entre visão completa de arestas, conexões de órbita física, sinapses semânticas ou foco exclusivo na vizinhança imediata.
+- **Piloto Cinemático de Câmera**: Botão **🎯 Recapturar Foco (`zoomToFit`)** recalibra a câmera automaticamente após qualquer salto ou expansão dimensional.
+
+### 2. ⚡ Integração Nativa com Google Antigravity (`agy.exe`)
+- **Protocolo ACP Assíncrono**: Comunicação via JSON-RPC 2.0 streaming com streaming instantâneo de pensamentos e respostas (`stream-json`).
+- **Subagentes de Elite**: Suporte a delegação paralela com subagentes especializados (`self`, `research`) e gerenciamento de tarefas em segundo plano.
+- **Modelos de Raciocínio Geração 3**: Acesso direto a modelos avançados de pensamento (Gemini 2.5 Pro/Flash Thinking, Claude Sonnet 3.7 Thinking).
+- **Modos de Execução**: Alternância instantânea entre `default` (autônomo), `accept-edits` (confirmação guiada) e `plan` (planejamento prévio obrigatório).
+
+### 3. 📜 Sinfonias, Sessões e Bifurcação (`/fork`)
+- **Isolamento Estrito por Órbita**: Cada projeto ou workspace possui seu próprio histórico de conversas e estado, sem vazamento de contexto entre projetos.
+- **Restauração Automática Completa**: Reabrir uma Sinfonia carrega instantaneamente todo o histórico de mensagens, raciocínio e ferramentas executadas diretamente do transcript.
+- **Bifurcação de Pensamento (`/fork`)**: Duplique qualquer linha de raciocínio a partir de qualquer ponto para testar hipóteses alternativas sem perder a conversa original.
+- **Nomeação Inteligente (`/rename`)**: Títulos de sessões gerados contextualmente por IA ou renomeados manualmente pelo operador.
+
+### 4. 🧭 Co-Steering Review & Governança de Artefatos
+- **Revisão Humano-no-Loop**: Interface para inspeção de planos de implementação e relatórios gerados pelos agentes antes da execução em código de produção.
+- **Comentários em Nível de Linha**: Anote instruções cirúrgicas diretamente no código ou no plano Markdown para que a IA ajuste a rota com precisão.
+- **Diagramas Mermaid Interativos**: Renderização nativa de arquiteturas, fluxogramas e linhas do tempo dentro do chat e dos modais de artefato.
+
+### 5. 🛡️ Zero-Noise Crawler & Blindagem de Pastas
+- **IsIgnoredPath Universal**: Algoritmo estrito que impede sumariamente a entrada de diretórios indesejados no grafo e na memória vetorial.
+- **Bloqueio Total**: `node_modules`, pastas `node`, `dist`, `build`, `bin`, `out`, `target`, `vendor`, `.git`, `.next`, `.turbo`, `.vscode`, `.lumaestro` e arquivos temporários são ignorados com `filepath.SkipDir` no primeiro contato, garantindo indexação ultrarrápida e zero nós fantasmas.
+
+### 6. 🔒 Fine-Grained Permissions & Zero-Trust (CPI)
+- **Controle Cirúrgico de Acesso**: Permissões declaradas no formato `action(target)` (ex: `read_file(internal/*)`, `run_command(go test)`).
+- **Sincronização em Tempo Real**: Altere permissões na aba de Segurança das Configurações ou responda a pedidos em tempo real — as configurações sincronizam imediatamente com o `settings.json` do Antigravity.
 
 ---
 
-## 🚀 Funcionalidades de Elite
+## 🕹️ Comandos de Barra (Slash Commands) & Ergonomia
 
-### ⚡ Lightning Reflexivity
+O terminal do Lumaestro inclui comandos rápidos de alta produtividade:
 
-O motor analítico detecta padrões no seu grafo de conhecimento e propõe otimizações de prompts em tempo real. O sistema aprende quais conexões são mais relevantes para as suas perguntas ("O Eficiente", "O Criativo", "O Rigoroso").
-
-### 🕸️ Knowledge Weaving
-
-Visualização 3D nativa (D3.js) que exibe a saúde do seu grafo. Com algoritmos de **PageRank** e **Community Detection**, você identifica instantaneamente os gargalos e os centros de gravidade do seu conhecimento.
-
-![Lumaestro Full Interface Control](./media/lumaestro_full_ui.png)
-
-### 🛡️ Auditoria Lógica (Validator)
-
-Um sistema de "Juiz Neural" (`AgentValidator`) que escania o banco de dados em busca de contradições lógicas e garante que a evolução do seu enxame seja matematicamente estável.
-
----
-
-## 🕹️ Controle & Telemetria: O Painel de Comando
-
-O Lumaestro oferece uma visão transparente e granular sobre a operação da sua IA:
-
-### 📊 Dashboard Executivo
-
-Monitore em tempo real o investimento em tokens, a economia de escala e o "Fluxo de Consciência" (Live Rollouts) do enxame. Saiba exatamente o que seus agentes estão aprendendo agora.
-
-![Lumaestro Executive Dashboard](./media/lumaestro_dashboard.png)
-
-### ⚙️ Orquestração Avançada
-
-Configure o seu ecossistema com precisão industrial através do Hub de IA:
-
-- **Gestão de Motores**: Alterne entre Gemini, Claude e LLMs locais (LM Studio) com um clique.
-- **Identidades Isoladas**: Gerencie múltiplas contas Gemini para alternar quotas de API e perfis de pesquisa.
-- **Ecossistema MCP**: Integre ferramentas externas (Postgres, Shopify, Google Search) via **Model Context Protocol**.
-- **Aglomerados Estelares**: Injete repositórios de código locais como "Nós Núcleo" para expansão radial do conhecimento.
-
-| Hub de Motores | Gestão de Identidades |
+| Comando | Descrição |
 | :--- | :--- |
-| ![Motores](./media/lumaestro_settings_engines.png) | ![Contas](./media/lumaestro_settings_accounts.png) |
+| `/find <termo>` | Busca ultraveloz no código-fonte do workspace ativo (respeitando pastas ignoradas) |
+| `/diff` | Exibe as alterações ativas do workspace (`git diff`) em visualizador integrado |
+| `/fork [título]` | Cria uma bifurcação (branch) da Sinfonia ativa para explorar novos caminhos |
+| `/rename <nome>` | Renomeia a Sinfonia atual com feedback imediato no histórico |
+| `/agents` | Lista e inspeciona os subagentes e especialistas disponíveis no ecossistema |
+| `/skills` | Cataloga todas as habilidades e ferramentas nativas do Antigravity |
+| `/mcp` | Inspeciona conexões e servidores do Model Context Protocol ativos |
+| `/clear` | Limpa o histórico visual do chat mantendo o contexto íntegro |
 
-| Protocolo MCP | Repositórios Radiais (Star Clusters) |
-| :--- | :--- |
-| ![MCP](./media/lumaestro_settings_mcp.png) | ![Aglomerados](./media/lumaestro_settings_repos.png) |
-
-> [!TIP]
-> Use o **Code RAG** (Devorar Código Fonte) nos Aglomerados Estelares para que a IA processe arquivos .js, .go, .py e .ts, injetando lógica de programação real no seu grafo de conhecimento.
+> **Atalhos de Teclado**:
+> - `Ctrl + K`: Abre a paleta de navegação e atalhos rápidos.
+> - `Alt + J`: Salto de foco para o painel de comando.
 
 ---
 
-## 🛠️ Stack Tecnológica de Ponta
+## 🛠️ Stack Tecnológica
 
-- **Core**: Go (Golang 1.24) + Wails v2 (High-Performance Bridge)
-- **Analytics**: DuckDB (Columnar OLAP) — Estabilizado com linkagem dinâmica CGO.
-- **Vectorial**: Qdrant Cloud (Embeddings via Gemini API).
-- **Graph**: Visualização Fractal e 3D Knowledge Search.
-- **Automation**: Scripts PowerShell customizados para build e deploy.
+| Camada | Tecnologias |
+| :--- | :--- |
+| **Backend Core** | Go 1.24, Wails v2, CGO |
+| **Frontend UI** | Vue 3, Vite, Pinia, TailwindCSS, Heroicons, KaTeX |
+| **Visualização 3D** | Deck.gl, WebGL Shaders, D3 Force (Física Quântica em WebWorker) |
+| **Motor de IA** | Google Antigravity CLI (`agy.exe`), Protocolo ACP (JSON-RPC 2.0) |
+| **Pulmão Analítico** | DuckDB v1.1.3 (OLAP em memória com linkagem CGO) |
+| **Bancos de Dados** | SQLite (Paperclip Mode para governança e tarefas), Qdrant Cloud (Vetorial) |
+| **Segurança** | CPI Validator (Zero-Trust Sandbox), Fine-Grained Permissions Engine |
 
 ---
 
 ## 🏗️ Como Rodar (Desenvolvimento & Produção)
 
-O ambiente de build foi simplificado para ser "Plug and Play":
+### 1. Pré-requisitos
+- **Go**: 1.24 ou superior
+- **Node.js**: 18 ou superior
+- **Wails CLI**: `go install github.com/wailsapp/wails/v2/cmd/wails@latest`
+- **Google Antigravity CLI**: `agy.exe` acessível no PATH do sistema
 
-### 1. Modo de Desenvolvimento (Hot Reload)
-
-Esqueça comandos longos. Use o atalho automatizado que já carrega as tags de correção do DuckDB:
+### 2. Modo de Desenvolvimento (Hot Reload)
+Inicia o backend em Go, linka as DLLs nativas do DuckDB e abre o DevServer Vite com suporte a hot reload:
 
 ```powershell
 .\dev
 ```
 
-### 2. Build de Produção (Release)
-
-Para gerar o executável final (`Lumaestro.exe`) com todas as DLLs empacotadas:
+### 3. Build de Produção (Release)
+Gera o binário compilado e otimizado com todas as dependências embutidas em `build/bin/`:
 
 ```powershell
 .\build
 ```
 
-*(O executável será gerado em `build/bin/` junto com a `duckdb.dll` oficial).*
+---
+
+## 📚 Documentação & Guias Arquiteturais
+
+Explore a documentação aprofundada nos diretórios oficiais:
+
+- **[Índice Geral de Documentação](./docs/INDEX.md)**: Mapa mestre de todos os guias e relatórios.
+- **[Governança do Cosmos](./docs/architecture/COSMOS_GOVERNANCE.md)**: Filosofia da hierarquia celestial e órbitas.
+- **[Motor Gráfico 3D](./docs/architecture/RENDER_ENGINE_3D.md)**: Shaders Deck.gl, física em Worker e câmera cinematográfica.
+- **[Protocolo de Ponte ACP](./docs/ACP_AGENT_BRIDGE.md)**: Arquitetura de integração com o Antigravity CLI.
+- **[Motor Analítico DuckDB](./docs/architecture/DUCKDB_ENGINE.md)**: Consultas em milissegundos e persistência de topologia.
+- **[Protocolo CPI (Zero-Trust)](./docs/CPI_PROTOCOL.md)**: Validação de segurança proativa e proteção do sistema de arquivos.
+- **[Gênese dos Nós](./docs/NODE_GENESIS.md)**: Ciclo de vida, metadados e gravidade dos nós do grafo.
 
 ---
 
-## 📚 Documentação e Governança
+**Lumaestro: Soberania Cognitiva, Autonomia e Conhecimento Vivo.** 🌌⚡🧠🪐✨
 
-Acesse o nosso **[Elite Knowledge Hub](./docs/INDEX.md)** ou explore o **[Índice de Arquivos](./docs/DOCS_INDEX.md)**:
-
-### 🏁 Iniciação Rápida
-
-- [Guia de Uso (Manual de Bordo)](./docs/walkthrough.md)
-- [Checklist de Tarefas (Missões Ativas)](./docs/tasks.md)
-- [Plano de Implementação (Roadmap)](./docs/IMPLEMENTATION_PLAN.md)
-
-### 🏛️ Deep Dive (Arquitetura e Agentes)
-
-- [Arquitetura Neural (3D Graph)](./docs/architecture/NEURAL_BRAIN.md)
-- [Sinfonia de Agentes (Manual ACP)](./docs/guide/AGENTS_GUIDE.md)
-- [Córtex Central (Lumaestro Core)](./docs/architecture/LUMAESTRO_CORE.md)
-- [Matriz de Soberania (Gap Analysis)](./docs/GAP_ANALYSIS.md)
-
----
-**Lumaestro: Evoluindo a autonomia, um rastro de cada vez.** 🐹⚙️⚡🤖🧬🏆🦾📂🧪
