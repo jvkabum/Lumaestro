@@ -824,6 +824,10 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     isDiffViewerOpen.value = (typeof state === 'boolean') ? state : !isDiffViewerOpen.value;
   };
 
+  const togglePermissionsModal = (state) => {
+    isPermissionsModalOpen.value = (typeof state === 'boolean') ? state : !isPermissionsModalOpen.value;
+  };
+
   const toggleArtifactModal = (state) => {
     showPlanOverlay.value = (typeof state === 'boolean') ? state : !showPlanOverlay.value;
   };
