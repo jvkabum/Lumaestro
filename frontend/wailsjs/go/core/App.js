@@ -126,6 +126,10 @@ export function GetDocuments(arg1) {
   return window['go']['core']['App']['GetDocuments'](arg1);
 }
 
+export function GetExecutionMode(arg1) {
+  return window['go']['core']['App']['GetExecutionMode'](arg1);
+}
+
 export function GetExecutiveSummary() {
   return window['go']['core']['App']['GetExecutiveSummary']();
 }
@@ -344,6 +348,10 @@ export function SetAgentModel(arg1, arg2) {
 
 export function SetAutonomousMode(arg1) {
   return window['go']['core']['App']['SetAutonomousMode'](arg1);
+}
+
+export function SetExecutionMode(arg1, arg2) {
+  return window['go']['core']['App']['SetExecutionMode'](arg1, arg2);
 }
 
 export function SetExplorationMode(arg1) {

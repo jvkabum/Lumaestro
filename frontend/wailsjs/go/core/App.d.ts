@@ -69,6 +69,8 @@ export function GetCustomAgents():Promise<Array<acp.CustomAgent>>;
 
 export function GetDocuments(arg1:string):Promise<Array<db.Document>>;
 
+export function GetExecutionMode(arg1:string):Promise<string>;
+
 export function GetExecutiveSummary():Promise<orchestration.ExecSummary>;
 
 export function GetExternalProjects():Promise<Array<config.ProjectScan>>;
@@ -178,6 +180,8 @@ export function SendTerminalData(arg1:string,arg2:string):Promise<void>;
 export function SetAgentModel(arg1:string,arg2:string):Promise<void>;
 
 export function SetAutonomousMode(arg1:boolean):Promise<string>;
+
+export function SetExecutionMode(arg1:string,arg2:string):Promise<boolean>;
 
 export function SetExplorationMode(arg1:boolean):Promise<string>;
 

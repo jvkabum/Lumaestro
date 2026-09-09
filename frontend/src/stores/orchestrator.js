@@ -81,9 +81,27 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     });
   };
 
+  const executionMode = ref('default'); // 'default' | 'accept-edits' | 'plan'
+
+  const setExecutionMode = async (mode, agent) => {
+    const validModes = ['default', 'accept-edits', 'plan'];
+    if (!validModes.includes(mode)) mode = 'default';
+    executionMode.value = mode;
+    isPlanMode.value = (mode === 'plan');
+    await safeCall('core', 'SetExecutionMode', agent || activeAgent.value || 'antigravity', mode);
+    pushStatus(`🛡️ Modo de Execução: [${mode}]`, 'status');
+  };
+
+  const cycleExecutionMode = async (agent) => {
+    const sequence = ['default', 'accept-edits', 'plan'];
+    const currentIndex = sequence.indexOf(executionMode.value);
+    const nextIndex = (currentIndex + 1) % sequence.length;
+    await setExecutionMode(sequence[nextIndex], agent);
+  };
+
   const togglePlanMode = async (agent) => {
-    isPlanMode.value = !isPlanMode.value;
-    await safeCall('core', 'SetPlanMode', agent || activeAgent.value || 'antigravity', isPlanMode.value);
+    const nextMode = isPlanMode.value ? 'default' : 'plan';
+    await setExecutionMode(nextMode, agent);
   };
 
   const pushStatus = (text, kind = 'status') => {
@@ -468,6 +486,14 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
       }
     });
 
+    // 🛡️ Sincronização de Modo de Execução (default | accept-edits | plan)
+    EventsOn('mode:changed', (data) => {
+      if (!data || !data.mode) return;
+      console.log("[Store] 🛡️ Modo de execução atualizado:", data.mode);
+      executionMode.value = data.mode;
+      isPlanMode.value = (data.mode === 'plan');
+    });
+
     // 4. Watcher de Resiliência: Mantém a UI síncrona com a realidade do Backend
     watch(runningSessions, (sessions) => {
       console.log("[Store] Resiliência: Sessões Ativas:", sessions);
@@ -805,7 +831,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   return {
     messages, isThinking, isTerminalMode, isWeaving, activeAgent, runningSessions, pendingReview, modelStats,
     sessions, currentACPID, isSidebarOpen, currentStatus, isNavigating, currentStatusKind, statusTimeline, statusFilter,
-    isPlanMode, togglePlanMode, subagents, showPlanOverlay, workspace,
+    isPlanMode, togglePlanMode, executionMode, setExecutionMode, cycleExecutionMode, subagents, showPlanOverlay, workspace,
     customAgents, isAgentsPanelOpen, isCodeSearchOpen, isDiffViewerOpen, isPermissionsModalOpen,
     initListeners, ask, startSession, sendInput, submitReview, switchAgent, stopSession, forceUnlock,
     fetchSessions, loadSession, newSession, renameSession, autoNameSession, toggleSidebar, clearStatusTimeline, sendSteeringHint,

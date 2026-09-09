@@ -58,6 +58,9 @@ type ACPExecutor struct {
 	// 📂 Workspace Ativo (diretório de trabalho da IA, isolamento de projeto)
 	Workspace      string
 
+	// 🛡️ Modo de Execução Ativo: "default", "accept-edits" ou "plan"
+	ExecutionMode  string
+
 	// 🛡️ CPI — Consciousness Protocol Isolation (Protocolo de Isolamento de Consciência)
 	CPI            *CPIValidator
 }
@@ -102,8 +105,9 @@ type ACPSession struct {
 	LastInput      string
 	LastImagesJSON string
 
-	// 🔒 Security & Policy (Plan Mode)
-	PlanMode bool
+	// 🔒 Security & Policy (Plan & Execution Modes: "default", "accept-edits", "plan")
+	PlanMode      bool
+	ExecutionMode string
 
 	// 🚀 Antigravity Native Engine (agy.exe)
 	IsAntigravity bool

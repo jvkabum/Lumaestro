@@ -198,12 +198,19 @@
             </div>
           </div>
 
-          <!-- Toggle Plan Mode 🔒 -->
-          <div class="safety-toggle plan-toggle" @click="orchestrator.togglePlanMode(selectedAgent)">
-            <span class="toggle-label">{{ orchestrator.isPlanMode ? '🔒 Plano' : 'Plano' }}</span>
-            <div class="switch plan" :class="{ on: orchestrator.isPlanMode }">
-              <div class="handle"></div>
-            </div>
+          <!-- Seletor de Modo de Execução Antigravity (default | accept-edits | plan) -->
+          <div 
+            class="execution-mode-pill" 
+            :class="orchestrator.executionMode"
+            @click="orchestrator.cycleExecutionMode(selectedAgent)"
+            :title="'Modo: ' + orchestrator.executionMode + ' • Clique ou aperte Shift+Tab para alternar'"
+          >
+            <span class="mode-icon">
+              <template v-if="orchestrator.executionMode === 'plan'">📝</template>
+              <template v-else-if="orchestrator.executionMode === 'accept-edits'">⚡</template>
+              <template v-else>🛡️</template>
+            </span>
+            <span class="mode-text">[{{ orchestrator.executionMode }}]</span>
           </div>
 
           <div class="divider"></div>
@@ -287,6 +294,30 @@
         <span class="voice-live-text">Ouvindo voz em tempo real... Fale seu comando ou pressione <strong>F5</strong> para concluir.</span>
         <button class="voice-done-btn" @click="toggleVoice">Concluir</button>
       </div>
+
+      <!-- Alerta Fast-Path para Subagentes (Ctrl+K para aprovar, Alt+J para ver) -->
+      <Transition name="fade-slide">
+        <div v-if="orchestrator.pendingReview" class="fast-path-alert glass">
+          <div class="fast-path-left">
+            <span class="pulse-dot-amber"></span>
+            <span class="fast-path-text">
+              ⚡ <strong>{{ orchestrator.pendingReview.agent || 'Subagente' }}</strong> solicita permissão:
+              <code class="fast-path-cmd">{{ orchestrator.pendingReview.details || orchestrator.pendingReview.command || 'Ação protegida' }}</code>
+            </span>
+          </div>
+          <div class="fast-path-actions">
+            <button class="fp-btn fp-approve" @click="orchestrator.submitReview(true)" title="Aprovar instantaneamente (Ctrl+K)">
+              ✓ Aprovar <kbd>Ctrl+K</kbd>
+            </button>
+            <button class="fp-btn fp-deny" @click="orchestrator.submitReview(false)" title="Recusar ação">
+              ✕ Recusar
+            </button>
+            <button class="fp-btn fp-inspect" @click="orchestrator.toggleAgentsPanel(true)" title="Inspecionar subagente (Alt+J)">
+              🔍 Ver <kbd>Alt+J</kbd>
+            </button>
+          </div>
+        </div>
+      </Transition>
 
       <!-- Área de Texto e Enviar -->
       <div class="textarea-section" :class="{ 'steering-mode': isThinking && messageText.trim() }">
@@ -643,12 +674,24 @@ const toggleVoice = () => {
   }
 };
 
-// Global Listeners (F5 e Inserção de Prompt)
+// Global Listeners (F5, Fast-Path Ctrl+K, Teleport Alt+J e Inserção de Prompt)
 onMounted(() => {
   const handleGlobalKeydown = (e) => {
     if (e.key === 'F5') {
       e.preventDefault();
       toggleVoice();
+    }
+    // ⚡ Fast-Path: Ctrl+K aprova revisão de subagente pendente
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+      if (orchestrator.pendingReview) {
+        e.preventDefault();
+        orchestrator.submitReview(true);
+      }
+    }
+    // 🚀 Teleport: Alt+J abre painel de subagentes
+    if (e.altKey && (e.key === 'j' || e.key === 'J')) {
+      e.preventDefault();
+      orchestrator.toggleAgentsPanel(true);
     }
   };
   window.addEventListener('keydown', handleGlobalKeydown);
@@ -668,6 +711,29 @@ onMounted(() => {
 });
 
 const handleTextareaKeydown = (e) => {
+  // 🛡️ Alternância de Modo Antigravity com Shift+Tab (default -> accept-edits -> plan)
+  if (e.key === 'Tab' && e.shiftKey) {
+    e.preventDefault();
+    orchestrator.cycleExecutionMode(selectedAgent.value);
+    return;
+  }
+
+  // ⚡ Fast-Path: Ctrl+K
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+    if (orchestrator.pendingReview) {
+      e.preventDefault();
+      orchestrator.submitReview(true);
+      return;
+    }
+  }
+
+  // 🚀 Teleport: Alt+J
+  if (e.altKey && (e.key === 'j' || e.key === 'J')) {
+    e.preventDefault();
+    orchestrator.toggleAgentsPanel(true);
+    return;
+  }
+
   if (showSlashMenu.value && filteredSlashCommands.value.length > 0) {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
@@ -967,30 +1033,152 @@ const sendMessage = () => {
   transform: translateY(10px) scale(0.95);
 }
 
-/* Safety Toggle (Switch) */
-.safety-toggle {
+/* Execution Mode Pill Antigravity (default | accept-edits | plan) */
+.execution-mode-pill {
   display: flex;
   align-items: center;
-  gap: 2px; /* 🗜️ Reduzido de 4px */
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 6px;
   cursor: pointer;
-  padding: 2px 3px; /* 🗜️ Reduzido de 6px lateral */
-  border-radius: 100px;
-  transition: all 0.2s;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: #94a3b8;
+  transition: all 0.2s ease;
+  user-select: none;
 }
-.safety-toggle:hover { background: rgba(255, 255, 255, 0.03); }
-.toggle-label { font-size: 8px; font-weight: 900; color: #64748b; text-transform: uppercase; letter-spacing: 0.3px; }
-.switch {
-  width: 20px; height: 11px; background: rgba(255, 255, 255, 0.08);
-  border-radius: 100px; position: relative; transition: all 0.3s;
+.execution-mode-pill:hover {
+  transform: translateY(-1px);
 }
-.switch.on { background: #3b82f6; }
-.switch.plan.on { background: #a78bfa; }
-.handle {
-  width: 7px; height: 7px; background: #fff; border-radius: 50%;
-  position: absolute; top: 2px; left: 2px; transition: all 0.3s;
+.execution-mode-pill.default {
+  border-color: rgba(56, 189, 248, 0.35);
+  background: rgba(56, 189, 248, 0.08);
+  color: #38bdf8;
 }
-.switch.on .handle { left: 11px; }
-.send-btn.plan-ready { background: #a78bfa; color: #fff; border-color: #a78bfa; box-shadow: 0 0 15px rgba(167, 139, 250, 0.3); }
+.execution-mode-pill.accept-edits {
+  border-color: rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.08);
+  color: #4ade80;
+}
+.execution-mode-pill.plan {
+  border-color: rgba(168, 85, 247, 0.35);
+  background: rgba(168, 85, 247, 0.08);
+  color: #c084fc;
+}
+.mode-icon { font-size: 11px; line-height: 1; }
+.mode-text { letter-spacing: 0.3px; }
+
+/* Fast-Path Subagent Alert */
+.fast-path-alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 12px;
+  margin-bottom: 6px;
+  border-radius: 8px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  box-shadow: 0 4px 15px rgba(245, 158, 11, 0.15);
+}
+.fast-path-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+.fast-path-text {
+  font-size: 11px;
+  color: #fef3c7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fast-path-cmd {
+  background: rgba(0, 0, 0, 0.4);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: #fde68a;
+}
+.fast-path-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.fp-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 5px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.fp-btn kbd {
+  font-size: 8px;
+  padding: 1px 3px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.3);
+  color: inherit;
+}
+.fp-approve {
+  background: #10b981;
+  color: #fff;
+  border-color: #059669;
+}
+.fp-approve:hover {
+  background: #059669;
+  transform: scale(1.05);
+}
+.fp-deny {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.4);
+}
+.fp-deny:hover {
+  background: #ef4444;
+  color: #fff;
+}
+.fp-inspect {
+  background: rgba(255, 255, 255, 0.08);
+  color: #cbd5e1;
+  border-color: rgba(255, 255, 255, 0.15);
+}
+.fp-inspect:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+.pulse-dot-amber {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #f59e0b;
+  box-shadow: 0 0 8px #f59e0b;
+  animation: pulse-amber 1.5s infinite;
+}
+@keyframes pulse-amber {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.3); opacity: 0.6; }
+}
+
+/* Transição do Fast-Path */
+.fade-slide-enter-active, .fade-slide-leave-active {
+  transition: all 0.25s ease;
+}
+.fade-slide-enter-from, .fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
 
 .divider { width: 1px; height: 16px; background: rgba(255, 255, 255, 0.1); }
 

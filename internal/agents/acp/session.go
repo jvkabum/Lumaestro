@@ -77,6 +77,13 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 	sandboxPath := filepath.Join(appRoot, ".lumaestro", "sandbox")
 	_ = os.MkdirAll(sandboxPath, 0755)
 
+	effectiveMode := e.ExecutionMode
+	if planMode {
+		effectiveMode = "plan"
+	} else if effectiveMode == "" {
+		effectiveMode = "accept-edits"
+	}
+
 	// 📂 Workspace: Usa o diretório de projeto ativo
 	if e.Workspace == "" && cfgLoaded != nil && cfgLoaded.ActiveWorkspace != "" {
 		e.Workspace = cfgLoaded.ActiveWorkspace
@@ -122,12 +129,19 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 				fmt.Printf("[ACP] 💎 Motor Nativo Antigravity CLI detectado: %s\n", binaryPath)
 				args = []string{"--input-format", "stream-json", "--output-format", "stream-json"}
 
-				// Modo de Operação (Accept Edits / Plan)
-				if planMode {
+				// Modo de Operação (default / accept-edits / plan)
+				switch effectiveMode {
+				case "plan":
 					args = append(args, "--mode=plan")
-				} else if e.AutonomousMode {
-					args = append(args, "--mode=accept-edits", "--dangerously-skip-permissions")
-				} else {
+				case "default":
+					args = append(args, "--mode=default")
+				case "accept-edits":
+					if e.AutonomousMode {
+						args = append(args, "--mode=accept-edits", "--dangerously-skip-permissions")
+					} else {
+						args = append(args, "--mode=accept-edits")
+					}
+				default:
 					args = append(args, "--mode=accept-edits")
 				}
 
@@ -443,7 +457,8 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 			CurrentIssueID: issueID,
 			RolloutID:      rolloutID,
 			AttemptID:      attemptID,
-			PlanMode:       planMode,
+			PlanMode:       planMode || (effectiveMode == "plan"),
+			ExecutionMode:  effectiveMode,
 			IsAntigravity:  isAntigravity,
 			Subagents:      make(map[string]*ACPSession),
 		}

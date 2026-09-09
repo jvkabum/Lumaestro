@@ -456,44 +456,85 @@ func (a *App) SendSteeringHint(agent string, input string) string {
 	return "Dica enviada!"
 }
 
-// SetPlanMode ativa ou desativa o modo de planejamento para a sessão.
-func (a *App) SetPlanMode(agent string, enabled bool) bool {
+// SetExecutionMode define o modo de autonomia: "default", "accept-edits" ou "plan"
+func (a *App) SetExecutionMode(agent string, mode string) bool {
+	validModes := map[string]bool{
+		"default":      true,
+		"accept-edits": true,
+		"plan":         true,
+	}
+	if !validModes[mode] {
+		mode = "default"
+	}
+
+	if a.executor == nil {
+		return false
+	}
+
+	a.executor.ExecutionMode = mode
+
 	a.executor.Mu.Lock()
 	session, ok := a.executor.ActiveSessions[agent]
 	a.executor.Mu.Unlock()
 
 	if ok {
-		prevMode := session.PlanMode
-		session.PlanMode = enabled
-		fmt.Printf("[App] 🛡️ Plan Mode alterado para %v na sessão %s\n", enabled, agent)
+		prevMode := session.ExecutionMode
+		session.ExecutionMode = mode
+		session.PlanMode = (mode == "plan")
+		fmt.Printf("[App] 🛡️ Modo de Execução alterado para '%s' na sessão %s\n", mode, agent)
 
-		// Se for sessão Antigravity e o modo mudou, reinicia o processo com a nova flag de modo
-		if session.IsAntigravity && prevMode != enabled {
+		// Se for sessão Antigravity e o modo mudou, reinicia o processo com a nova flag
+		if session.IsAntigravity && prevMode != mode {
 			go func() {
-				_ = a.executor.StartSession(a.ctx, session.AgentName, session.ID, session.ACPSessID, session.AgentID, session.CurrentIssueID, enabled, nil)
+				_ = a.executor.StartSession(a.ctx, session.AgentName, session.ID, session.ACPSessID, session.AgentID, session.CurrentIssueID, session.PlanMode, nil)
 			}()
 		}
 
-		status := "Modo Execução (⚡) ativado"
-		if enabled {
-			status = "Modo Plano (📝) ativado — Escrita bloqueada"
-		}
-		a.emitAgentStatus(agent, status, "status")
+		statusLabel := map[string]string{
+			"default":      "Modo Padrão (Interativo) [default]",
+			"accept-edits": "Modo Edição Automática [accept-edits]",
+			"plan":         "Modo Planejamento (Leitura) [plan]",
+		}[mode]
+
+		a.emitAgentStatus(agent, statusLabel, "status")
+		utils.SafeEmit(a.ctx, "mode:changed", map[string]string{
+			"agent": agent,
+			"mode":  mode,
+		})
 		return true
 	}
 	return false
 }
 
-// GetPlanMode retorna o estado atual do Plan Mode para a sessão.
-func (a *App) GetPlanMode(agent string) bool {
+// GetExecutionMode retorna o modo de autonomia ativo para a sessão.
+func (a *App) GetExecutionMode(agent string) string {
+	if a.executor == nil {
+		return "default"
+	}
 	a.executor.Mu.Lock()
 	session, ok := a.executor.ActiveSessions[agent]
 	a.executor.Mu.Unlock()
 
-	if ok {
-		return session.PlanMode
+	if ok && session.ExecutionMode != "" {
+		return session.ExecutionMode
 	}
-	return false
+	if a.executor.ExecutionMode != "" {
+		return a.executor.ExecutionMode
+	}
+	return "default"
+}
+
+// SetPlanMode ativa ou desativa o modo de planejamento para a sessão (compatibilidade legado).
+func (a *App) SetPlanMode(agent string, enabled bool) bool {
+	if enabled {
+		return a.SetExecutionMode(agent, "plan")
+	}
+	return a.SetExecutionMode(agent, "accept-edits")
+}
+
+// GetPlanMode retorna o estado atual do Plan Mode para a sessão (compatibilidade legado).
+func (a *App) GetPlanMode(agent string) bool {
+	return a.GetExecutionMode(agent) == "plan"
 }
 
 // ReadGeminiConfig lê o conteúdo do arquivo GEMINI.md na raiz do projeto.
