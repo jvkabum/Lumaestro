@@ -318,6 +318,13 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
 
       // TRATAMENTO DE SISTEMA
       if (source === 'SYSTEM' || source === 'ERROR' || source === 'CRAWLER') {
+        if (type === 'progress') {
+          // Status de progresso transitório: atualiza indicador ao vivo sem poluir o histórico com bolhas estáticas
+          pushStatus(content, 'status');
+          currentStatus.value = { agent: 'Maestro', tool: '', action: content };
+          isThinking.value = true;
+          return;
+        }
         messages.value = [...messages.value, { role: 'assistant', text: content, mode: 'system', agent: source }];
         return;
       }

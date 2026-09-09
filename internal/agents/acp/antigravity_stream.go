@@ -199,11 +199,29 @@ func (e *ACPExecutor) runAntigravityListener(s *ACPSession, stdout io.Reader) {
 						toolName = name
 					}
 				}
-				action := fmt.Sprintf("Executando: %s", toolName)
+				action := ""
 				if step.ToolInfo != nil {
-					if desc, ok := step.ToolInfo["description"].(string); ok && desc != "" {
+					if act, ok := step.ToolInfo["toolAction"].(string); ok && act != "" {
+						action = act
+					} else if sum, ok := step.ToolInfo["toolSummary"].(string); ok && sum != "" {
+						action = sum
+					} else if desc, ok := step.ToolInfo["description"].(string); ok && desc != "" {
 						action = desc
+					} else if target, ok := step.ToolInfo["TargetFile"].(string); ok && target != "" {
+						action = fmt.Sprintf("Editando %s", filepath.Base(target))
+					} else if path, ok := step.ToolInfo["AbsolutePath"].(string); ok && path != "" {
+						action = fmt.Sprintf("Lendo %s", filepath.Base(path))
+					} else if cmd, ok := step.ToolInfo["CommandLine"].(string); ok && cmd != "" {
+						if len(cmd) > 35 {
+							cmd = cmd[:32] + "..."
+						}
+						action = fmt.Sprintf("Executando: %s", cmd)
+					} else if q, ok := step.ToolInfo["Query"].(string); ok && q != "" {
+						action = fmt.Sprintf("Buscando \"%s\"", q)
 					}
+				}
+				if action == "" {
+					action = fmt.Sprintf("Executando: %s", toolName)
 				}
 				if e.Ctx != nil {
 					utils.SafeEmit(e.Ctx, "agent:status", map[string]string{

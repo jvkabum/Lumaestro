@@ -71,8 +71,8 @@
           class="sender-icon assistant-icon pulsing"
           :class="orchestrator.currentStatus?.agent ? getIconClass({ agent: orchestrator.currentStatus.agent }) : 'gemini-icon'"
         >
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+            <path d="M12 1L14.8 8.8L22.6 11.6L14.8 14.4L12 22.2L9.2 14.4L1.4 11.6L9.2 8.8L12 1Z"/>
           </svg>
         </div>
         <div class="thinking-wrapper">
@@ -84,7 +84,7 @@
                {{ String(orchestrator.currentStatus.tool).replace('_', ' ').toUpperCase() }}
              </div>
              <div class="thinking-text">
-               {{ orchestrator.currentStatus?.action || 'Harmonizando...' }}
+               {{ orchestrator.currentStatus?.action || 'Harmonizando sinapses...' }}
              </div>
            </div>
         </div>
@@ -391,47 +391,68 @@ onMounted(scrollToBottom);
 :deep(pre) { padding: 16px; margin: 0; overflow-x: auto; }
 :deep(code) { font-family: 'JetBrains Mono', monospace; font-size: 13px; }
 
-/* Thinking Waviness */
+/* Thinking Waviness & Tool Activity Card */
+.message-row.assistant.thinking {
+  margin-top: 2px;
+  margin-bottom: 6px;
+}
+
 .thinking-wrapper {
-  background: rgba(255, 255, 255, 0.03);
-  padding: 10px 16px;
-  border-radius: 4px 16px 16px 16px;
+  background: linear-gradient(135deg, rgba(30, 58, 138, 0.22) 0%, rgba(15, 23, 42, 0.65) 100%);
+  padding: 8px 14px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   gap: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25), 0 0 15px rgba(59, 130, 246, 0.08);
+  animation: thinking-glow 3s infinite ease-in-out;
 }
 
-.thinking-waves { display: flex; align-items: flex-end; gap: 3px; height: 12px; }
+@keyframes thinking-glow {
+  0%, 100% { border-color: rgba(59, 130, 246, 0.25); box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25), 0 0 10px rgba(59, 130, 246, 0.05); }
+  50% { border-color: rgba(96, 165, 250, 0.45); box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35), 0 0 18px rgba(59, 130, 246, 0.15); }
+}
+
+.thinking-waves { display: flex; align-items: flex-end; gap: 3px; height: 13px; }
 .thinking-waves span {
   width: 3px;
-  background: #3b82f6;
-  border-radius: 1px;
+  background: #60a5fa;
+  border-radius: 1.5px;
   animation: waviness 1.2s infinite ease-in-out;
 }
-.thinking-waves span:nth-child(2) { animation-delay: 0.1s; }
-.thinking-waves span:nth-child(3) { animation-delay: 0.2s; }
-.thinking-waves span:nth-child(4) { animation-delay: 0.3s; }
+.thinking-waves span:nth-child(2) { animation-delay: 0.15s; }
+.thinking-waves span:nth-child(3) { animation-delay: 0.3s; }
+.thinking-waves span:nth-child(4) { animation-delay: 0.45s; }
 
 @keyframes waviness {
-  0%, 100% { height: 4px; opacity: 0.3; }
-  50% { height: 12px; opacity: 1; }
+  0%, 100% { height: 4px; opacity: 0.35; }
+  50% { height: 13px; opacity: 1; }
 }
 
 .thinking-content {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .thinking-tool {
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 800;
-  color: #3b82f6;
-  letter-spacing: 1px;
+  font-family: 'JetBrains Mono', monospace;
+  color: #93c5fd;
+  background: rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  padding: 2px 8px;
+  border-radius: 6px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  line-height: 1.3;
 }
 
-.thinking-text { font-size: 13px; color: #94a3b8; font-weight: 500; }
+.thinking-text { font-size: 13px; color: #e2e8f0; font-weight: 500; letter-spacing: 0.2px; }
 
 /* 🧶 WEAVER Animação Premium */
 .weaving .message-bubble {

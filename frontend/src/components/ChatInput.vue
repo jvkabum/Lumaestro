@@ -190,6 +190,15 @@
         </div>
 
         <div class="toolbar-right">
+          <!-- 📊 Stats Badge integrado organicamente no header (sem sobreposição) -->
+          <span 
+            v-if="orchestrator.modelStats && orchestrator.modelStats.info" 
+            class="stats-badge" 
+            :title="'Telemetria: ' + orchestrator.modelStats.info"
+          >
+            {{ orchestrator.modelStats.info }}
+          </span>
+
           <!-- Toggle Modo Autônomo Premium -->
           <div class="safety-toggle" @click="isAutonomous = !isAutonomous; toggleAutonomous()">
             <span class="toggle-label">Autônomo</span>
@@ -210,7 +219,7 @@
               <template v-else-if="orchestrator.executionMode === 'accept-edits'">⚡</template>
               <template v-else>🛡️</template>
             </span>
-            <span class="mode-text">[{{ orchestrator.executionMode }}]</span>
+            <span class="mode-text">{{ orchestrator.executionMode }}</span>
           </div>
 
           <!-- Botão Microfone / Ditado por Voz (/voice, F5) -->
@@ -229,13 +238,6 @@
             <span v-if="isListening" class="rec-label">REC</span>
           </button>
         </div>
-      </div>
-
-      <!-- 📊 Stats Badge (alinhado à direita, discreto e compacto) -->
-      <div v-if="orchestrator.modelStats && orchestrator.modelStats.info" class="stats-badge-row">
-        <span class="stats-badge" :title="'Telemetria: ' + orchestrator.modelStats.info">
-          {{ orchestrator.modelStats.info }}
-        </span>
       </div>
 
       <!-- Previews de Imagem (Miniaturas) -->
@@ -1208,38 +1210,32 @@ const sendMessage = () => {
   background: rgba(0,0,0,0.6); color: #fff; border-radius: 50%; border: none; font-size: 12px;
 }
 
-/* Stats Badge Row (Direita Compacto, estilo mockup) */
-.stats-badge-row {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  padding: 0 6px;
-  margin-top: 1px;
-  margin-bottom: -6px; /* Não empurra o textarea para baixo */
-  position: relative;
-  z-index: 10;
-}
-
+/* Stats Badge (Integrado no header direito) */
 .stats-badge {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 9px;
+  font-size: 10px;
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   color: #64748b;
   background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  padding: 1px 7px;
-  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 3px 8px;
+  border-radius: 6px;
   letter-spacing: 0.2px;
-  line-height: 1.4;
+  line-height: 1.3;
   transition: all 0.2s ease;
+  white-space: nowrap;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .stats-badge:hover {
   background: rgba(255, 255, 255, 0.07);
   color: #94a3b8;
-  border-color: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.12);
+  max-width: none;
 }
 
 /* Textarea Section */
