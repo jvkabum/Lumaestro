@@ -162,6 +162,10 @@ export function GetLastSessionID() {
   return window['go']['core']['App']['GetLastSessionID']();
 }
 
+export function GetLatestArtifact() {
+  return window['go']['core']['App']['GetLatestArtifact']();
+}
+
 export function GetLatestSpans() {
   return window['go']['core']['App']['GetLatestSpans']();
 }
@@ -200,6 +204,10 @@ export function GetPromptHistory(arg1) {
 
 export function GetSecurityPermissions() {
   return window['go']['core']['App']['GetSecurityPermissions']();
+}
+
+export function GetSessionArtifacts(arg1) {
+  return window['go']['core']['App']['GetSessionArtifacts'](arg1);
 }
 
 export function GetSkeletalGraph() {
@@ -404,6 +412,10 @@ export function StartLoginSession(arg1) {
 
 export function StopAgentSession(arg1) {
   return window['go']['core']['App']['StopAgentSession'](arg1);
+}
+
+export function SubmitArtifactReview(arg1) {
+  return window['go']['core']['App']['SubmitArtifactReview'](arg1);
 }
 
 export function SubmitReview(arg1, arg2) {

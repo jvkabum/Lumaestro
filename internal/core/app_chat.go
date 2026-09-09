@@ -489,6 +489,10 @@ func (a *App) SendTerminalData(agent string, data string) {
 func (a *App) SendSteeringHint(agent string, input string) string {
 	fmt.Printf("[App] ⚡ Enviando Steering Hint para %s: '%s'\n", agent, input)
 
+	if a.executor == nil {
+		return "Executor não inicializado"
+	}
+
 	// No Lumaestro, a sessão ACP de chat principal usa o nome do agente como ID.
 	sessionID := agent
 	err := a.executor.SendSteeringHint(sessionID, input)

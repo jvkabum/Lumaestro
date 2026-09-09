@@ -824,8 +824,30 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     isDiffViewerOpen.value = (typeof state === 'boolean') ? state : !isDiffViewerOpen.value;
   };
 
-  const togglePermissionsModal = (state) => {
-    isPermissionsModalOpen.value = (typeof state === 'boolean') ? state : !isPermissionsModalOpen.value;
+  const toggleArtifactModal = (state) => {
+    showPlanOverlay.value = (typeof state === 'boolean') ? state : !showPlanOverlay.value;
+  };
+
+  const forkSession = async () => {
+    const currentId = currentACPID.value;
+    const agent = activeAgent.value || 'antigravity';
+    pushStatus('🌿 Ramificando sessão ativa (/fork)...', 'status');
+    try {
+      const bridge = window.go?.core?.App || window.go?.main?.App;
+      if (bridge && typeof bridge.ForkSession === 'function') {
+        const newId = await bridge.ForkSession(agent, currentId || '');
+        if (newId) {
+          await loadSession(agent, newId);
+          pushStatus(`🌿 Sessão ramificada: ${newId.substring(0, 8)}...`, 'success');
+          return;
+        }
+      }
+      await newSession(agent);
+      pushStatus('🌿 Nova ramificação de sessão criada com sucesso.', 'success');
+    } catch (err) {
+      console.error('[Store] Falha ao ramificar sessão:', err);
+      pushStatus('❌ Falha ao ramificar sessão', 'error');
+    }
   };
 
   return {
@@ -837,7 +859,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     fetchSessions, loadSession, newSession, renameSession, autoNameSession, toggleSidebar, clearStatusTimeline, sendSteeringHint,
     selectWorkspace, clearWorkspace, loadWorkspace,
     fetchCustomAgents, killSubagent, runCodeSearch, getWorkspaceDiff, getSecurityPermissions,
-    toggleAgentsPanel, toggleCodeSearch, toggleDiffViewer, togglePermissionsModal,
+    toggleAgentsPanel, toggleCodeSearch, toggleDiffViewer, togglePermissionsModal, toggleArtifactModal, forkSession,
     confirm, confirmModal
   };
 });

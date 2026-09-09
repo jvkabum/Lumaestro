@@ -87,6 +87,8 @@ export function GetIssues():Promise<Array<db.Issue>>;
 
 export function GetLastSessionID():Promise<string>;
 
+export function GetLatestArtifact():Promise<core.ArtifactItem>;
+
 export function GetLatestSpans():Promise<Array<Record<string, any>>>;
 
 export function GetLightningStats():Promise<Record<string, any>>;
@@ -106,6 +108,8 @@ export function GetPromptCandidates():Promise<Array<Record<string, any>>>;
 export function GetPromptHistory(arg1:string):Promise<Array<Record<string, any>>>;
 
 export function GetSecurityPermissions():Promise<config.SecurityConfig>;
+
+export function GetSessionArtifacts(arg1:string):Promise<Array<core.ArtifactItem>>;
 
 export function GetSkeletalGraph():Promise<Record<string, any>>;
 
@@ -208,6 +212,8 @@ export function StartBackgroundAgentSession(arg1:string):Promise<void>;
 export function StartLoginSession(arg1:string):Promise<string>;
 
 export function StopAgentSession(arg1:string):Promise<void>;
+
+export function SubmitArtifactReview(arg1:core.ArtifactReviewSubmission):Promise<string>;
 
 export function SubmitReview(arg1:string,arg2:boolean):Promise<void>;
 
