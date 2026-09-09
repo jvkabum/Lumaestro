@@ -30,6 +30,10 @@ func (a *App) ScanVault() string {
 		return "⚠️ Sync Obsidian 3D bloqueado: crawler não pôde ser inicializado."
 	}
 
+	if a.ctx != nil {
+		a.crawler.SetContext(a.ctx)
+	}
+
 	if a.IsScanning {
 		return "⚠️ Scan já em progresso."
 	}
@@ -50,6 +54,8 @@ func (a *App) ScanVault() string {
 			fmt.Println("[BACKEND] ⏳ Scan ABORTADO: Motores em transição ou offline.")
 			return
 		}
+
+		crawler.SetContext(ctx)
 
 		err := crawler.IndexVault(ctx)
 		if err != nil {

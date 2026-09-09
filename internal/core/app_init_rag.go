@@ -34,6 +34,9 @@ func (a *App) initRAGInfrastructure(cfg *config.Config) {
 		targetRoot = cfg.ObsidianVaultPath
 	}
 	a.crawler = obsidian.NewCrawler(targetRoot, a.embedder, a.qdrant, a.ontology, a.LStore, a.executor.CPI)
+	if a.ctx != nil {
+		a.crawler.SetContext(a.ctx)
+	}
 	
 	if a.embedder == nil || a.ontology == nil {
 		a.emitBoot("crawler", "⚠️", "Crawler em modo degradado: Somente estrutura de arquivos (IA offline).")

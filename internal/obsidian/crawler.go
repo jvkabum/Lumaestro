@@ -59,6 +59,21 @@ func (c *Crawler) SetContext(ctx context.Context) {
 	c.ctx = ctx
 }
 
+// isMediaOrTexture retorna true para fotos, texturas, vídeos, áudios e modelos 3D.
+// Para esses arquivos, o Lumaestro indexa apenas o nome e metadados no grafo 3D,
+// sem ler conteúdo binário pesado nem enviar para visão computacional ou IA multimodal.
+func isMediaOrTexture(ext string) bool {
+	switch strings.ToLower(ext) {
+	case ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".svg", ".ico", ".tga", ".dds", ".hdr", ".exr", ".tiff", ".tif", ".psd",
+		".mp4", ".mkv", ".avi", ".mov", ".webm", ".wmv", ".flv", ".m4v",
+		".mp3", ".wav", ".ogg", ".flac", ".aac", ".m4a",
+		".obj", ".fbx", ".gltf", ".glb", ".blend", ".dae", ".3ds", ".stl":
+		return true
+	default:
+		return false
+	}
+}
+
 func isBlockedSegment(s string) bool {
 	s = strings.TrimSpace(strings.ToLower(s))
 	if s == "" || s == "." {
@@ -166,6 +181,9 @@ func (c *Crawler) PurgeCache() error {
 // IndexVault percorre e indexa notas do Obsidian em DUAS FASES para máxima eficiência.
 // FASA 1 (Offline): Extrai links e monta o grafo visual hierárquico (0 chamadas de API).
 func (c *Crawler) IndexVault(ctx context.Context) error {
+	if ctx != nil {
+		c.ctx = ctx
+	}
 	if c.VaultPath == "" {
 		fmt.Println("[Crawler] 🛑 Scan ignorado: Nenhum Workspace ou Vault configurado. O Lumaestro está em Modo IDE aguardando um projeto.")
 		return nil
@@ -277,18 +295,22 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 
 		ext := strings.ToLower(filepath.Ext(path))
 		isMD := ext == ".md"
-		isImage := ext == ".png" || ext == ".jpg" || ext == ".jpeg"
+		isMedia := isMediaOrTexture(ext)
 		isPDF := ext == ".pdf"
 		isCode := ext == ".go" || ext == ".js" || ext == ".jsx" || ext == ".ts" || ext == ".tsx" || ext == ".py" || ext == ".html" || ext == ".css"
 
-		if !isMD && !isImage && !isPDF && !isCode {
+		if !isMD && !isMedia && !isPDF && !isCode {
 			return nil
 		}
 
 		nodeName := strings.TrimSuffix(info.Name(), ext)
 		nodeID := "moon:" + pathHash + ":" + strings.ToLower(nodeName)
 		docType := "chunk"
-		if isImage || isPDF { docType = "source" }
+		if isMedia {
+			docType = "media"
+		} else if isPDF {
+			docType = "source"
+		}
 
 		// Aresta de Órbita da Lua ao seu Planeta (Pasta)
 		parentDir := filepath.Dir(relPath)
@@ -307,6 +329,44 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 		})
 		if c.LStore != nil {
 			c.LStore.InsertGraphEdge(folderPath, parentID, nodeID, 3, "orbital")
+		}
+
+		// 📷 Se for Mídia, Foto, Textura ou Vídeo: indexa APENAS o nome e tipo no grafo 3D!
+		// Não lê bytes pesados na RAM, não chama visão computacional e não gasta cota de IA.
+		if isMedia {
+			extUpper := strings.ToUpper(strings.TrimPrefix(ext, "."))
+			fileSummary := fmt.Sprintf("Arquivo %s: %s", extUpper, nodeName)
+			fileWhatItDoes := fmt.Sprintf("Ativo de mídia/textura indexado por nome (%s).", extUpper)
+
+			utils.SafeEmit(c.ctx, "graph:node", map[string]interface{}{
+				"id":                nodeID,
+				"name":              nodeName,
+				"document-type":     "media",
+				"celestial-type":    "moon",
+				"mass":              3.0,
+				"parent_gravity_id": parentID,
+				"summary":           fileSummary,
+				"what-it-does":      fileWhatItDoes,
+			})
+			if c.LStore != nil {
+				c.LStore.UpsertGraphNode(folderPath, nodeID, nodeName, "media", "", map[string]interface{}{
+					"celestial-type":    "moon",
+					"mass":              3.0,
+					"parent_gravity_id": parentID,
+					"summary":           fileSummary,
+				})
+			}
+			c.nameMu.Lock()
+			c.nodeNames[nodeName] = nodeID
+			c.nameMu.Unlock()
+
+			// Marca no cache local com data de modificação para pular em futuros scans
+			c.mu.Lock()
+			c.cache[path] = fmt.Sprintf("media-%d", info.ModTime().Unix())
+			c.mu.Unlock()
+
+			atomic.AddInt32(&totalCached, 1)
+			return nil // ⚡ Retorna imediatamente sem colocar em pendingFiles!
 		}
 
 		// Lê conteúdo (md/código) para gerar resumo real e extrair links
@@ -461,6 +521,9 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 
 // IndexSystemDocs varre a raiz do projeto em busca de documentação técnica interna (Paralelo).
 func (c *Crawler) IndexSystemDocs(ctx context.Context, rootPath string) error {
+	if ctx != nil {
+		c.ctx = ctx
+	}
 	if err := c.EnsureCollections(ctx); err != nil {
 		return err
 	}
@@ -546,6 +609,9 @@ func (c *Crawler) IndexSystemDocs(ctx context.Context, rootPath string) error {
 
 // IndexRepositories engloba a lógica radial paralela com hierarquia celestial.
 func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.ProjectScan) error {
+	if ctx != nil {
+		c.ctx = ctx
+	}
 	if err := c.EnsureCollections(ctx); err != nil {
 		return err
 	}
@@ -661,26 +727,14 @@ func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.P
 			ext := strings.ToLower(filepath.Ext(path))
 			isCode := ext == ".go" || ext == ".js" || ext == ".jsx" || ext == ".ts" || ext == ".tsx" || ext == ".py" || ext == ".html" || ext == ".css"
 			isMD := ext == ".md"
+			isMedia := isMediaOrTexture(ext)
 			
-			if !isMD && !(isCode && repo.IncludeCode) {
+			if !isMD && !isMedia && !(isCode && repo.IncludeCode) {
 				return nil
 			}
 
-			docType := "project-file"
-			if isCode { docType = "code-file" }
-
 			nodeName := strings.TrimSuffix(info.Name(), ext)
 			nodeID := "moon:" + pathHash + ":" + strings.ToLower(nodeName)
-
-			// Gera resumo real a partir do conteúdo do arquivo
-			fileSummary, fileWhatItDoes := func() (string, string) {
-				raw, readErr := os.ReadFile(path)
-				if readErr != nil {
-					return fmt.Sprintf("Arquivo '%s' do repositório satélite.", nodeName),
-						"Sem conteúdo legível disponível."
-				}
-				return extractFileSummary(nodeName, ext, string(raw))
-			}()
 
 			// Determina o Pai (Parent) para criar aresta de órbita
 			parentDir := filepath.Dir(relPath)
@@ -690,6 +744,54 @@ func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.P
 			} else {
 				parentID = "planet:" + pathHash + ":" + strings.ToLower(parentDir)
 			}
+
+			// 📷 Se for Mídia, Foto, Textura ou Vídeo: indexa APENAS o nome e tipo no grafo 3D!
+			// Não lê bytes pesados na RAM, não chama visão computacional e não gasta cota de IA.
+			if isMedia {
+				extUpper := strings.ToUpper(strings.TrimPrefix(ext, "."))
+				fileSummary := fmt.Sprintf("Arquivo %s: %s", extUpper, nodeName)
+				fileWhatItDoes := fmt.Sprintf("Ativo de mídia/textura indexado por nome (%s).", extUpper)
+
+				utils.SafeEmit(c.ctx, "graph:node", map[string]interface{}{
+					"id":                nodeID,
+					"name":              nodeName,
+					"document-type":     "media",
+					"celestial-type":    "moon",
+					"mass":              3.0,
+					"parent_gravity_id": parentID,
+					"summary":           fileSummary,
+					"what-it-does":      fileWhatItDoes,
+				})
+				utils.SafeEmit(c.ctx, "graph:edge", map[string]interface{}{
+					"source":    parentID,
+					"target":    nodeID,
+					"weight":    3,
+					"edge-type": "orbital",
+				})
+				if c.LStore != nil {
+					c.LStore.UpsertGraphNode(repo.Path, nodeID, nodeName, "media", "", map[string]interface{}{
+						"celestial-type":    "moon",
+						"mass":              3.0,
+						"parent_gravity_id": parentID,
+						"summary":           fileSummary,
+					})
+					c.LStore.InsertGraphEdge(repo.Path, parentID, nodeID, 3, "orbital")
+				}
+				return nil // ⚡ Retorna imediatamente sem colocar em tasks de IA!
+			}
+
+			docType := "project-file"
+			if isCode { docType = "code-file" }
+
+			// Gera resumo real a partir do conteúdo do arquivo de código ou markdown
+			fileSummary, fileWhatItDoes := func() (string, string) {
+				raw, readErr := os.ReadFile(path)
+				if readErr != nil {
+					return fmt.Sprintf("Arquivo '%s' do repositório satélite.", nodeName),
+						"Sem conteúdo legível disponível."
+				}
+				return extractFileSummary(nodeName, ext, string(raw))
+			}()
 
 			// Emite a Lua do Projeto com resumo individual
 			utils.SafeEmit(c.ctx, "graph:node", map[string]interface{}{
@@ -739,13 +841,16 @@ func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.P
 
 // processFile é o núcleo de inteligência que processa, extrai triplas e salva no Qdrant e DuckDB.
 func (c *Crawler) processFile(ctx context.Context, path string, workspacePath string, info os.FileInfo, forcedDocType string, implicitLinks []string, parentID string) (bool, error) {
+	if ctx != nil && c.ctx == nil {
+		c.ctx = ctx
+	}
 	ext := strings.ToLower(filepath.Ext(path))
 	isMD := ext == ".md"
-	isImage := ext == ".png" || ext == ".jpg" || ext == ".jpeg"
+	isMedia := isMediaOrTexture(ext)
 	isPDF := ext == ".pdf"
 	isCode := ext == ".go" || ext == ".js" || ext == ".jsx" || ext == ".ts" || ext == ".tsx" || ext == ".py" || ext == ".html" || ext == ".css"
 
-	if !isMD && !isImage && !isPDF && !isCode {
+	if !isMD && !isMedia && !isPDF && !isCode {
 		return false, nil
 	}
 
@@ -755,6 +860,25 @@ func (c *Crawler) processFile(ctx context.Context, path string, workspacePath st
 	h.Write([]byte(workspacePath))
 	pathHash := hex.EncodeToString(h.Sum(nil))[:6]
 	nodeID := "moon:" + pathHash + ":" + strings.ToLower(nodeName)
+
+	// 📷 Mídia / Foto / Textura / Vídeo: indexa APENAS o nome e tipo, sem ler bytes pesados e sem IA multimodal!
+	if isMedia {
+		extUpper := strings.ToUpper(strings.TrimPrefix(ext, "."))
+		nodeSummary := fmt.Sprintf("Arquivo %s: %s", extUpper, nodeName)
+		if c.LStore != nil {
+			c.LStore.UpsertGraphNode(workspacePath, nodeID, nodeName, "media", "", map[string]interface{}{
+				"celestial-type":    "moon",
+				"mass":              3.0,
+				"parent_gravity_id": parentID,
+				"summary":           nodeSummary,
+			})
+			c.LStore.InsertGraphEdge(workspacePath, parentID, nodeID, 3, "orbital")
+		}
+		c.mu.Lock()
+		c.cache[path] = fmt.Sprintf("media-%d", info.ModTime().Unix())
+		c.mu.Unlock()
+		return true, nil
+	}
 
 	// 🛡️ CPI: Validação de Segurança Proativa no Processamento Semântico
 	safePath, errCPI := c.CPI.ValidatePath(path)
@@ -886,10 +1010,8 @@ func (c *Crawler) processFile(ctx context.Context, path string, workspacePath st
 	// ══════════════════════════════════════════════════════════
 	var vector []float32
 	if c.Embedder != nil {
-		if isImage || isPDF {
-			mimeType := "image/png"
-			if isPDF { mimeType = "application/pdf" }
-			vector, err = c.Embedder.GenerateMultimodalEmbedding(ctx, rawContent, mimeType, false)
+		if isPDF {
+			vector, err = c.Embedder.GenerateMultimodalEmbedding(ctx, rawContent, "application/pdf", false)
 		} else {
 			// Truncamento de Segurança para Embeddings (Max 1.5k chars para evitar estouro de tokens no motor nativo)
 			safeEmbedText := textContent
@@ -915,7 +1037,7 @@ func (c *Crawler) processFile(ctx context.Context, path string, workspacePath st
 
 	// Gera resumo individual a partir do conteúdo processado
 	var nodeSummary, nodeWhatItDoes string
-	if isImage || isPDF {
+	if isPDF {
 		if textContent != "" {
 			nodeSummary = clampStr(textContent, 220)
 			ext2 := strings.ToUpper(strings.TrimPrefix(ext, "."))
