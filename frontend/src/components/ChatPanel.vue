@@ -419,17 +419,6 @@ const handleSessionEnded = (agent) => {
 
         <ChatLog :messages="messages" :is-thinking="isThinking" />
 
-        <!-- 📡 Pulso de Atividade: Mostra o que a IA está fazendo AGORA (Anti-Travamento) -->
-        <Transition name="status-fade">
-          <div v-if="orchestrator.currentStatus?.action" class="activity-status-bar glass">
-            <div class="activity-pulse"></div>
-            <div class="activity-info">
-              <span v-if="orchestrator.currentStatus?.tool" class="activity-tool">{{ String(orchestrator.currentStatus.tool).replace('_', ' ').toUpperCase() }}</span>
-              <span class="activity-text">{{ orchestrator.currentStatus.action }}</span>
-            </div>
-          </div>
-        </Transition>
-
         <!-- Indicador de Navegação do Grafo (Context Flow) -->
         <Transition name="slide-up">
           <div v-if="isNavigating" class="navigation-status glass">
@@ -993,71 +982,10 @@ const handleSessionEnded = (agent) => {
 .fade-enter-from, .fade-leave-to {
   opacity: 0;
 }
-/* 📡 Activity Status Bar (Anti-Travamento) */
-.activity-status-bar {
-  position: absolute;
-  bottom: 120px;
-  left: 20px;
-  right: 20px;
-  padding: 10px 16px;
-  border-radius: 12px;
-  background: rgba(15, 23, 42, 0.4);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  z-index: 50;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-  pointer-events: none;
-}
-
-.activity-pulse {
-  width: 6px;
-  height: 6px;
-  background: #3b82f6;
-  border-radius: 50%;
-  animation: activity-glow 1.2s infinite ease-in-out;
-  box-shadow: 0 0 8px #3b82f6;
-}
-
-@keyframes activity-glow {
-  0%, 100% { transform: scale(1); opacity: 0.5; }
-  50% { transform: scale(1.5); opacity: 1; }
-}
-
-.activity-text {
-  font-size: 11px;
-  font-weight: 500;
-  color: #94a3b8;
-  letter-spacing: 0.5px;
-}
-
-.activity-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.activity-tool {
-  font-size: 9px;
-  font-weight: 900;
-  color: #3b82f6;
-  letter-spacing: 1px;
-}
-
 /* Perfis de Identidade Visual */
 .active-agent-badge.doc-master { background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.2); }
 .active-agent-badge.coder { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.2); }
 .active-agent-badge.planner { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.2); }
-
-.status-fade-enter-active, .status-fade-leave-active {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.status-fade-enter-from, .status-fade-leave-to {
-  opacity: 0;
-  transform: translateY(10px);
-}
 
 /* 🪐 CENTRO: Ilha Flutuante de Órbita */
 .workspace-island {
