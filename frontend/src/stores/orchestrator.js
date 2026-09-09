@@ -215,6 +215,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
       console.log("[Store] 🎼 Sinfonia sincronizada com o backend:", sessionId);
       if (sessionId) {
         currentACPID.value = sessionId;
+        isThinking.value = false; // 🚀 Destrava a tela inicial imediatamente
       }
     });
 
@@ -377,8 +378,8 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
       currentStatusKind.value = s.kind || 'status';
       const actionStr = String(actionRaw || 'Atualizando estado do agente...');
       let kind = s.kind || 'status';
+      const lowered = actionStr.toLowerCase();
       if (kind === 'status') {
-        const lowered = actionStr.toLowerCase();
         if (lowered.includes('ferramenta') || lowered.includes('tool')) kind = 'tool';
         if (lowered.includes('comando') || lowered.includes('cmd ') || lowered.includes('powershell') || lowered.includes('bash')) kind = 'command';
         if (lowered.includes('erro') || lowered.includes('falha')) kind = 'error';
@@ -386,9 +387,12 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
       }
       pushStatus(actionStr, kind);
       resetSafetyTimeout();
-      // 🔓 Se o watchdog ou o usuário já desbloqueou a UI, NÃO re-ligar o spinner.
-      // Status de memória também não deve religar.
-      if (kind !== 'memory' && !forcedUnlock.value) {
+
+      // 🔓 Se o motor avisar que está PRONTO ou ONLINE, DESTRAVA a UI imediatamente!
+      if (lowered.includes('pronto') || lowered.includes('online') || lowered.includes('aguardando') || kind === 'ready') {
+        isThinking.value = false;
+        forcedUnlock.value = false;
+      } else if (kind !== 'memory' && !forcedUnlock.value) {
         isThinking.value = true;
       }
 
@@ -547,6 +551,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     // 🛡️ Trava de Segurança: Não inicia se já estiver rodando
     if (runningSessions.value.includes(agent)) {
       console.log(`[Store] Agente ${agent} já está ativo. Ignorando novo Start.`);
+      isThinking.value = false;
       return;
     }
 
@@ -570,6 +575,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
       
     } catch (err) {
       messages.value.push({ role: 'assistant', text: `❌ Falha: ${err}`, mode: 'system' });
+    } finally {
       isThinking.value = false;
     }
   };
@@ -593,6 +599,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     // 🛡️ ANTI-DUPLICAÇÃO: Ignora se já estamos nesta sinfonia ou se outra carga está em andamento
     if (currentACPID.value === acpID) {
       console.log(`[Store] Sinfonia ${acpID} já está ativa. Ignorando.`);
+      isThinking.value = false;
       return;
     }
     if (isLoadingSession.value) {
@@ -611,9 +618,9 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
       await fetchSessions(agent); // Atualiza a lista lateral
     } catch (err) {
       messages.value.push({ role: 'assistant', text: `❌ Erro ao carregar: ${err}`, mode: 'system' });
-      isThinking.value = false;
     } finally {
       isLoadingSession.value = false;
+      isThinking.value = false;
     }
   };
 
@@ -628,6 +635,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
       await fetchSessions(agent);
     } catch (err) {
       messages.value.push({ role: 'assistant', text: `❌ Erro ao criar: ${err}`, mode: 'system' });
+    } finally {
       isThinking.value = false;
     }
   };

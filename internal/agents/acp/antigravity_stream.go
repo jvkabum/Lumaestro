@@ -114,10 +114,13 @@ func (e *ACPExecutor) runAntigravityListener(s *ACPSession, stdout io.Reader) {
 					utils.SafeEmit(e.Ctx, "sessions:current", s.ACPSessID)
 					utils.SafeEmit(e.Ctx, "sessions:updated", nil)
 				}
+				utils.SafeEmit(e.Ctx, "terminal:started", map[string]string{
+					"agent": s.AgentName,
+				})
 				utils.SafeEmit(e.Ctx, "agent:status", map[string]string{
 					"agent":  s.AgentName,
 					"action": fmt.Sprintf("Motor Antigravity pronto (%d ferramentas ativas)", numTools),
-					"kind":   "status",
+					"kind":   "ready",
 				})
 			}
 
