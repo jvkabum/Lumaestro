@@ -81,10 +81,13 @@
            </div>
            <div class="thinking-content">
              <div v-if="orchestrator.currentStatus?.tool" class="thinking-tool">
-               {{ String(orchestrator.currentStatus.tool).replace('_', ' ').toUpperCase() }}
+               {{ String(orchestrator.currentStatus.tool).replace(/_/g, ' ').toUpperCase() }}
              </div>
              <div class="thinking-text">
                {{ orchestrator.currentStatus?.action || 'Harmonizando sinapses...' }}
+             </div>
+             <div v-if="orchestrator.currentStatus?.file" class="thinking-file" :title="orchestrator.currentStatus.file">
+               📄 {{ getFileName(orchestrator.currentStatus.file) }}
              </div>
            </div>
         </div>
@@ -182,6 +185,19 @@ const getIconClass = (msg) => {
   if (msg.agent === 'Terminal') return 'terminal-icon';
   if (msg.agent === 'Claude') return 'claude-icon';
   return 'gemini-icon'; // Antigravity / Gemini use same visual identity
+};
+
+// 📄 Extrai o nome do arquivo de um caminho (ex: "internal/agents/acp/handler.go" → "handler.go")
+const getFileName = (filePath) => {
+  if (!filePath) return '';
+  const normalized = filePath.replace(/\\/g, '/');
+  const parts = normalized.split('/');
+  const name = parts[parts.length - 1];
+  // Se tiver pelo menos 2 segmentos, mostra o diretório pai também
+  if (parts.length >= 2) {
+    return parts.slice(-2).join('/');
+  }
+  return name;
 };
 
 const getMessageClasses = (msg) => {
@@ -453,6 +469,22 @@ onMounted(scrollToBottom);
 }
 
 .thinking-text { font-size: 13px; color: #e2e8f0; font-weight: 500; letter-spacing: 0.2px; }
+
+.thinking-file {
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  color: #a5b4fc;
+  background: rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  padding: 2px 8px;
+  border-radius: 6px;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 260px;
+  cursor: default;
+}
 
 /* 🧶 WEAVER Animação Premium */
 .weaving .message-bubble {

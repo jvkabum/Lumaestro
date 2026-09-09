@@ -424,10 +424,13 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     EventsOn('agent:status', (s) => {
       console.log("[Store] 🛠️ Status da IA:", s);
       const actionRaw = s.action || s.Action || "";
+      const fileRaw = s.file || s.File || "";
       currentStatus.value = {
         agent: s.agent || s.Agent || "",
         tool: s.tool || s.Tool || "",
-        action: actionRaw
+        action: actionRaw,
+        file: fileRaw,
+        state: s.state || s.State || ""
       };
       currentStatusKind.value = s.kind || 'status';
       const actionStr = String(actionRaw || 'Atualizando estado do agente...');

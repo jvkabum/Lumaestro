@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"Lumaestro/internal/config"
@@ -290,7 +291,9 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			utils.SafeEmit(h.Executor.Ctx, "agent:status", map[string]string{
 				"agent":  h.Session.AgentName,
 				"tool":   "read_file",
-				"action": fmt.Sprintf("Lendo arquivo: %s", p.Path),
+				"action": fmt.Sprintf("📖 Lendo: %s", filepath.ToSlash(p.Path)),
+				"file":   filepath.ToSlash(p.Path),
+				"kind":   "tool",
 			})
 			cfg, _ := config.Load()
 			if cfg.Security.AllowRead {
@@ -321,7 +324,9 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			utils.SafeEmit(h.Executor.Ctx, "agent:status", map[string]string{
 				"agent":  h.Session.AgentName,
 				"tool":   "write_file",
-				"action": fmt.Sprintf("Escrevendo em: %s", p.Path),
+				"action": fmt.Sprintf("📝 Salvando: %s", filepath.ToSlash(p.Path)),
+				"file":   filepath.ToSlash(p.Path),
+				"kind":   "tool",
 			})
 			cfg, _ := config.Load()
 			fileExists := false
@@ -381,7 +386,9 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			utils.SafeEmit(h.Executor.Ctx, "agent:status", map[string]string{
 				"agent":  h.Session.AgentName,
 				"tool":   "delete_file",
-				"action": fmt.Sprintf("Deletando: %s", p.Path),
+				"action": fmt.Sprintf("🗑️ Deletando: %s", filepath.ToSlash(p.Path)),
+				"file":   filepath.ToSlash(p.Path),
+				"kind":   "tool",
 			})
 			cfg, _ := config.Load()
 			if cfg.Security.AllowDelete {
@@ -415,7 +422,9 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			utils.SafeEmit(h.Executor.Ctx, "agent:status", map[string]string{
 				"agent":  h.Session.AgentName,
 				"tool":   "move_file",
-				"action": fmt.Sprintf("Movendo: %s", p.OldPath),
+				"action": fmt.Sprintf("📦 Movendo: %s -> %s", filepath.ToSlash(p.OldPath), filepath.ToSlash(p.NewPath)),
+				"file":   filepath.ToSlash(p.NewPath),
+				"kind":   "tool",
 			})
 			cfg, _ := config.Load()
 			if cfg.Security.AllowMove {

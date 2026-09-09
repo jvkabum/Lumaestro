@@ -113,6 +113,10 @@ type ACPSession struct {
 	// 🚀 Antigravity Native Engine (agy.exe)
 	IsAntigravity bool
 
+	// 🛠️ Rastreamento de Ferramentas Ativas (Evita duplicação ACTIVE -> DONE)
+	lastToolStepIdx int
+	lastToolName    string
+
 	// 🌳 Session Hierarchy (Subagents)
 	ParentSessionID string                   `json:"parentSessionId,omitempty"`
 	Subagents       map[string]*ACPSession   `json:"-"`

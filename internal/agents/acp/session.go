@@ -504,6 +504,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 			PlanMode:       planMode || (effectiveMode == "plan"),
 			ExecutionMode:  effectiveMode,
 			IsAntigravity:  isAntigravity,
+			lastToolStepIdx: -1,
 			Subagents:      make(map[string]*ACPSession),
 		}
 
