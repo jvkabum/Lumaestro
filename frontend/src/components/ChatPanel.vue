@@ -153,15 +153,9 @@ const sendChatMessage = async (payload) => {
 
 const handleSwitchProject = async (proj) => {
   showProjectDropdown.value = false
-  const { SetWorkspace, GetWorkspace } = await import('../../wailsjs/go/core/App')
   try {
-    await SetWorkspace(proj.path)
-    const updatedWs = await GetWorkspace()
-    orchestrator.workspace = updatedWs
+    await orchestrator.setWorkspace(proj.path)
     settingsStore.notify(`🚀 Órbita alterada para: ${proj.core_node}`, "success")
-    if (orchestrator.activeAgent) {
-      await orchestrator.fetchSessions(orchestrator.activeAgent)
-    }
   } catch (err) {
     settingsStore.notify(`❌ Falha na transição: ${err}`, "error")
   }

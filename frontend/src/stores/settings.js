@@ -160,6 +160,24 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   }
 
+  // 🔄 Sincronização de Configurações com o Backend Go
+  const loadConfig = async () => {
+    try {
+      const bridge = (window.go && window.go.core && window.go.core.App) || 
+                     (window.go && window.go.main && window.go.main.App)
+      if (bridge && typeof bridge.GetConfig === 'function') {
+        const savedConfig = await bridge.GetConfig()
+        if (savedConfig && Object.keys(savedConfig).length > 0) {
+          config.value = Object.assign({}, config.value, savedConfig)
+          return savedConfig
+        }
+      }
+    } catch (e) {
+      console.warn("[SettingsStore] Erro ao carregar config:", e)
+    }
+    return null
+  }
+
   return {
     config, status,
     installLogs, installStatus, logContainer,
@@ -172,6 +190,7 @@ export const useSettingsStore = defineStore('settings', () => {
     repoPathInput, coreNodeInput, includeCodeToggle, repoStatusMsg,
     lmModels, lmTesting, lmTestResult, lmLoadingModels,
     geminiKeyCount, groqKeyCount,
-    toast, notify
+    toast, notify,
+    loadConfig
   }
 })

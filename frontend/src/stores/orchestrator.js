@@ -22,6 +22,7 @@ const safeCall = async (pkg, func, ...args) => {
 };
 
 export const useOrchestratorStore = defineStore('orchestrator', () => {
+  const settingsStore = useSettingsStore();
   const messages = ref([]);
   const isThinking = ref(false);
   const isNavigating = ref(false); // 🔍 Inteligência de Navegação em Tempo Real
@@ -157,12 +158,39 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   };
 
   // 📂 Workspace Management
+  const setWorkspace = async (path) => {
+    try {
+      await safeCall('main', 'SetWorkspace', path);
+      const result = await safeCall('main', 'GetWorkspace');
+      if (result) {
+        workspace.value = result;
+        pushStatus(`📂 Órbita alterada: ${result.name}`, 'status');
+      }
+      await settingsStore.loadConfig();
+      if (activeAgent.value) {
+        messages.value = [];
+        currentACPID.value = null;
+        await fetchSessions(activeAgent.value);
+      }
+      return result;
+    } catch (err) {
+      console.error('[Workspace] Erro ao definir órbita:', err);
+      throw err;
+    }
+  };
+
   const selectWorkspace = async () => {
     try {
       const result = await safeCall('main', 'SelectWorkspace');
       if (result) {
         workspace.value = result;
         pushStatus(`📂 Projeto: ${result.name}`, 'status');
+        await settingsStore.loadConfig();
+        if (activeAgent.value) {
+          messages.value = [];
+          currentACPID.value = null;
+          await fetchSessions(activeAgent.value);
+        }
       }
     } catch (err) {
       console.error('[Workspace] Erro ao selecionar:', err);
@@ -175,6 +203,12 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
       if (result) {
         workspace.value = result;
         pushStatus('📂 Workspace limpo. IA operando em Sandbox segura.', 'status');
+        await settingsStore.loadConfig();
+        if (activeAgent.value) {
+          messages.value = [];
+          currentACPID.value = null;
+          await fetchSessions(activeAgent.value);
+        }
       }
     } catch (err) {
       console.error('[Workspace] Erro ao limpar:', err);
@@ -184,7 +218,10 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   const loadWorkspace = async () => {
     try {
       const result = await safeCall('main', 'GetWorkspace');
-      if (result) workspace.value = result;
+      if (result && (result.path !== undefined || result.name !== undefined)) {
+        workspace.value = result;
+      }
+      await settingsStore.loadConfig();
     } catch (err) {
       console.error('[Workspace] Erro ao carregar:', err);
     }
@@ -207,6 +244,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     EventsOn('workspace:changed', async (data) => {
       if (data) {
         workspace.value = { path: data.path || '', name: data.name || 'Nenhuma Órbita (Sandbox)' };
+        await settingsStore.loadConfig();
         if (activeAgent.value) {
           console.log("[Store] 🪐 Órbita alterada para:", data.path, "- Atualizando sinfonias...");
           messages.value = [];
@@ -939,7 +977,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     customAgents, isAgentsPanelOpen, isCodeSearchOpen, isDiffViewerOpen, isPermissionsModalOpen,
     initListeners, ask, startSession, sendInput, submitReview, switchAgent, stopSession, forceUnlock,
     fetchSessions, loadSession, restoreSessionMessages, newSession, renameSession, autoNameSession, toggleSidebar, clearStatusTimeline, sendSteeringHint,
-    selectWorkspace, clearWorkspace, loadWorkspace,
+    selectWorkspace, clearWorkspace, loadWorkspace, setWorkspace,
     fetchCustomAgents, killSubagent, runCodeSearch, getWorkspaceDiff, getSecurityPermissions,
     toggleAgentsPanel, toggleCodeSearch, toggleDiffViewer, togglePermissionsModal, toggleArtifactModal, forkSession,
     currentView, openSettings,

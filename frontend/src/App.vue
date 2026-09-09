@@ -106,6 +106,13 @@ onMounted(async () => {
     currentView.value = view
   })
 
+  EventsOn('workspace:changed', async (data) => {
+    if (data) {
+      orchestrator.workspace = { path: data.path || '', name: data.name || 'Nenhuma Órbita (Sandbox)' }
+      await settingsStore.loadConfig()
+    }
+  })
+
   // 🚀 [Mixer v2] Throttling de Logs + Streaming para Performance e Fluidez
   let logBuffer = []
   const flushLogs = () => {
@@ -221,6 +228,10 @@ onMounted(async () => {
         if (toolsStatus) {
             settingsStore.status.tools = toolsStatus
         }
+
+        // ⚙️ Carrega configurações e projetos em órbita no boot
+        await settingsStore.loadConfig()
+        await orchestrator.loadWorkspace()
       } else {
         connectionError.value = "Backend respondeu, mas Qdrant ou Configuração falharam."
       }

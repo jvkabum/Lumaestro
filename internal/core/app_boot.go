@@ -104,6 +104,25 @@ func (a *App) initServices() error {
 		fmt.Printf("[Boot] 🛡️ Segurança: Nenhuma órbita externa configurada. Redirecionando para Sandbox limpa: %s\n", activeWs)
 	}
 
+	// 🪐 Auto-cura: se active_workspace existe e não está em ExternalProjects, adiciona
+	if cfg.ActiveWorkspace != "" {
+		found := false
+		for _, p := range cfg.ExternalProjects {
+			if strings.EqualFold(filepath.Clean(p.Path), filepath.Clean(cfg.ActiveWorkspace)) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			cfg.ExternalProjects = append(cfg.ExternalProjects, config.ProjectScan{
+				Path:        cfg.ActiveWorkspace,
+				CoreNode:    filepath.Base(cfg.ActiveWorkspace),
+				IncludeCode: true,
+			})
+			_ = config.Save(*cfg)
+		}
+	}
+
 	a.executor.CPI = acp.NewCPIValidator(activeWs, cfg.ObsidianVaultPath)
 	a.executor.Workspace = a.executor.CPI.ActiveOrbit
 
@@ -112,6 +131,9 @@ func (a *App) initServices() error {
 	} else {
 		fmt.Println("[Boot] 🛡️ Segurança: Sistema operando em modo de amnésia total (sem órbitas definidas).")
 	}
+
+	// 📡 Sincroniza o workspace ativo com o Frontend no boot
+	a.emitEvent("workspace:changed", a.GetWorkspace())
 
 	// 1. LM Studio
 	if cfg.LMStudioEnabled && cfg.LMStudioURL != "" {

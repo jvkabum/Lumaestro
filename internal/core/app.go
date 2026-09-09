@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 )
 
@@ -99,8 +100,43 @@ func (a *App) GetLastSessionID() (string, error) {
 
 // NewApp creates a new App application struct
 func NewApp() *App {
-	exec := acp.NewACPExecutor("", "")
+	cfg, err := config.Load()
+	if err != nil || cfg == nil {
+		cfg = &config.Config{}
+	}
+
+	appRoot, _ := os.Getwd()
+	activeWs := cfg.ActiveWorkspace
+	normWs := strings.ToLower(filepath.Clean(activeWs))
+	normAppRoot := strings.ToLower(filepath.Clean(appRoot))
+
+	if activeWs == "" || normWs == normAppRoot {
+		activeWs = filepath.Join(appRoot, ".lumaestro", "sandbox")
+		_ = os.MkdirAll(activeWs, 0755)
+	}
+
+	// 🪐 Auto-cura: se active_workspace existe e não está em ExternalProjects, adiciona
+	if cfg.ActiveWorkspace != "" {
+		found := false
+		for _, p := range cfg.ExternalProjects {
+			if strings.EqualFold(filepath.Clean(p.Path), filepath.Clean(cfg.ActiveWorkspace)) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			cfg.ExternalProjects = append(cfg.ExternalProjects, config.ProjectScan{
+				Path:        cfg.ActiveWorkspace,
+				CoreNode:    filepath.Base(cfg.ActiveWorkspace),
+				IncludeCode: true,
+			})
+			_ = config.Save(*cfg)
+		}
+	}
+
+	exec := acp.NewACPExecutor(activeWs, cfg.ObsidianVaultPath)
 	return &App{
+		config:       cfg,
 		installer:    tools.NewInstaller(),
 		executor:     exec,
 		legacyExec:   agents.NewExecutor(),

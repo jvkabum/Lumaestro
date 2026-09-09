@@ -71,6 +71,23 @@ func (a *App) SetWorkspace(path string) error {
 
 	if a.config != nil {
 		a.config.ActiveWorkspace = absPath
+
+		// 🪐 Registra automaticamente na lista de projetos em órbita (ExternalProjects)
+		found := false
+		for _, p := range a.config.ExternalProjects {
+			if strings.EqualFold(filepath.Clean(p.Path), filepath.Clean(absPath)) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			a.config.ExternalProjects = append(a.config.ExternalProjects, config.ProjectScan{
+				Path:        absPath,
+				CoreNode:    filepath.Base(absPath),
+				IncludeCode: true,
+			})
+		}
+
 		config.Save(*a.config)
 	}
 
@@ -108,6 +125,10 @@ func (a *App) SetWorkspace(path string) error {
 // GetWorkspace retorna o workspace ativo atual.
 func (a *App) GetWorkspace() map[string]string {
 	ws := a.executor.Workspace
+	if ws == "" && a.config != nil && a.config.ActiveWorkspace != "" {
+		ws = a.config.ActiveWorkspace
+		a.executor.Workspace = ws
+	}
 	appRoot, _ := os.Getwd()
 	sandboxDir := filepath.Join(appRoot, ".lumaestro", "sandbox")
 
