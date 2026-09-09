@@ -110,6 +110,9 @@ onMounted(async () => {
     if (data) {
       orchestrator.workspace = { path: data.path || '', name: data.name || 'Nenhuma Órbita (Sandbox)' }
       await settingsStore.loadConfig()
+      // Limpa o grafo anterior para que os nós e arestas da nova órbita apareçam com fidelidade
+      state.nodes.splice(0, state.nodes.length)
+      state.edges.splice(0, state.edges.length)
     }
   })
 

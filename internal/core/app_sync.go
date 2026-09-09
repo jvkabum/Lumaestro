@@ -336,7 +336,14 @@ func (a *App) LoadFastGraph() {
 				fmt.Printf("[Sync] 💾 Fallback: Emitindo %d arestas do DuckDB.\n", len(edges))
 				a.emitEvent("graph:edges:batch", edges)
 			}
+			return
 		}
+	}
+
+	// 3. Auto-Scan se o workspace nunca foi indexado (0 nós no cache e no DuckDB)
+	if a.crawler != nil && a.getActiveWorkspace() != "" && !a.IsScanning {
+		fmt.Println("[Sync] 🚀 Primeiro acesso ao workspace: disparando auto-scan estrutural...")
+		go a.ScanVault()
 	}
 }
 

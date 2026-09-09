@@ -119,6 +119,9 @@ func (a *App) SetWorkspace(path string) error {
 	})
 	a.emitEvent("sessions:updated", nil)
 
+	// 🪐 Carrega o cosmos 3D e as conexões do novo workspace
+	go a.LoadFastGraph()
+
 	return nil
 }
 
