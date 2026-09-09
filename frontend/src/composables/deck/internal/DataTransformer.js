@@ -37,10 +37,12 @@ export function useDataTransformer() {
 
     // 3. Sincronização de Links (Remove links órfãos após filtragem de nós)
     const nodeIds = new Set(filteredNodes.map(n => String(n.id)))
+    const nodeIdsLower = new Set(filteredNodes.map(n => String(n.id).toLowerCase()))
     filteredLinks = filteredLinks.filter(l => {
         const sid = typeof l.source === 'object' ? String(l.source.id) : String(l.source)
         const tid = typeof l.target === 'object' ? String(l.target.id) : String(l.target)
-        return nodeIds.has(sid) && nodeIds.has(tid)
+        return (nodeIds.has(sid) || nodeIdsLower.has(sid.toLowerCase())) &&
+               (nodeIds.has(tid) || nodeIdsLower.has(tid.toLowerCase()))
     })
 
     return { 

@@ -37,6 +37,24 @@ export const useGraphStore = defineStore('graph', () => {
     clickedNodeLinks.value = new Set()
     highlightedNeighbors.value = new Set()
   }
+  // ── Conexões Visuais ──
+  const showConnections = ref(true)
+  const connectionFilter = ref('all') // 'all' | 'semantic' | 'focus'
+
+  const cycleConnectionFilter = () => {
+    if (connectionFilter.value === 'all') {
+      connectionFilter.value = 'semantic'
+    } else if (connectionFilter.value === 'semantic') {
+      connectionFilter.value = 'focus'
+    } else {
+      connectionFilter.value = 'all'
+    }
+  }
+
+  const toggleShowConnections = () => {
+    showConnections.value = !showConnections.value
+  }
+
   const xRayThreshold = ref(0)
   const scanLoading = ref(false)
   const pruneLoading = ref(false)
@@ -126,12 +144,14 @@ export const useGraphStore = defineStore('graph', () => {
     graphHealth,
     highlightedLinks, clickedNodeLinks, highlightedNeighbors,
     xRayThreshold, scanLoading, pruneLoading, skeletalMode,
+    showConnections, connectionFilter,
     showFps, currentFps,
     scanning, showConfirmModal, modalMode,
     currentConflict,
     communityPalette,
     // Actions
     closeDetails, openSource, checkHealth, resetHighlights, clearGraph,
+    cycleConnectionFilter, toggleShowConnections,
     setSelectedNode, setNodeDetails
   }
 })

@@ -426,12 +426,33 @@ func (s *DuckDBStore) GetFullGraph(workspacePath string) ([]map[string]interface
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// 1. Recuperar Nós do Workspace
-	rowsN, err := s.db.Query(`SELECT id, name, type, pos_x, pos_y, pos_z, parent_id, metadata FROM graph_nodes WHERE workspace_path = ?`, workspacePath)
-	if err != nil {
-		return nil, nil, err
+	var rowsN, rowsE *sql.Rows
+	var err error
+
+	cleanWs := strings.TrimSpace(workspacePath)
+	if cleanWs == "" {
+		rowsN, err = s.db.Query(`SELECT id, name, type, pos_x, pos_y, pos_z, parent_id, metadata FROM graph_nodes`)
+		if err != nil {
+			return nil, nil, err
+		}
+		rowsE, err = s.db.Query(`SELECT source_id, target_id, weight, relation_type FROM graph_edges`)
+		if err != nil {
+			rowsN.Close()
+			return nil, nil, err
+		}
+	} else {
+		rowsN, err = s.db.Query(`SELECT id, name, type, pos_x, pos_y, pos_z, parent_id, metadata FROM graph_nodes WHERE workspace_path = ?`, cleanWs)
+		if err != nil {
+			return nil, nil, err
+		}
+		rowsE, err = s.db.Query(`SELECT source_id, target_id, weight, relation_type FROM graph_edges WHERE workspace_path = ?`, cleanWs)
+		if err != nil {
+			rowsN.Close()
+			return nil, nil, err
+		}
 	}
 	defer rowsN.Close()
+	defer rowsE.Close()
 
 	var nodes []map[string]interface{}
 	for rowsN.Next() {
@@ -460,20 +481,17 @@ func (s *DuckDBStore) GetFullGraph(workspacePath string) ([]map[string]interface
 		}
 	}
 
-	// 2. Recuperar Arestas do Workspace
-	rowsE, err := s.db.Query(`SELECT source_id, target_id, weight, relation_type FROM graph_edges WHERE workspace_path = ?`, workspacePath)
-	if err != nil {
-		return nil, nil, err
-	}
-	defer rowsE.Close()
-
 	var edges []map[string]interface{}
 	for rowsE.Next() {
 		var src, tgt, rel string
 		var w float64
 		if err := rowsE.Scan(&src, &tgt, &w, &rel); err == nil {
 			edges = append(edges, map[string]interface{}{
-				"source": src, "target": tgt, "weight": w, "relation_type": rel,
+				"source":        src,
+				"target":        tgt,
+				"weight":        w,
+				"relation_type": rel,
+				"edge-type":     rel,
 			})
 		}
 	}

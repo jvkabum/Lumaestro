@@ -87,26 +87,32 @@ export function useDeckRender() {
 
 
     /**
-     * ⚡ activateNetwork — Identifica e ilumina a vizinhança imadiata do nó.
+     * ⚡ activateNetwork — Identifica e ilumina a vizinhança imediata do nó.
      */
     const activateNetwork = (nodeId) => {
         if (!nodeId) return;
         const s = String(nodeId);
+        const sLow = s.toLowerCase();
 
         store.resetHighlights();
 
         currentLinks.value.forEach(l => {
             const sid = String(l.source?.id || l.source);
             const tid = String(l.target?.id || l.target);
+            const sidLow = sid.toLowerCase();
+            const tidLow = tid.toLowerCase();
 
-            if (sid === s || tid === s) {
+            if (sid === s || tid === s || sidLow === sLow || tidLow === sLow) {
                 // Acende o link
                 store.clickedNodeLinks.add(`${sid}-${tid}`);
                 store.clickedNodeLinks.add(`${tid}-${sid}`); // Bidirecional para segurança visual
+                store.clickedNodeLinks.add(`${sidLow}-${tidLow}`);
+                store.clickedNodeLinks.add(`${tidLow}-${sidLow}`);
 
                 // Acende o vizinho
-                const neighborId = sid === s ? tid : sid;
+                const neighborId = (sid === s || sidLow === sLow) ? tid : sid;
                 store.highlightedNeighbors.add(neighborId);
+                store.highlightedNeighbors.add(neighborId.toLowerCase());
             }
         });
 
@@ -163,7 +169,11 @@ export function useDeckRender() {
 
         // 1. Dados e Deck
         currentNodes.value = bootstrapCoordinates(purify(rawNodes));
-        currentNodes.value.forEach(n => nodeMap.set(String(n.id), n));
+        currentNodes.value.forEach(n => {
+            const sid = String(n.id);
+            nodeMap.set(sid, n);
+            nodeMap.set(sid.toLowerCase(), n);
+        });
         currentLinks.value = mapLinks(rawEdges, nodeMap);
 
         deckInstance.value = createDeck({

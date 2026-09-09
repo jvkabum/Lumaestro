@@ -23,7 +23,7 @@ export function useLayerComposer() {
         
         // 🔗 Links de Ativação
         const clLinks = store.clickedNodeLinks; // Conexões do nó ativo (Neon Brilhante)
-        const hlLinks = store.highlightedNeighbors; // Vizinhos (Para lógica de rótulos se necessário)
+        const hlLinks = store.highlightedLinks; // Links globais destacados (RAG Solar)
 
         // 🧠 [VÍNCULO SEMÂNTICO] IDs capturados pelo motor de sinapses invisíveis
         const semanticNeighborIds = new Set(
@@ -54,7 +54,7 @@ export function useLayerComposer() {
             }),
             
             // 2. Conexões + Fótons (GPU Sync V9)
-            createLinkLayer({ currentLinks, clLinks, hlLinks, animationTime }),
+            createLinkLayer({ currentLinks, clLinks, hlLinks, animationTime, store }),
             
             // 3. Nós (Interação) - CARTESIAN Sync
             createNodeLayer({ 

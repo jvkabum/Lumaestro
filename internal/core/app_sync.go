@@ -321,16 +321,21 @@ func (a *App) LoadFastGraph() {
 		return
 	}
 
-	// 2. Fallback: Se não houver cache, tenta ler apenas os nós do DuckDB
+	// 2. Fallback: Se não houver cache, tenta ler do DuckDB (Nós + Arestas)
 	if a.LStore != nil {
-		vaultPath := ""
-		if a.config != nil {
-			vaultPath = a.config.ObsidianVaultPath
+		targetWs := a.getActiveWorkspace()
+		if targetWs == "" && a.config != nil {
+			targetWs = a.config.ObsidianVaultPath
 		}
-		nodes, _, err := a.LStore.GetFullGraph(vaultPath)
+		nodes, edges, err := a.LStore.GetFullGraph(targetWs)
 		if err == nil && len(nodes) > 0 {
 			fmt.Printf("[Sync] 💾 Fallback: Emitindo %d nós do DuckDB.\n", len(nodes))
 			a.emitEvent("graph:nodes:batch", nodes)
+			if len(edges) > 0 {
+				time.Sleep(300 * time.Millisecond)
+				fmt.Printf("[Sync] 💾 Fallback: Emitindo %d arestas do DuckDB.\n", len(edges))
+				a.emitEvent("graph:edges:batch", edges)
+			}
 		}
 	}
 }
@@ -394,8 +399,12 @@ func (a *App) SyncAllNodes() {
 	
 	// ⚡ Carrega posições salvas do DuckDB para merge
 	savedPositions := make(map[string][]float64)
+	targetWs := a.getActiveWorkspace()
+	if targetWs == "" && a.config != nil {
+		targetWs = a.config.ObsidianVaultPath
+	}
 	if a.LStore != nil {
-		nodes, _, _ := a.LStore.GetFullGraph(a.config.ObsidianVaultPath)
+		nodes, _, _ := a.LStore.GetFullGraph(targetWs)
 		for _, n := range nodes {
 			id, _ := n["id"].(string)
 			x, _ := n["x"].(float64)
@@ -450,7 +459,7 @@ func (a *App) SyncAllNodes() {
 	// 🛠️ FALLBACK: Se Qdrant estiver vazio, tenta carregar a estrutura básica do DuckDB (Fase 1)
 	if len(points) == 0 && a.LStore != nil {
 		fmt.Println("[Sync] ⚠️ Qdrant vazio. Utilizando estrutura local do DuckDB (Modo Estrutural)...")
-		dbNodes, dbEdges, _ := a.LStore.GetFullGraph(a.config.ObsidianVaultPath)
+		dbNodes, dbEdges, _ := a.LStore.GetFullGraph(targetWs)
 		
 		if len(dbNodes) > 0 {
 			a.emitEvent("agent:log", map[string]string{

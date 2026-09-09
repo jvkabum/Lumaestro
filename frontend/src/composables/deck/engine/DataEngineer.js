@@ -34,7 +34,10 @@ export function useDataEngineer() {
         // 1. Reconciliação de Metadados (Mantendo referências físicas)
         const updatedList = pureNodes.map(n => {
             const sid = String(n.id);
-            if (!nodeMap.has(sid)) {
+            const sidLower = sid.toLowerCase();
+            const existing = nodeMap.get(sid) || nodeMap.get(sidLower);
+
+            if (!existing) {
                 // Novo Nó: Nascimento Esférico
                 const r = 200 + Math.random() * 500;
                 const theta = Math.random() * 2 * Math.PI;
@@ -47,16 +50,18 @@ export function useDataEngineer() {
                     z: r * Math.cos(phi)
                 };
                 nodeMap.set(sid, newNode);
+                nodeMap.set(sidLower, newNode);
                 return newNode;
             } else {
                 // Nó Existente: Mescla metadados novos preservando coordenadas de física
-                const existing = nodeMap.get(sid);
                 Object.assign(existing, { 
                     ...n, 
                     x: existing.x, 
                     y: existing.y, 
                     z: existing.z 
                 });
+                nodeMap.set(sid, existing);
+                nodeMap.set(sidLower, existing);
                 return existing;
             }
         });
@@ -75,8 +80,8 @@ export function useDataEngineer() {
             const tid = String(typeof link.target === 'object' ? link.target.id : link.target);
             return {
                 ...link,
-                sourceObj: nodeMap.get(sid),
-                targetObj: nodeMap.get(tid)
+                sourceObj: nodeMap.get(sid) || nodeMap.get(sid.toLowerCase()),
+                targetObj: nodeMap.get(tid) || nodeMap.get(tid.toLowerCase())
             };
         });
     };

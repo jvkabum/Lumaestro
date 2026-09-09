@@ -112,57 +112,105 @@ NeuralLinkLayer.layerName = 'NeuralLinkLayer';
 /**
  * 🕸️ LinkLayer — A Teia Conectiva
  */
-export function createLinkLayer({ currentLinks, clLinks, hlLinks, animationTime }) {
+export function createLinkLayer({ currentLinks, clLinks, hlLinks, animationTime, store }) {
+    const showConnections = store ? store.showConnections !== false : true;
+    const connectionFilter = (store && store.connectionFilter) || 'all'; // 'all' | 'semantic' | 'focus'
+
+    const isLinkInSet = (s, t, set) => {
+        if (!set || set.size === 0) return false;
+        const sLow = s.toLowerCase();
+        const tLow = t.toLowerCase();
+        return set.has(`${s}-${t}`) || set.has(`${t}-${s}`) ||
+               set.has(`${sLow}-${tLow}`) || set.has(`${tLow}-${sLow}`);
+    };
+
     return new NeuralLinkLayer({
         id: 'graph-edges-v9-surgical',
         coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
         data: [...currentLinks].filter(l => {
-            // 🚫 [MAGNETISMO INVISÍVEL] Remove links orbitais e semânticos da renderização visual.
-            // Eles continuam existindo na física (puxando nós), mas não poluem a tela com linhas.
-            if (l['edge-type'] === 'orbital' || l['edge-type'] === 'semantic') return false;
-
             const sObj = l.sourceObj;
             const tObj = l.targetObj;
 
-            // 🛡️ Previne o "Nó Central Invisível" (Buraco Negro)
-            // Se a aresta não tem um nó de origem ou destino válido, a ignoramos.
+            // 🛡️ Previne pontas nulas, nós inexistentes ou laços em si mesmo
             if (!sObj || !tObj) return false;
+            if (sObj.id === tObj.id) return false;
 
-            if (sObj['celestial-type'] === 'galaxy-core' || sObj['celestial-type'] === 'solar-system-core') return false;
-            if (tObj['celestial-type'] === 'galaxy-core' || tObj['celestial-type'] === 'solar-system-core') return false;
+            const s = String(l.source?.id || l.source);
+            const t = String(l.target?.id || l.target);
+            const isClicked = isLinkInSet(s, t, clLinks);
+            const isHighlighted = isLinkInSet(s, t, hlLinks);
+
+            // 🌟 Conexões ativas do nó selecionado SEMPRE aparecem
+            if (isClicked || isHighlighted) return true;
+
+            // Se o usuário desligou as conexões:
+            if (!showConnections) return false;
+
+            // Modo 'focus': exibe apenas as conexões do nó selecionado
+            if (connectionFilter === 'focus') return false;
+
+            const edgeType = l['edge-type'] || l['relation_type'] || l.relation_type || 'link';
+
+            // Modo 'semantic': exibe conexões semânticas e links diretos, omitindo hierarquia orbital pura
+            if (connectionFilter === 'semantic' && edgeType === 'orbital') return false;
+
             return true;
         }),
         getSourcePosition: link => link.sourceObj ? [link.sourceObj.x || 0, link.sourceObj.y || 0, link.sourceObj.z || 0] : [0, 0, 0],
         getTargetPosition: link => link.targetObj ? [link.targetObj.x || 0, link.targetObj.y || 0, link.targetObj.z || 0] : [0, 0, 0],
         getSourceColor: link => {
-            const s = link.source.id || link.source;
-            const t = link.target.id || link.target;
-            if (clLinks.has(`${s}-${t}`) || clLinks.has(`${t}-${s}`)) return [0, 242, 255, 160]; // Azul ciano suave
-            if (hlLinks.has(`${s}-${t}`) || hlLinks.has(`${t}-${s}`)) return [...colors.active, 180];
-            return [...colors.page, 60]; // Restaurado para visibilidade normal
+            const s = String(link.source?.id || link.source);
+            const t = String(link.target?.id || link.target);
+            const isClicked = isLinkInSet(s, t, clLinks);
+            const isHighlighted = isLinkInSet(s, t, hlLinks);
+
+            if (isClicked) return [0, 242, 255, 240]; // Azul ciano neon vibrante
+            if (isHighlighted) return [252, 211, 77, 220]; // Dourado solar
+
+            const type = link['edge-type'] || link['relation_type'] || link.relation_type || 'link';
+            if (type === 'semantic' || type === 'recon_auto') return [167, 139, 250, 95]; // Violeta neural
+            if (type === 'orbital') return [70, 150, 240, 50]; // Linha hierárquica cósmica sutil
+            if (type === 'memory') return [244, 114, 182, 110]; // Rosa memória
+            return [...colors.page, 75]; // Cyan vibrante padrão
         },
         getTargetColor: link => {
-            const s = link.source.id || link.source;
-            const t = link.target.id || link.target;
-            if (clLinks.has(`${s}-${t}`) || clLinks.has(`${t}-${s}`)) return [0, 242, 255, 160]; // Azul ciano suave
-            if (hlLinks.has(`${s}-${t}`) || hlLinks.has(`${t}-${s}`)) return [252, 211, 77, 180];
-            return [40, 180, 180, 60]; // Restaurado para visibilidade normal
+            const s = String(link.source?.id || link.source);
+            const t = String(link.target?.id || link.target);
+            const isClicked = isLinkInSet(s, t, clLinks);
+            const isHighlighted = isLinkInSet(s, t, hlLinks);
+
+            if (isClicked) return [0, 242, 255, 240];
+            if (isHighlighted) return [252, 211, 77, 220];
+
+            const type = link['edge-type'] || link['relation_type'] || link.relation_type || 'link';
+            if (type === 'semantic' || type === 'recon_auto') return [34, 211, 238, 95];
+            if (type === 'orbital') return [100, 180, 255, 50];
+            if (type === 'memory') return [244, 114, 182, 110];
+            return [40, 180, 180, 75];
         },
         getWidth: link => {
-            const s = link.source.id || link.source;
-            const t = link.target.id || link.target;
-            if (clLinks.has(`${s}-${t}`) || clLinks.has(`${t}-${s}`)) return 1.2; // Reduzido
-            if (hlLinks.has(`${s}-${t}`) || hlLinks.has(`${t}-${s}`)) return 1.0; // Reduzido
-            return 1.0; // Restaurado para visibilidade normal
+            const s = String(link.source?.id || link.source);
+            const t = String(link.target?.id || link.target);
+            const isClicked = isLinkInSet(s, t, clLinks);
+            const isHighlighted = isLinkInSet(s, t, hlLinks);
+
+            if (isClicked) return 2.0; // Destaque intenso
+            if (isHighlighted) return 1.5;
+
+            const type = link['edge-type'] || link['relation_type'] || link.relation_type || 'link';
+            if (type === 'orbital') return 0.6; // Linha fina para hierarquia estrutural
+            return 1.0;
         },
-        getHeight: 0.3, // Curva quase imperceptível para manter charme orgânico sem entortar a entrada no nó!
+        getHeight: 0.25, // Curva quase imperceptível para manter charme orgânico sem entortar a entrada no nó!
         animationTime,
         getOffset: (link, { index }) => index * 1.618,
         updateTriggers: {
-            getSourceColor: [clLinks.size, hlLinks.size],
-            getTargetColor: [clLinks.size, hlLinks.size],
+            getSourceColor: [clLinks?.size || 0, hlLinks?.size || 0, store?.connectionFilter, store?.showConnections],
+            getTargetColor: [clLinks?.size || 0, hlLinks?.size || 0, store?.connectionFilter, store?.showConnections],
+            getWidth: [clLinks?.size || 0, hlLinks?.size || 0],
             getSourcePosition: animationTime,
-            getTargetPosition: animationTime
+            getTargetPosition: animationTime,
+            data: [store?.connectionFilter, store?.showConnections, clLinks?.size || 0]
         }
     });
 }

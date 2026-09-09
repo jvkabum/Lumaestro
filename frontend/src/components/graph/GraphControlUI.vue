@@ -1,4 +1,5 @@
 <script setup>
+import { computed } from 'vue'
 import { useGraphStore } from '../../stores/graph'
 import { useOrchestratorStore } from '../../stores/orchestrator'
 import { useGraphActions } from '../../composables/deck/useGraphActions'
@@ -29,6 +30,21 @@ const {
   runReconScan, 
   pruneNodes 
 } = useGraphActions()
+
+// 🕸️ Conexões Visuais & Filtro
+const connectionIcon = computed(() => {
+  if (!store.showConnections) return '🚫'
+  if (store.connectionFilter === 'all') return '🕸️'
+  if (store.connectionFilter === 'semantic') return '🧠'
+  return '🎯'
+})
+
+const connectionLabel = computed(() => {
+  if (!store.showConnections) return 'OFF'
+  if (store.connectionFilter === 'all') return 'TODAS'
+  if (store.connectionFilter === 'semantic') return 'SEMÂNT'
+  return 'FOCO'
+})
 </script>
 
 <template>
@@ -85,6 +101,13 @@ const {
              <button @click="store.skeletalMode = !store.skeletalMode" :class="['recon-btn', { active: store.skeletalMode }]" title="Modo Esqueleto (MST)">
                <span v-if="!store.skeletalMode">🩻 MST</span>
                <span v-else>👁️ FULL</span>
+             </button>
+             <button 
+               @click="store.cycleConnectionFilter()" 
+               :class="['recon-btn', { active: store.showConnections && store.connectionFilter !== 'all' }]" 
+               :title="`Conexões: ${connectionLabel} (Clique para alternar: Todas -> Semânticas -> Foco)`"
+             >
+               <span>{{ connectionIcon }} {{ connectionLabel }}</span>
              </button>
           </div>
         </div>

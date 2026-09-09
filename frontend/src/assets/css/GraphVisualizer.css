@@ -692,11 +692,13 @@
 
 .recon-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .recon-btn, .prune-btn {
-  flex: 1;
+  flex: 1 1 calc(50% - 6px);
+  min-width: 58px;
   background: rgba(255,255,255,0.05);
   border: 1px solid rgba(59, 130, 246, 0.3);
   color: #fff;
