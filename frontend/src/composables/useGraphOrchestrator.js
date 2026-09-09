@@ -24,7 +24,7 @@ export function useGraphOrchestrator(props) {
   // ── Importações de Sub-Lógicas (Domínio Deck) ──
   const { 
     initGraph, updateGraph, destroyGraph, updateForce, 
-    currentViewState, savePositions, currentNodes, focusNodeById 
+    currentViewState, savePositions, currentNodes, focusNodeById, zoomToFit 
   } = useDeckRender()
   const { transform } = useDataTransformer()
   const { registerKeyboardControls } = useInputDriver()
@@ -46,6 +46,7 @@ export function useGraphOrchestrator(props) {
     // 🚀 [CONEXÃO VITAL] Registra a interface do grafo na Store para controle externo (Efeito de Descoberta)
     Object.assign(store.graphInstance, { 
         focusNodeById,
+        zoomToFit,
         pan: (dx, dy, dz) => focusNodeById(null)
     })
 

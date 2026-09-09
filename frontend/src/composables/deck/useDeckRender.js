@@ -258,6 +258,7 @@ export function useDeckRender() {
     return {
         initGraph, updateGraph, destroyGraph, updateForce,
         currentViewState, savePositions, currentNodes,
-        focusNodeById, nodeMap
+        focusNodeById, nodeMap,
+        zoomToFit: () => pilotZoom(deckInstance.value, currentViewState)
     };
 }
