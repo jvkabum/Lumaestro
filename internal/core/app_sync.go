@@ -396,6 +396,14 @@ func (a *App) UpdateNodePositions(nodes []map[string]interface{}) string {
 
 // SyncAllNodes percorre o banco de dados e emite cada nota para o visualizador 3D.
 func (a *App) SyncAllNodes() {
+	// ⏳ Aguarda brevemente caso os motores vitais ainda estejam inicializando no boot
+	for i := 0; i < 6; i++ {
+		if a.qdrant != nil && a.ctx != nil && a.GEngine != nil {
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+
 	if a.qdrant == nil || a.ctx == nil || a.GEngine == nil {
 		fmt.Println("[Sync] ⚠️ Sincronização cancelada: Motores vitais indisponíveis.")
 		return
