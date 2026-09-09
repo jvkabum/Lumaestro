@@ -5,7 +5,7 @@
 [![DuckDB](https://img.shields.io/badge/DuckDB-v1.1.3-FFF000?style=for-the-badge&logo=duckdb&logoColor=black)](https://duckdb.org)
 [![Deck.gl 3D](https://img.shields.io/badge/Deck.gl-3D_Cosmos-4ade80?style=for-the-badge)](https://deck.gl)
 [![Antigravity](https://img.shields.io/badge/Engine-Google_Antigravity-8b5cf6?style=for-the-badge)](https://github.com/jvkabum/Lumaestro)
-[![Status](https://img.shields.io/badge/Status-Industrial_Stability-10b981?style=for-the-badge)](https://github.com/jvkabum/Lumaestro)
+[![Release](https://img.shields.io/badge/Release-v1.0.0-f59e0b?style=for-the-badge)](https://github.com/jvkabum/Lumaestro/releases)
 
 ![Lumaestro Neural Graph Hero](./media/lumaestro_graph_hero.png)
 
@@ -25,6 +25,7 @@ graph TD
     B --> E["🏢 Governança & Custos (SQLite / Paperclip)"]
     B --> F["🔍 Memória Vetorial (Qdrant Cloud)"]
     B --> G["🛡️ Zero-Noise Crawler (Obsidian / Codebases)"]
+    B --> H["👁️ Real-Time Tool Visibility"]
 ```
 
 ### 1. 🪐 Motor Cósmico 3D (Deck.gl & WebGL)
@@ -39,22 +40,35 @@ graph TD
 - **Modelos de Raciocínio Geração 3**: Acesso direto a modelos avançados de pensamento (Gemini 2.5 Pro/Flash Thinking, Claude Sonnet 3.7 Thinking).
 - **Modos de Execução**: Alternância instantânea entre `default` (autônomo), `accept-edits` (confirmação guiada) e `plan` (planejamento prévio obrigatório).
 
-### 3. 📜 Sinfonias, Sessões e Bifurcação (`/fork`)
+### 3. 👁️ Visibilidade em Tempo Real de Ferramentas
+- **Rastreamento Inteligente de Ações**: O Lumaestro extrai e exibe em tempo real o que a IA está fazendo — qual arquivo está lendo, editando, buscando ou qual comando está executando.
+- **Card Flutuante Enriquecido**: O indicador de atividade no chat exibe o nome da ferramenta, a ação humanizada com emoji contextual e um badge do arquivo alvo.
+- **Terminal de Processamento Detalhado**: Logs com ícones e caminhos relativos ao projeto:
+  - `📖 Lendo: internal/agents/acp/handler.go`
+  - `✏️ Editando: frontend/src/components/ChatLog.vue`
+  - `🔍 Buscando "currentStatus" em frontend/src`
+  - `💻 Executando: go test ./internal/agents/acp`
+  - `📁 Listando pasta: internal/agents`
+  - `🌐 Pesquisando web: "deck.gl ScatterplotLayer"`
+- **Deduplicação Inteligente**: Eventos `ACTIVE`/`DONE` são deduplicados para evitar flooding no terminal — apenas a primeira ocorrência de cada ferramenta é exibida.
+- **Suporte a 15+ Ferramentas**: `view_file`, `replace_file_content`, `write_to_file`, `grep_search`, `find_by_name`, `list_dir`, `run_command`, `search_web`, `read_url_content`, `delete_file`, `move_file`, `invoke_subagent` e mais.
+
+### 4. 📜 Sinfonias, Sessões e Bifurcação (`/fork`)
 - **Isolamento Estrito por Órbita**: Cada projeto ou workspace possui seu próprio histórico de conversas e estado, sem vazamento de contexto entre projetos.
 - **Restauração Automática Completa**: Reabrir uma Sinfonia carrega instantaneamente todo o histórico de mensagens, raciocínio e ferramentas executadas diretamente do transcript.
 - **Bifurcação de Pensamento (`/fork`)**: Duplique qualquer linha de raciocínio a partir de qualquer ponto para testar hipóteses alternativas sem perder a conversa original.
 - **Nomeação Inteligente (`/rename`)**: Títulos de sessões gerados contextualmente por IA ou renomeados manualmente pelo operador.
 
-### 4. 🧭 Co-Steering Review & Governança de Artefatos
+### 5. 🧭 Co-Steering Review & Governança de Artefatos
 - **Revisão Humano-no-Loop**: Interface para inspeção de planos de implementação e relatórios gerados pelos agentes antes da execução em código de produção.
 - **Comentários em Nível de Linha**: Anote instruções cirúrgicas diretamente no código ou no plano Markdown para que a IA ajuste a rota com precisão.
 - **Diagramas Mermaid Interativos**: Renderização nativa de arquiteturas, fluxogramas e linhas do tempo dentro do chat e dos modais de artefato.
 
-### 5. 🛡️ Zero-Noise Crawler & Blindagem de Pastas
+### 6. 🛡️ Zero-Noise Crawler & Blindagem de Pastas
 - **IsIgnoredPath Universal**: Algoritmo estrito que impede sumariamente a entrada de diretórios indesejados no grafo e na memória vetorial.
 - **Bloqueio Total**: `node_modules`, pastas `node`, `dist`, `build`, `bin`, `out`, `target`, `vendor`, `.git`, `.next`, `.turbo`, `.vscode`, `.lumaestro` e arquivos temporários são ignorados com `filepath.SkipDir` no primeiro contato, garantindo indexação ultrarrápida e zero nós fantasmas.
 
-### 6. 🔒 Fine-Grained Permissions & Zero-Trust (CPI)
+### 7. 🔒 Fine-Grained Permissions & Zero-Trust (CPI)
 - **Controle Cirúrgico de Acesso**: Permissões declaradas no formato `action(target)` (ex: `read_file(internal/*)`, `run_command(go test)`).
 - **Sincronização em Tempo Real**: Altere permissões na aba de Segurança das Configurações ou responda a pedidos em tempo real — as configurações sincronizam imediatamente com o `settings.json` do Antigravity.
 
@@ -117,6 +131,18 @@ Gera o binário compilado e otimizado com todas as dependências embutidas em `b
 .\build
 ```
 
+### 4. Lançar uma Release
+O script automatizado cria a tag Git, compila o binário de produção e gera o pacote `.zip` portátil:
+
+```powershell
+.\release v1.0.0
+```
+
+O pacote final (`Lumaestro-v1.0.0-windows-amd64.zip`) inclui:
+- `Lumaestro.exe` — Executável principal
+- `duckdb.dll` — Motor analítico nativo
+- `README.md` e `LICENSE.md`
+
 ---
 
 ## 📚 Documentação & Guias Arquiteturais
@@ -134,4 +160,3 @@ Explore a documentação aprofundada nos diretórios oficiais:
 ---
 
 **Lumaestro: Soberania Cognitiva, Autonomia e Conhecimento Vivo.** 🌌⚡🧠🪐✨
-
