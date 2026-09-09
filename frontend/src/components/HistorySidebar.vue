@@ -119,31 +119,8 @@ const confirmDelete = async () => {
 onMounted(async () => {
   if (store.activeAgent) {
     await store.fetchSessions(store.activeAgent);
-    
-    // Auto-reconnect: Recupera última sessão se não houver sessão ativa
-    if (!store.currentACPID) {
-        try {
-            const sessions = await ListAgentSessions(store.activeAgent);
-            if (sessions && sessions.length > 0) {
-                // O primeiro elemento (índice 0) é a sessão mais recente (ordenada por updatedAt decrescente)
-                const lastSession = sessions[0];
-                if (lastSession.sessionId) {
-                    console.log("🔄 Auto-Reconnect: Restaurando sessão mais recente", lastSession.sessionId);
-                    await store.loadSession(store.activeAgent, lastSession.sessionId);
-                } else {
-                    console.warn("Última sessão encontrada, mas sem sessionId.");
-                }
-            } else {
-                console.warn("Nenhuma sessão persistida encontrada.");
-            }
-        } catch (err) {
-            console.error("Erro ao tentar reconectar à última sessão:", err);
-            console.warn("Nenhuma sessão persistida encontrada.");
-        }
-    }
   }
 });
-
 
 watch(() => store.activeAgent, async (newAgent) => {
   if (newAgent) {
@@ -155,17 +132,6 @@ watch(() => store.workspace?.path, async (newPath, oldPath) => {
   if (newPath !== oldPath && store.activeAgent) {
     console.log("[HistorySidebar] 🪐 Órbita alterada para:", newPath, "- Recarregando sinfonias...");
     await store.fetchSessions(store.activeAgent);
-    const sessions = store.sessions;
-    if (sessions && sessions.length > 0) {
-      const exists = sessions.some(s => s.sessionId === store.currentACPID);
-      if (!exists) {
-        console.log("[HistorySidebar] Restaurando sinfonia mais recente da nova órbita:", sessions[0].sessionId);
-        await store.loadSession(store.activeAgent, sessions[0].sessionId);
-      }
-    } else {
-      store.currentACPID = null;
-      store.messages = [];
-    }
   }
 });
 </script>

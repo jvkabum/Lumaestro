@@ -180,3 +180,13 @@ type SessionInfo struct {
 type ListSessionsResponse struct {
 	Sessions []SessionInfo `json:"sessions"`
 }
+
+// ChatMessage representa uma mensagem estruturada da conversa/sinfonia restaurada.
+type ChatMessage struct {
+	Role       string `json:"role"`                 // "user" ou "assistant"
+	Text       string `json:"text"`                 // Conteúdo da mensagem em markdown
+	Thought    string `json:"thought,omitempty"`    // Pensamento da IA (se houver)
+	Agent      string `json:"agent,omitempty"`      // Nome do agente (ex: "Antigravity")
+	Mode       string `json:"mode,omitempty"`       // "system" se for mensagem de sistema
+	IsPlanning bool   `json:"isPlanning,omitempty"` // true se for resposta do assistente
+}

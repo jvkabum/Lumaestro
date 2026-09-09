@@ -1,5 +1,27 @@
 export namespace acp {
 	
+	export class ChatMessage {
+	    role: string;
+	    text: string;
+	    thought?: string;
+	    agent?: string;
+	    mode?: string;
+	    isPlanning?: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ChatMessage(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.role = source["role"];
+	        this.text = source["text"];
+	        this.thought = source["thought"];
+	        this.agent = source["agent"];
+	        this.mode = source["mode"];
+	        this.isPlanning = source["isPlanning"];
+	    }
+	}
 	export class CustomAgent {
 	    name: string;
 	    description: string;

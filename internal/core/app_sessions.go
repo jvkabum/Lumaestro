@@ -226,3 +226,11 @@ func min(a, b int) int {
 	}
 	return b
 }
+
+// GetSessionMessages recupera o histórico cronológico de mensagens de uma sessão/sinfonia
+func (a *App) GetSessionMessages(sessionID string) ([]acp.ChatMessage, error) {
+	if a.executor == nil {
+		return nil, fmt.Errorf("executor indisponível")
+	}
+	return a.executor.GetSessionMessages(sessionID)
+}

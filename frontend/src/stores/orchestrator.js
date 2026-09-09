@@ -209,17 +209,22 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
         workspace.value = { path: data.path || '', name: data.name || 'Nenhuma Órbita (Sandbox)' };
         if (activeAgent.value) {
           console.log("[Store] 🪐 Órbita alterada para:", data.path, "- Atualizando sinfonias...");
+          messages.value = [];
+          currentACPID.value = null;
           await fetchSessions(activeAgent.value);
         }
       }
     });
 
     // 🎼 Sincronização de Sinfonias com o Backend (Auto-Start / Auto-Resume)
-    EventsOn('sessions:current', (sessionId) => {
+    EventsOn('sessions:current', async (sessionId) => {
       console.log("[Store] 🎼 Sinfonia sincronizada com o backend:", sessionId);
       if (sessionId) {
         currentACPID.value = sessionId;
         isThinking.value = false; // 🚀 Destrava a tela inicial imediatamente
+        if (messages.value.length === 0) {
+          await restoreSessionMessages(sessionId);
+        }
       }
     });
 
@@ -584,6 +589,29 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     }
   };
 
+  const restoreSessionMessages = async (sessionId) => {
+    if (!sessionId) return;
+    try {
+      console.log(`[Store] 📜 Restaurando mensagens da Sinfonia: ${sessionId}`);
+      const rawMsgs = await safeCall('core', 'GetSessionMessages', sessionId);
+      if (rawMsgs && Array.isArray(rawMsgs) && rawMsgs.length > 0) {
+        messages.value = rawMsgs.map(m => ({
+          role: m.role || 'assistant',
+          text: m.text || '',
+          thought: m.thought || '',
+          agent: m.agent || 'Antigravity',
+          isPlanning: m.isPlanning ?? (m.role === 'assistant'),
+          mode: m.mode || ''
+        }));
+        console.log(`[Store] ✅ ${messages.value.length} mensagens restauradas para a Sinfonia ${sessionId}`);
+      } else {
+        console.log(`[Store] ℹ️ Nenhuma mensagem anterior encontrada para a Sinfonia ${sessionId}`);
+      }
+    } catch (err) {
+      console.warn(`[Store] ⚠️ Falha ao restaurar mensagens da sessão ${sessionId}:`, err);
+    }
+  };
+
   const fetchSessions = async (agent) => {
     if (!agent) return;
     try {
@@ -591,6 +619,16 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
       if (list) {
           // Ordenar por data (mais recente primeiro)
           sessions.value = list.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+
+          // 🚀 Auto-restauração na inicialização se o chat estiver vazio
+          if (messages.value.length === 0) {
+            const targetId = currentACPID.value || (sessions.value.length > 0 ? sessions.value[0].sessionId : null);
+            if (targetId) {
+              console.log("[Store] 🚀 Auto-restaurando mensagens da sinfonia mais recente:", targetId);
+              currentACPID.value = targetId;
+              await restoreSessionMessages(targetId);
+            }
+          }
       }
     } catch (err) {
       console.error("[Store] Erro ao buscar sessões:", err);
@@ -600,9 +638,9 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   const isLoadingSession = ref(false); // 🛡️ Trava anti-duplicação de cliques
 
   const loadSession = async (agent, acpID) => {
-    // 🛡️ ANTI-DUPLICAÇÃO: Ignora se já estamos nesta sinfonia ou se outra carga está em andamento
-    if (currentACPID.value === acpID) {
-      console.log(`[Store] Sinfonia ${acpID} já está ativa. Ignorando.`);
+    // 🛡️ ANTI-DUPLICAÇÃO: Ignora apenas se já estamos nesta sinfonia E as mensagens já estão em tela
+    if (currentACPID.value === acpID && messages.value.length > 0) {
+      console.log(`[Store] Sinfonia ${acpID} já está ativa com mensagens. Ignorando.`);
       isThinking.value = false;
       return;
     }
@@ -619,6 +657,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     
     try {
       await safeCall('main', 'LoadAgentSession', agent, acpID);
+      await restoreSessionMessages(acpID);
       await fetchSessions(agent); // Atualiza a lista lateral
     } catch (err) {
       messages.value.push({ role: 'assistant', text: `❌ Erro ao carregar: ${err}`, mode: 'system' });
@@ -899,7 +938,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     isPlanMode, togglePlanMode, executionMode, setExecutionMode, cycleExecutionMode, subagents, showPlanOverlay, workspace,
     customAgents, isAgentsPanelOpen, isCodeSearchOpen, isDiffViewerOpen, isPermissionsModalOpen,
     initListeners, ask, startSession, sendInput, submitReview, switchAgent, stopSession, forceUnlock,
-    fetchSessions, loadSession, newSession, renameSession, autoNameSession, toggleSidebar, clearStatusTimeline, sendSteeringHint,
+    fetchSessions, loadSession, restoreSessionMessages, newSession, renameSession, autoNameSession, toggleSidebar, clearStatusTimeline, sendSteeringHint,
     selectWorkspace, clearWorkspace, loadWorkspace,
     fetchCustomAgents, killSubagent, runCodeSearch, getWorkspaceDiff, getSecurityPermissions,
     toggleAgentsPanel, toggleCodeSearch, toggleDiffViewer, togglePermissionsModal, toggleArtifactModal, forkSession,

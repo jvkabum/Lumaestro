@@ -222,6 +222,10 @@ export function GetSessionArtifacts(arg1) {
   return window['go']['core']['App']['GetSessionArtifacts'](arg1);
 }
 
+export function GetSessionMessages(arg1) {
+  return window['go']['core']['App']['GetSessionMessages'](arg1);
+}
+
 export function GetSkeletalGraph() {
   return window['go']['core']['App']['GetSkeletalGraph']();
 }

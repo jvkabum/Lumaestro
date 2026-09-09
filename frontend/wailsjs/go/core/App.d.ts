@@ -117,6 +117,8 @@ export function GetSecurityPermissions():Promise<config.SecurityConfig>;
 
 export function GetSessionArtifacts(arg1:string):Promise<Array<core.ArtifactItem>>;
 
+export function GetSessionMessages(arg1:string):Promise<Array<acp.ChatMessage>>;
+
 export function GetSkeletalGraph():Promise<Record<string, any>>;
 
 export function GetToolsStatus():Promise<Record<string, boolean>>;
