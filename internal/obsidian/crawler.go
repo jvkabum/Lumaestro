@@ -59,6 +59,58 @@ func (c *Crawler) SetContext(ctx context.Context) {
 	c.ctx = ctx
 }
 
+func isBlockedSegment(s string) bool {
+	s = strings.TrimSpace(strings.ToLower(s))
+	if s == "" || s == "." {
+		return false
+	}
+	if s == ".git" ||
+		s == "node" ||
+		s == "node_modules" ||
+		s == "dist" ||
+		s == "build" ||
+		s == "bin" ||
+		s == "out" ||
+		s == "target" ||
+		s == "vendor" ||
+		s == "tmp" ||
+		s == "temp" ||
+		s == ".next" ||
+		s == ".nuxt" ||
+		s == ".turbo" ||
+		s == ".parcel-cache" ||
+		s == ".lumaestro" ||
+		s == ".vscode" ||
+		s == ".idea" ||
+		s == ".obsidian" ||
+		s == "__pycache__" ||
+		s == ".svelte-kit" ||
+		s == "coverage" ||
+		strings.HasPrefix(s, "node_") ||
+		strings.HasPrefix(s, "node-") ||
+		(strings.HasPrefix(s, ".") && s != "..") {
+		return true
+	}
+	return false
+}
+
+// IsIgnoredPath verifica se um diretório ou arquivo deve ser estritamente ignorado pelo Crawler.
+// Bloqueia com 100% de rigor pastas como node, node_modules, dist, build, .git, etc.
+func IsIgnoredPath(name string, relPath string) bool {
+	if isBlockedSegment(name) {
+		return true
+	}
+
+	lowRel := strings.ToLower(filepath.ToSlash(relPath))
+	for _, seg := range strings.Split(lowRel, "/") {
+		if isBlockedSegment(seg) {
+			return true
+		}
+	}
+
+	return false
+}
+
 // NewCrawler inicializa o crawler com suporte a cache de indexação e banco analítico.
 func NewCrawler(vaultPath string, embedder provider.Embedder, qdrant *provider.QdrantClient, ontology *provider.OntologyService, lStore *lightning.DuckDBStore, cpi *acp.CPIValidator) *Crawler {
 	c := &Crawler{
@@ -164,8 +216,7 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 
 		// 📁 Se for diretório, emite como um Planeta ou Sistema Solar
 		if info.IsDir() {
-			dirName := info.Name()
-			if dirName == ".git" || dirName == "node_modules" || dirName == ".lumaestro" || dirName == ".vscode" || dirName == ".obsidian" || dirName == "dist" || dirName == "build" || dirName == "bin" || dirName == "tmp" || (strings.HasPrefix(dirName, ".") && dirName != ".") {
+			if IsIgnoredPath(info.Name(), relPath) {
 				return filepath.SkipDir
 			}
 
@@ -219,7 +270,11 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 			return nil
 		}
 
-		// 📄 Se for arquivo, emite como uma Lua
+		// 📄 Se for arquivo, ignora caminhos bloqueados antes de processar
+		if IsIgnoredPath(info.Name(), relPath) {
+			return nil
+		}
+
 		ext := strings.ToLower(filepath.Ext(path))
 		isMD := ext == ".md"
 		isImage := ext == ".png" || ext == ".jpg" || ext == ".jpeg"
@@ -449,18 +504,23 @@ func (c *Crawler) IndexSystemDocs(ctx context.Context, rootPath string) error {
 	}
 
 	err := filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
+		if err != nil {
 			return nil
 		}
 
-		pathLower := strings.ToLower(path)
-		if strings.Contains(pathLower, "node_modules") || 
-		   strings.Contains(pathLower, ".git") || 
-		   strings.Contains(pathLower, "wailsjs") || 
-		   strings.Contains(pathLower, "build") ||
-		   strings.Contains(pathLower, "bin") ||
-		   strings.Contains(pathLower, ".next") ||
-		   strings.Contains(pathLower, "frontend/dist") {
+		relPath, _ := filepath.Rel(rootPath, path)
+		if relPath == "." {
+			return nil
+		}
+
+		if info.IsDir() {
+			if IsIgnoredPath(info.Name(), relPath) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		if IsIgnoredPath(info.Name(), relPath) {
 			return nil
 		}
 
@@ -541,17 +601,12 @@ func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.P
 			if relPath == "." { return nil }
 
 			if info.IsDir() {
-				dirName := info.Name()
-				if dirName == ".git" || dirName == "node_modules" || dirName == ".lumaestro" || dirName == ".vscode" || dirName == "dist" || dirName == "build" || dirName == "bin" || dirName == "tmp" || (strings.HasPrefix(dirName, ".") && dirName != ".") {
+				if IsIgnoredPath(info.Name(), relPath) {
 					return filepath.SkipDir
 				}
 			}
 
-			pathLower := strings.ToLower(path)
-			if strings.Contains(pathLower, "node_modules") || 
-			   strings.Contains(pathLower, ".git") || 
-			   strings.Contains(pathLower, "build") ||
-			   strings.Contains(pathLower, "dist") {
+			if IsIgnoredPath(info.Name(), relPath) {
 				return nil
 			}
 

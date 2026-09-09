@@ -282,13 +282,25 @@ func (a *App) RunCodeSearch(query string, pathFilter string, isLiteral bool) (*C
 		Files:      []CodeSearchFile{},
 	}
 
-	ignoredDirs := map[string]bool{
-		".git":         true,
-		"node_modules": true,
-		".lumaestro":   true,
-		"dist":         true,
-		".gemini":      true,
-		"deps":         true,
+	isIgnoredDir := func(name string) bool {
+		low := strings.ToLower(name)
+		return low == ".git" ||
+			low == "node" ||
+			low == "node_modules" ||
+			low == "dist" ||
+			low == "build" ||
+			low == "bin" ||
+			low == "out" ||
+			low == "target" ||
+			low == "vendor" ||
+			low == ".lumaestro" ||
+			low == ".gemini" ||
+			low == "deps" ||
+			low == ".next" ||
+			low == ".nuxt" ||
+			strings.HasPrefix(low, "node_") ||
+			strings.HasPrefix(low, "node-") ||
+			(strings.HasPrefix(low, ".") && low != "..")
 	}
 
 	errWalk := filepath.WalkDir(ws, func(p string, d os.DirEntry, err error) error {
@@ -296,7 +308,7 @@ func (a *App) RunCodeSearch(query string, pathFilter string, isLiteral bool) (*C
 			return nil
 		}
 		if d.IsDir() {
-			if ignoredDirs[d.Name()] {
+			if isIgnoredDir(d.Name()) {
 				return filepath.SkipDir
 			}
 			return nil
