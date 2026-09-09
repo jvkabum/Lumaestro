@@ -7,7 +7,7 @@
 [![Antigravity](https://img.shields.io/badge/Engine-Google_Antigravity-8b5cf6?style=for-the-badge)](https://github.com/jvkabum/Lumaestro)
 [![Release](https://img.shields.io/badge/Release-v1.0.0-f59e0b?style=for-the-badge)](https://github.com/jvkabum/Lumaestro/releases)
 
-![Lumaestro Neural Graph Hero](./media/lumaestro_graph_hero.png)
+![Lumaestro Cockpit](./media/lumaestro_full_ui.png)
 
 O **Lumaestro** é um **Sistema Operacional Cognitivo (COS)** e **Orquestrador Soberano de IA** projetado para unificar o conhecimento pessoal (Obsidian vaults), bases de código de software (repositórios locais) e agentes autônomos de elite em um universo tridimensional dinâmico e navegável.
 
