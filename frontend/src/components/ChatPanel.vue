@@ -129,23 +129,17 @@ const sendChatMessage = async (payload) => {
       return
     }
 
-    // Envio Padrão (Multimodal)
+    // Envio Direto Nativo (Antigravity CLI)
     const targetAgent = payload.agent || 'antigravity'
-    const isActMode = payload.mode === 'act'
     const images = payload.images || []
 
-    if (isActMode) {
-      console.log("[ChatPanel] Modo ACT detectado para:", targetAgent);
-      // Garante que a sessão está ativa antes de enviar
-      if (!runningSessions.value.includes(targetAgent)) {
-        await orchestrator.startSession(targetAgent)
-        await new Promise(r => setTimeout(r, 500))
-      }
-      await orchestrator.sendInput(targetAgent, text, images)
-    } else {
-      console.log("[ChatPanel] Modo CHAT detectado para:", targetAgent);
-      await orchestrator.ask(targetAgent, text, images)
+    console.log("[ChatPanel] Enviando para o motor ativo:", targetAgent);
+    // Garante que a sessão está ativa antes de enviar
+    if (!runningSessions.value.includes(targetAgent)) {
+      await orchestrator.startSession(targetAgent)
+      await new Promise(r => setTimeout(r, 500))
     }
+    await orchestrator.sendInput(targetAgent, text, images)
   } catch (err) {
     console.error("[ChatPanel] Falha crítica no envio:", err);
     // Injeta erro visual para o usuário

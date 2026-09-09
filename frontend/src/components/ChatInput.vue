@@ -213,22 +213,6 @@
             <span class="mode-text">[{{ orchestrator.executionMode }}]</span>
           </div>
 
-          <div class="divider"></div>
-
-          <!-- Mode Toggle (Act/Chat) -->
-          <div class="mode-pills">
-            <button 
-              type="button" 
-              :class="{ active: mode === 'act' }" 
-              @click="mode = 'act'"
-            >Act</button>
-            <button 
-              type="button" 
-              :class="{ active: mode === 'chat' }" 
-              @click="mode = 'chat'"
-            >Chat</button>
-          </div>
-
           <!-- Botão Microfone / Ditado por Voz (/voice, F5) -->
           <button 
             type="button" 
@@ -461,14 +445,12 @@ onMounted(() => {
   });
 
   const savedAgent = localStorage.getItem('lumaestro.chat.agent');
-  const savedMode = localStorage.getItem('lumaestro.chat.mode');
   if (savedAgent) selectedAgent.value = savedAgent;
-  if (savedMode) mode.value = savedMode;
 });
 
 const messageText = ref('');
 const selectedAgent = ref('antigravity');
-const mode = ref('act');
+const mode = 'act'; // Fixo no modo nativo direto (ACT)
 const textarea = ref(null);
 const isAutonomous = ref(false);
 const attachedImages = ref([]); // [{ preview, base64, type }]
@@ -479,9 +461,8 @@ const props = defineProps({
 
 const emit = defineEmits(['send']);
 
-watch([selectedAgent, mode], () => {
-  localStorage.setItem('lumaestro.chat.agent', selectedAgent.value);
-  localStorage.setItem('lumaestro.chat.mode', mode.value);
+watch(selectedAgent, (newVal) => {
+  localStorage.setItem('lumaestro.chat.agent', newVal);
 });
 
 const handlePaste = async (e) => {
@@ -1211,14 +1192,6 @@ const sendMessage = () => {
 
 .divider { width: 1px; height: 16px; background: rgba(255, 255, 255, 0.1); }
 
-/* Mode Pills */
-.mode-pills { display: flex; gap: 4px; }
-.mode-pills button {
-  background: transparent; border: 1px solid rgba(255, 255, 255, 0.05);
-  color: #64748b; padding: 3px 10px; border-radius: 100px;
-  font-size: 10px; font-weight: 800; text-transform: uppercase; cursor: pointer;
-}
-.mode-pills button.active { background: rgba(59, 130, 246, 0.1); color: #60a5fa; border-color: rgba(59, 130, 246, 0.3); }
 
 /* Previews de Imagem */
 .image-previews-container {
