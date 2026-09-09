@@ -173,6 +173,7 @@ type SessionInfo struct {
 	UpdatedAt        string `json:"updatedAt"`
 	File             string `json:"file"`
 	IsCurrentSession bool   `json:"isCurrentSession"`
+	Workspace        string `json:"workspace,omitempty"`
 }
 
 // ListSessionsResponse é a resposta estruturada para o método listSessions.

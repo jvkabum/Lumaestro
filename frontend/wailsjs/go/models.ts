@@ -27,6 +27,7 @@ export namespace acp {
 	    updatedAt: string;
 	    file: string;
 	    isCurrentSession: boolean;
+	    workspace?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new SessionInfo(source);
@@ -40,6 +41,7 @@ export namespace acp {
 	        this.updatedAt = source["updatedAt"];
 	        this.file = source["file"];
 	        this.isCurrentSession = source["isCurrentSession"];
+	        this.workspace = source["workspace"];
 	    }
 	}
 	export class SkillItem {

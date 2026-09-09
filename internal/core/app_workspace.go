@@ -83,10 +83,24 @@ func (a *App) SetWorkspace(path string) error {
 		fmt.Printf("[Workspace] 🕸️ Crawler reconfigurado para: %s\n", absPath)
 	}
 
+	// 🛑 Encerra processos ativos de agentes para reinicializar no novo diretório de trabalho
+	if a.executor != nil {
+		a.executor.Mu.Lock()
+		for id, s := range a.executor.ActiveSessions {
+			if s.Cmd != nil && s.Cmd.Process != nil {
+				fmt.Printf("[Workspace] 🔄 Encerrando processo do agente %s para transição de órbita...\n", id)
+				_ = s.Cmd.Process.Kill()
+			}
+			delete(a.executor.ActiveSessions, id)
+		}
+		a.executor.Mu.Unlock()
+	}
+
 	a.emitEvent("workspace:changed", map[string]string{
 		"path": absPath,
 		"name": projectName,
 	})
+	a.emitEvent("sessions:updated", nil)
 
 	return nil
 }

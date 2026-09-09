@@ -204,9 +204,13 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     loadWorkspace();
 
     // 📂 Listener de mudança de Workspace
-    EventsOn('workspace:changed', (data) => {
+    EventsOn('workspace:changed', async (data) => {
       if (data) {
         workspace.value = { path: data.path || '', name: data.name || 'Nenhuma Órbita (Sandbox)' };
+        if (activeAgent.value) {
+          console.log("[Store] 🪐 Órbita alterada para:", data.path, "- Atualizando sinfonias...");
+          await fetchSessions(activeAgent.value);
+        }
       }
     });
 

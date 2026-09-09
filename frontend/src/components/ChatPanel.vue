@@ -159,6 +159,9 @@ const handleSwitchProject = async (proj) => {
     const updatedWs = await GetWorkspace()
     orchestrator.workspace = updatedWs
     settingsStore.notify(`🚀 Órbita alterada para: ${proj.core_node}`, "success")
+    if (orchestrator.activeAgent) {
+      await orchestrator.fetchSessions(orchestrator.activeAgent)
+    }
   } catch (err) {
     settingsStore.notify(`❌ Falha na transição: ${err}`, "error")
   }

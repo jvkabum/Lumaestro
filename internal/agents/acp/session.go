@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -783,46 +784,72 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 	return nil
 }
 
-// ListSessions recupera a lista de conversas salvas diretamente do sistema de arquivos.
+// normalizeWorkspaceURI decodifica percent-encoding (ex: file:///d%3A/Git%20Hub/Fortress)
+// e retorna o caminho canônico do sistema operacional em minúsculas para comparação precisa de Órbita/Workspace.
+func normalizeWorkspaceURI(rawURI string) string {
+	u := strings.TrimSpace(rawURI)
+	if u == "" {
+		return ""
+	}
+
+	// 1. Decodificar percent-encoding (%20 -> espaço, %3a / %3A -> :, etc.)
+	if unescaped, err := url.PathUnescape(u); err == nil {
+		u = unescaped
+	}
+	if strings.Contains(u, "%") {
+		if q, errQ := url.QueryUnescape(u); errQ == nil {
+			u = q
+		}
+	}
+
+	// 2. Remover esquemas de protocolo de URI
+	u = strings.TrimPrefix(u, "file:///")
+	u = strings.TrimPrefix(u, "file://")
+	u = strings.TrimPrefix(u, "file:")
+
+	// 3. No Windows, remover barra inicial em /C:/... ou /D:/...
+	if len(u) >= 3 && (u[0] == '/' || u[0] == '\\') && u[2] == ':' {
+		u = u[1:]
+	}
+
+	// 4. Normalizar separadores de caminho do SO
+	clean := filepath.Clean(filepath.FromSlash(u))
+	return strings.ToLower(clean)
+}
+
+// ListSessions recupera a lista de conversas salvas diretamente do sistema de arquivos,
+// isolando e filtrando as sinfonias estritamente pela Órbita (Workspace) ativa.
 func (e *ACPExecutor) ListSessions(s *ACPSession) ([]SessionInfo, error) {
-	// 1. Determinar o diretório de base (.gemini) e incluir TODOS os pilotos conhecidos
 	userHome, _ := os.UserHomeDir()
-
-	// Lista de diretórios para varredura
-	var sessionHomes []string
-
-	// 🎼 Sinfonias: O diretório central do projeto tem prioridade total
-	sinfoniaPath := filepath.Join(e.Workspace, ".lumaestro", "sinfonias", "gemini")
-	sessionHomes = append(sessionHomes, sinfoniaPath)
-	sessionHomes = append(sessionHomes, filepath.Join(sinfoniaPath, ".gemini"))
-
-	sessionHomes = append(sessionHomes, filepath.Join(userHome, ".gemini"))
 
 	cwd, _ := os.Getwd()
 	if e.Workspace != "" {
 		cwd = e.Workspace
+	} else if cfg, errCfg := config.Load(); errCfg == nil && cfg.ActiveWorkspace != "" {
+		cwd = cfg.ActiveWorkspace
 	}
+	if absCwd, errAbs := filepath.Abs(cwd); errAbs == nil {
+		cwd = absCwd
+	}
+	normCwd := strings.ToLower(filepath.Clean(cwd))
+	projectName := filepath.Base(cwd)
+
+	var sessionHomes []string
+	sinfoniaPath := filepath.Join(cwd, ".lumaestro", "sinfonias", "gemini")
+	sessionHomes = append(sessionHomes, sinfoniaPath)
+	sessionHomes = append(sessionHomes, filepath.Join(sinfoniaPath, ".gemini"))
+	sessionHomes = append(sessionHomes, filepath.Join(userHome, ".gemini"))
 
 	if cfg, errCfg := config.Load(); errCfg == nil {
-		// Se o workspace estiver vazio no config mas tivermos um ativo em memória, usa ele
-		if cfg.ActiveWorkspace == "" && e.Workspace != "" {
-			cfg.ActiveWorkspace = e.Workspace
-		}
-		
 		for _, id := range cfg.Identities {
 			if id.Provider == "google" && id.HomeDir != "" {
-				// 🛡️ Adiciona o diretório de cada piloto à varredura global
 				sessionHomes = append(sessionHomes, filepath.Join(id.HomeDir, ".gemini"))
 			}
 		}
-	} else {
-		if _, err := os.Stat(filepath.Join(cwd, ".gemini")); err == nil {
-			sessionHomes = append(sessionHomes, filepath.Join(cwd, ".gemini"))
-		}
 	}
 
-	projectID := "lumaestro"
-	// 🎯 Varredura Dinâmica de Project ID em todos os Home
+	// 🎯 Descobre o projectID específico do workspace atual via projects.json
+	projectID := ""
 	for _, sHome := range sessionHomes {
 		projectsPath := filepath.Join(sHome, "projects.json")
 		if data, err := os.ReadFile(projectsPath); err == nil {
@@ -831,27 +858,47 @@ func (e *ACPExecutor) ListSessions(s *ACPSession) ([]SessionInfo, error) {
 			}
 			if json.Unmarshal(data, &p) == nil {
 				for path, id := range p.Projects {
-					if strings.EqualFold(path, cwd) {
+					cleanPath := strings.ToLower(filepath.Clean(path))
+					if cleanPath == normCwd || strings.HasPrefix(normCwd, cleanPath+string(filepath.Separator)) {
 						projectID = id
 						break
 					}
 				}
 			}
 		}
+		if projectID != "" {
+			break
+		}
 	}
 
 	var sessionsDirs []string
-	for _, sHome := range sessionHomes {
-		sessionsDirs = append(sessionsDirs,
-			filepath.Join(sHome, "history", projectID),
-			filepath.Join(sHome, "history", "ia"),
-			filepath.Join(sHome, "history", "lumaestro"),
-			filepath.Join(sHome, "history", "lumaestro-1"),
-			filepath.Join(sHome, "tmp", "lumaestro", "chats"),
-			filepath.Join(sHome, "tmp", "lumaestro-1", "chats"),
-			filepath.Join(sHome, "tmp", "sandbox", "chats"),
-			filepath.Join(sHome, "sessions"),
-		)
+	// Sinfonias salvas na pasta do próprio projeto (.lumaestro/sinfonias/gemini)
+	histDir := filepath.Join(sinfoniaPath, "history")
+	sessionsDirs = append(sessionsDirs, histDir, sinfoniaPath)
+	if entries, errSub := os.ReadDir(histDir); errSub == nil {
+		for _, entry := range entries {
+			if entry.IsDir() {
+				sessionsDirs = append(sessionsDirs, filepath.Join(histDir, entry.Name()))
+			}
+		}
+	}
+
+	// Histórico do projeto no Gemini CLI ~/.gemini/history/<projectID>
+	if projectID != "" {
+		for _, sHome := range sessionHomes {
+			sessionsDirs = append(sessionsDirs, filepath.Join(sHome, "history", projectID))
+		}
+	}
+
+	// Se a órbita ativa for o próprio repositório Lumaestro (desenvolvimento interno)
+	if strings.Contains(normCwd, "lumaestro") && !strings.Contains(normCwd, "sandbox") {
+		for _, sHome := range sessionHomes {
+			sessionsDirs = append(sessionsDirs,
+				filepath.Join(sHome, "history", "lumaestro"),
+				filepath.Join(sHome, "history", "lumaestro-1"),
+				filepath.Join(sHome, "tmp", "lumaestro", "chats"),
+			)
+		}
 	}
 
 	var rawList []SessionInfo
@@ -867,25 +914,20 @@ func (e *ACPExecutor) ListSessions(s *ACPSession) ([]SessionInfo, error) {
 			continue
 		}
 
-		foundInDir := 0
 		for _, f := range files {
 			name := f.Name()
 			if !f.IsDir() && (strings.HasSuffix(name, ".json") || strings.HasSuffix(name, ".jsonl")) && name != "index.json" {
-				// 🛡️ DEDUPLICAÇÃO DE JUNCTIONS: Usa o nome único do arquivo (com hash)
-				// em vez do caminho. Se a mesma sessão for vista pelo caminho real e pela junction, ignora.
 				if visited[name] {
 					continue
 				}
 				visited[name] = true
 
-				foundInDir++
 				path := filepath.Join(dirPath, f.Name())
 				data, err := os.ReadFile(path)
 				if err != nil {
 					continue
 				}
 
-				// 🛠️ Suporte a JSONL: Se for .jsonl, pegamos apenas a primeira linha para o Unmarshal de meta
 				jsonToParse := data
 				if strings.HasSuffix(name, ".jsonl") {
 					lines := strings.Split(string(data), "\n")
@@ -932,6 +974,7 @@ func (e *ACPExecutor) ListSessions(s *ACPSession) ([]SessionInfo, error) {
 						Title:     title,
 						UpdatedAt: updatedAt,
 						File:      path,
+						Workspace: projectName,
 					})
 				}
 			}
@@ -954,32 +997,32 @@ func (e *ACPExecutor) ListSessions(s *ACPSession) ([]SessionInfo, error) {
 					UpdatedAt     string   `json:"UpdatedAt"`
 					WorkspaceURIs []string `json:"WorkspaceURIs"`
 					AppDataDir    string   `json:"AppDataDir"`
+					ProjectID     string   `json:"ProjectID"`
 				} `json:"summary"`
 			} `json:"conversations"`
 		}
 
 		if json.Unmarshal(agyData, &metaFile) == nil {
-			normCwd := strings.ToLower(filepath.Clean(cwd))
 			for convID, conv := range metaFile.Conversations {
 				if conv.IsInternal {
 					continue
 				}
 
-				// Verifica se a conversa pertence ao workspace atual ou sandbox
+				// Verifica se a conversa pertence à Órbita / Workspace atual
 				belongsToWorkspace := false
 				if conv.Summary != nil && len(conv.Summary.WorkspaceURIs) > 0 {
-					for _, uri := range conv.Summary.WorkspaceURIs {
-						cleanURI := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(uri, "%3a", ":"), "%3A", ":"))
-						cleanURI = strings.TrimPrefix(cleanURI, "file:///")
-						cleanURI = strings.TrimPrefix(cleanURI, "file://")
-						cleanURI = filepath.Clean(filepath.FromSlash(cleanURI))
-						if strings.Contains(normCwd, cleanURI) || strings.Contains(cleanURI, normCwd) || strings.Contains(cleanURI, "lumaestro") {
+					for _, rawURI := range conv.Summary.WorkspaceURIs {
+						cleanURI := normalizeWorkspaceURI(rawURI)
+						if cleanURI == "" {
+							continue
+						}
+						if cleanURI == normCwd ||
+							strings.HasPrefix(normCwd, cleanURI+string(filepath.Separator)) ||
+							strings.HasPrefix(cleanURI, normCwd+string(filepath.Separator)) {
 							belongsToWorkspace = true
 							break
 						}
 					}
-				} else {
-					belongsToWorkspace = true
 				}
 
 				if !belongsToWorkspace {
@@ -1014,12 +1057,13 @@ func (e *ACPExecutor) ListSessions(s *ACPSession) ([]SessionInfo, error) {
 					Title:     title,
 					UpdatedAt: updatedAt,
 					File:      dbFile,
+					Workspace: projectName,
 				})
 			}
 		}
 	}
 
-	// 💾 Inclusão da última sessão do workspace se existir arquivo .db correspondente
+	// 💾 Inclusão da última sessão gravada nesta órbita específica (.lumaestro/last_session.json)
 	lastSessionPath := filepath.Join(cwd, ".lumaestro", "last_session.json")
 	if data, err := os.ReadFile(lastSessionPath); err == nil {
 		var ls struct {
@@ -1037,17 +1081,16 @@ func (e *ACPExecutor) ListSessions(s *ACPSession) ([]SessionInfo, error) {
 					Title:     title,
 					UpdatedAt: info.ModTime().Format(time.RFC3339),
 					File:      dbFile,
+					Workspace: projectName,
 				})
 			}
 		}
 	}
 
-	// 🛡️ DEDUPLICAÇÃO AGRESSIVA: O Gemini CLI cria múltiplos checkpoints.
-	// Agrupamos por SessionID (ID lógico) e mantemos apenas o arquivo mais recente.
+	// 🛡️ DEDUPLICAÇÃO E ORDENAÇÃO
 	sessionMap := make(map[string]SessionInfo)
 	for _, s := range rawList {
 		if s.SessionID == "" {
-			// Se não tem ID, usa o título como chave de agrupamento (fallback)
 			key := "title:" + s.Title
 			existing, exists := sessionMap[key]
 			if !exists || s.UpdatedAt > existing.UpdatedAt {
@@ -1055,7 +1098,7 @@ func (e *ACPExecutor) ListSessions(s *ACPSession) ([]SessionInfo, error) {
 			}
 			continue
 		}
-		
+
 		existing, exists := sessionMap[s.SessionID]
 		if !exists || s.UpdatedAt > existing.UpdatedAt {
 			sessionMap[s.SessionID] = s
@@ -1072,7 +1115,7 @@ func (e *ACPExecutor) ListSessions(s *ACPSession) ([]SessionInfo, error) {
 	})
 
 	if len(finalList) > 0 {
-		fmt.Printf("[ListSessions] 📜 %d sessões anteriores carregadas.\n", len(finalList))
+		fmt.Printf("[ListSessions] 📜 %d sessões da órbita '%s' (%s) carregadas.\n", len(finalList), projectName, cwd)
 	}
 	return finalList, nil
 }

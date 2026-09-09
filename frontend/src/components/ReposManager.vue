@@ -25,6 +25,9 @@ const handleQuickSelect = async (proj) => {
     const updatedWs = await GetWorkspace()
     orchestrator.workspace = updatedWs
     store.notify(`🚀 Órbita alterada: ${proj.core_node}`, "success")
+    if (orchestrator.activeAgent) {
+      await orchestrator.fetchSessions(orchestrator.activeAgent)
+    }
   } catch (err) {
     store.notify(`❌ Falha na transição: ${err}`, "error")
   }

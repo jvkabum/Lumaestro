@@ -150,12 +150,36 @@ watch(() => store.activeAgent, async (newAgent) => {
     await store.fetchSessions(newAgent);
   }
 });
+
+watch(() => store.workspace?.path, async (newPath, oldPath) => {
+  if (newPath !== oldPath && store.activeAgent) {
+    console.log("[HistorySidebar] 🪐 Órbita alterada para:", newPath, "- Recarregando sinfonias...");
+    await store.fetchSessions(store.activeAgent);
+    const sessions = store.sessions;
+    if (sessions && sessions.length > 0) {
+      const exists = sessions.some(s => s.sessionId === store.currentACPID);
+      if (!exists) {
+        console.log("[HistorySidebar] Restaurando sinfonia mais recente da nova órbita:", sessions[0].sessionId);
+        await store.loadSession(store.activeAgent, sessions[0].sessionId);
+      }
+    } else {
+      store.currentACPID = null;
+      store.messages = [];
+    }
+  }
+});
 </script>
 
 <template>
   <aside class="history-sidebar glass">
     <div class="sidebar-header">
-      <h2 class="title">Sinfonias</h2>
+      <div class="title-container">
+        <h2 class="title">Sinfonias</h2>
+        <div class="orbit-badge" :title="store.workspace?.path || 'Nenhuma Órbita'">
+          <span class="orbit-dot"></span>
+          <span class="orbit-name">{{ store.workspace?.name || 'Sandbox' }}</span>
+        </div>
+      </div>
       <button @click="handleNewSession" class="new-btn" title="Nova Sinfonia">
         <span class="icon">+</span>
       </button>
@@ -171,7 +195,9 @@ watch(() => store.activeAgent, async (newAgent) => {
       </template>
 
       <div v-else-if="store.sessions.length === 0" class="empty-state">
-        Nenhuma sinfonia gravada ainda.
+        <div class="empty-icon">🪐</div>
+        <p class="empty-text">Nenhuma sinfonia na órbita <strong>{{ store.workspace?.name || 'Sandbox' }}</strong></p>
+        <button class="empty-action-btn" @click="handleNewSession">+ Iniciar Sinfonia</button>
       </div>
       
       <div 
@@ -306,20 +332,99 @@ watch(() => store.activeAgent, async (newAgent) => {
 }
 
 .sidebar-header {
-  padding: 16px 20px;
+  padding: 14px 18px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   border-bottom: 1px solid rgba(255, 255, 255, 0.03);
 }
 
+.title-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .title {
   font-size: 11px;
-  font-weight: 500;
-  color: rgba(139, 148, 158, 0.6);
+  font-weight: 600;
+  color: rgba(139, 148, 158, 0.7);
   letter-spacing: 1px;
   text-transform: uppercase;
   margin: 0;
+}
+
+.orbit-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(139, 92, 246, 0.08);
+  border: 1px solid rgba(139, 92, 246, 0.22);
+  padding: 2px 7px;
+  border-radius: 6px;
+  max-width: 155px;
+}
+
+.orbit-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #a855f7;
+  box-shadow: 0 0 6px rgba(168, 85, 247, 0.8);
+  flex-shrink: 0;
+}
+
+.orbit-name {
+  font-size: 10px;
+  font-weight: 600;
+  color: #c084fc;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.empty-state {
+  padding: 36px 16px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.empty-icon {
+  font-size: 26px;
+  opacity: 0.85;
+}
+
+.empty-text {
+  font-size: 11px;
+  color: rgba(139, 148, 158, 0.7);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.empty-text strong {
+  color: #c084fc;
+}
+
+.empty-action-btn {
+  margin-top: 8px;
+  padding: 5px 12px;
+  font-size: 11px;
+  font-weight: 500;
+  background: rgba(139, 92, 246, 0.15);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  color: #c084fc;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.empty-action-btn:hover {
+  background: rgba(139, 92, 246, 0.3);
+  border-color: rgba(139, 92, 246, 0.5);
+  color: #e9d5ff;
 }
 
 .new-btn {
