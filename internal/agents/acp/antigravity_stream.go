@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"Lumaestro/internal/utils"
@@ -96,7 +98,22 @@ func (e *ACPExecutor) runAntigravityListener(s *ACPSession, stdout io.Reader) {
 			default:
 			}
 
+			// 💾 Persiste a sinfonia atual no last_session.json do workspace e notifica a UI
+			if s.ACPSessID != "" {
+				ws := e.Workspace
+				if ws == "" || ws == "." {
+					ws, _ = os.Getwd()
+				}
+				lastSessionDir := filepath.Join(ws, ".lumaestro")
+				_ = os.MkdirAll(lastSessionDir, 0755)
+				_ = os.WriteFile(filepath.Join(lastSessionDir, "last_session.json"), []byte(fmt.Sprintf(`{"sessionId":"%s"}`, s.ACPSessID)), 0644)
+			}
+
 			if e.Ctx != nil {
+				if s.ACPSessID != "" {
+					utils.SafeEmit(e.Ctx, "sessions:current", s.ACPSessID)
+					utils.SafeEmit(e.Ctx, "sessions:updated", nil)
+				}
 				utils.SafeEmit(e.Ctx, "agent:status", map[string]string{
 					"agent":  s.AgentName,
 					"action": fmt.Sprintf("Motor Antigravity pronto (%d ferramentas ativas)", numTools),

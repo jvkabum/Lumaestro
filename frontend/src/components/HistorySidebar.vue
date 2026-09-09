@@ -123,13 +123,12 @@ onMounted(async () => {
     // Auto-reconnect: Recupera última sessão se não houver sessão ativa
     if (!store.currentACPID) {
         try {
-            // Use ListAgentSessions instead of GetLastSessionID
-            const sessions = await ListAgentSessions(store.activeAgent); // Correctly use the imported function
+            const sessions = await ListAgentSessions(store.activeAgent);
             if (sessions && sessions.length > 0) {
-                // Assuming the last session in the list is the one to auto-reconnect to
-                const lastSession = sessions[sessions.length - 1];
+                // O primeiro elemento (índice 0) é a sessão mais recente (ordenada por updatedAt decrescente)
+                const lastSession = sessions[0];
                 if (lastSession.sessionId) {
-                    console.log("🔄 Auto-Reconnect: Restaurando sessão", lastSession.sessionId);
+                    console.log("🔄 Auto-Reconnect: Restaurando sessão mais recente", lastSession.sessionId);
                     await store.loadSession(store.activeAgent, lastSession.sessionId);
                 } else {
                     console.warn("Última sessão encontrada, mas sem sessionId.");

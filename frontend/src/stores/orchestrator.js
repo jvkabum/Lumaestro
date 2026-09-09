@@ -210,6 +210,20 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
       }
     });
 
+    // 🎼 Sincronização de Sinfonias com o Backend (Auto-Start / Auto-Resume)
+    EventsOn('sessions:current', (sessionId) => {
+      console.log("[Store] 🎼 Sinfonia sincronizada com o backend:", sessionId);
+      if (sessionId) {
+        currentACPID.value = sessionId;
+      }
+    });
+
+    EventsOn('sessions:updated', async () => {
+      if (activeAgent.value) {
+        await fetchSessions(activeAgent.value);
+      }
+    });
+
     // 0. Sinal de Início do Motor (Recuperação de Sessão)
     EventsOn('agent:starting', (agent) => {
       console.log("[Store] Motor ligando para:", agent);

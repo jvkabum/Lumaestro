@@ -117,14 +117,20 @@ func (a *App) LoadAgentSession(agent string, acpSessionID string) error {
 	fmt.Printf("[App] Trocando para sessão: %s\n", acpSessionID)
 	sessionID := agent
 
-	// 🛡️ HOT SWAP DIRETO: Se já houver uma sessão ativa, apenas envia session/load
-	// sem passar pelo fluxo completo de StartSession (que pode criar sessões extras).
+	// 🛡️ HOT SWAP DIRETO: Se já houver uma sessão ativa, verifica o tipo de motor
 	a.executor.Mu.Lock()
 	existingSession, exists := a.executor.ActiveSessions[sessionID]
 	isAlive := exists && existingSession.Cmd != nil && existingSession.Cmd.ProcessState == nil
+	isAntigravity := isAlive && existingSession.IsAntigravity
 	a.executor.Mu.Unlock()
 
 	if isAlive {
+		if isAntigravity {
+			// Antigravity opera via stream-json e deve ser reiniciado apontando para a conversa desejada
+			fmt.Printf("[App] 🔄 Reiniciando motor Antigravity CLI com a conversa: %s\n", acpSessionID)
+			_ = a.executor.StopSession(sessionID)
+			return a.executor.StartSession(a.ctx, agent, sessionID, acpSessionID, uuid.Nil, nil, false, nil)
+		}
 		fmt.Printf("[App] ♻️ Hot Swap Direto: Carregando sessão %s no processo ativo\n", acpSessionID)
 		return a.executor.LoadSession(existingSession, acpSessionID)
 	}
@@ -137,7 +143,18 @@ func (a *App) LoadAgentSession(agent string, acpSessionID string) error {
 func (a *App) NewAgentSession(agent string) error {
 	fmt.Println("[App] Iniciando NOVO chat (limpando contexto)...")
 	sessionID := agent
-	return a.executor.StartSession(a.ctx, agent, sessionID, "", uuid.Nil, nil, false, nil)
+
+	a.executor.Mu.Lock()
+	existingSession, exists := a.executor.ActiveSessions[sessionID]
+	isAlive := exists && existingSession.Cmd != nil && existingSession.Cmd.ProcessState == nil
+	isAntigravity := isAlive && existingSession.IsAntigravity
+	a.executor.Mu.Unlock()
+
+	if isAntigravity {
+		_ = a.executor.StopSession(sessionID)
+	}
+
+	return a.executor.StartSession(a.ctx, agent, sessionID, "NEW", uuid.Nil, nil, false, nil)
 }
 
 func (a *App) ResizeTerminal(agent string, cols int, rows int) {

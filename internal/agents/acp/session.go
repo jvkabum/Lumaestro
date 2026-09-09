@@ -55,12 +55,22 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 
 	if s, ok := e.ActiveSessions[sessionID]; ok {
 		if s.Cmd != nil && s.Cmd.ProcessState == nil {
-			isHotSwap = true
-			session = s
-			fmt.Printf("[ACP] ♻️ Hot Swap: Reutilizando processo CLI nativo para o agente: %s\n", sessionID)
-			if s.IsAntigravity {
-				e.Mu.Unlock()
-				return nil
+			// Se for Antigravity e uma sessão específica diferente foi solicitada (ou "NEW"),
+			// encerra o processo anterior para reiniciar com a nova conversa
+			if s.IsAntigravity && (loadSessionID == "NEW" || (loadSessionID != "" && loadSessionID != "LATEST" && s.ACPSessID != loadSessionID)) {
+				fmt.Printf("[ACP] 🔄 Reiniciando processo Antigravity para trocar de conversa (%s -> %s)\n", s.ACPSessID, loadSessionID)
+				if s.Cancel != nil {
+					s.Cancel()
+				}
+				delete(e.ActiveSessions, sessionID)
+			} else {
+				isHotSwap = true
+				session = s
+				fmt.Printf("[ACP] ♻️ Hot Swap: Reutilizando processo CLI nativo para o agente: %s\n", sessionID)
+				if s.IsAntigravity {
+					e.Mu.Unlock()
+					return nil
+				}
 			}
 		} else {
 			if s.Cancel != nil {
@@ -129,12 +139,11 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 				fmt.Printf("[ACP] 💎 Motor Nativo Antigravity CLI detectado: %s\n", binaryPath)
 				args = []string{"--input-format", "stream-json", "--output-format", "stream-json"}
 
-				// Modo de Operação (default / accept-edits / plan)
+				// Modo de Operação (accept-edits / plan)
+				// O Antigravity CLI só aceita --mode=accept-edits e --mode=plan. Modo default dispensa flag.
 				switch effectiveMode {
 				case "plan":
 					args = append(args, "--mode=plan")
-				case "default":
-					args = append(args, "--mode=default")
 				case "accept-edits":
 					if e.AutonomousMode {
 						args = append(args, "--mode=accept-edits", "--dangerously-skip-permissions")
@@ -142,7 +151,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 						args = append(args, "--mode=accept-edits")
 					}
 				default:
-					args = append(args, "--mode=accept-edits")
+					// Modo padrão do Antigravity: não injetar --mode para evitar warning
 				}
 
 				// Isolamento Sandbox de Terminal
@@ -156,10 +165,44 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 					fmt.Printf("[ACP] 🎯 Modelo Antigravity: %s\n", cfgLoaded.GeminiModel)
 				}
 
-				// Continuação de Conversa
-				if loadSessionID != "" && loadSessionID != "LATEST" {
-					args = append(args, "--conversation="+loadSessionID)
-					fmt.Printf("[ACP] 🕰️ Resumindo conversa Antigravity: %s\n", loadSessionID)
+				// Continuação de Conversa / Sinfonia
+				if loadSessionID == "NEW" {
+					fmt.Println("[ACP] 🆕 Iniciando nova conversa limpa no Antigravity")
+				} else if loadSessionID != "" && loadSessionID != "LATEST" {
+					// Verifica se o banco .db existe antes de passar --conversation
+					convDbPath := filepath.Join(userHome, ".gemini", "antigravity-cli", "conversations", loadSessionID+".db")
+					if _, errDb := os.Stat(convDbPath); errDb == nil {
+						args = append(args, "--conversation="+loadSessionID)
+						fmt.Printf("[ACP] 🕰️ Resumindo conversa Antigravity por ID: %s\n", loadSessionID)
+					} else {
+						fmt.Printf("[ACP] ⚠️ Conversa %s não encontrada localmente. Retomando via --continue.\n", loadSessionID)
+						args = append(args, "--continue")
+					}
+				} else {
+					// Para "LATEST" ou vazio: tenta identificar a última sessão do workspace ou usa --continue
+					lastSessionID := ""
+					lastSessionPath := filepath.Join(e.Workspace, ".lumaestro", "last_session.json")
+					if data, err := os.ReadFile(lastSessionPath); err == nil {
+						var ls struct {
+							SessionID string `json:"sessionId"`
+						}
+						if json.Unmarshal(data, &ls) == nil && ls.SessionID != "" {
+							lastSessionID = ls.SessionID
+						}
+					}
+					if lastSessionID != "" {
+						convDbPath := filepath.Join(userHome, ".gemini", "antigravity-cli", "conversations", lastSessionID+".db")
+						if _, errDb := os.Stat(convDbPath); errDb == nil {
+							args = append(args, "--conversation="+lastSessionID)
+							fmt.Printf("[ACP] 🕰️ Resumindo última conversa do workspace (%s)\n", lastSessionID)
+						} else {
+							args = append(args, "--continue")
+							fmt.Println("[ACP] 🕰️ Resumindo última conversa ativa via --continue")
+						}
+					} else {
+						args = append(args, "--continue")
+						fmt.Println("[ACP] 🕰️ Resumindo última conversa ativa via --continue")
+					}
 				}
 
 				// Diretório de Projeto
@@ -891,6 +934,110 @@ func (e *ACPExecutor) ListSessions(s *ACPSession) ([]SessionInfo, error) {
 						File:      path,
 					})
 				}
+			}
+		}
+	}
+
+	// 🚀 Varredura de Sessões Nativas do Antigravity CLI (Google DeepMind)
+	userHomeDir, _ := os.UserHomeDir()
+	agyMetaPath := filepath.Join(userHomeDir, ".gemini", "antigravity-cli", "cache", "conversation_metadata.json")
+	if agyData, errAgy := os.ReadFile(agyMetaPath); errAgy == nil {
+		var metaFile struct {
+			Conversations map[string]struct {
+				IsInternal       bool   `json:"is_internal"`
+				LastModifiedTime string `json:"last_modified_time"`
+				Summary          *struct {
+					ID            string   `json:"ID"`
+					Title         string   `json:"Title"`
+					Preview       string   `json:"Preview"`
+					NumSteps      int      `json:"NumSteps"`
+					UpdatedAt     string   `json:"UpdatedAt"`
+					WorkspaceURIs []string `json:"WorkspaceURIs"`
+					AppDataDir    string   `json:"AppDataDir"`
+				} `json:"summary"`
+			} `json:"conversations"`
+		}
+
+		if json.Unmarshal(agyData, &metaFile) == nil {
+			normCwd := strings.ToLower(filepath.Clean(cwd))
+			for convID, conv := range metaFile.Conversations {
+				if conv.IsInternal {
+					continue
+				}
+
+				// Verifica se a conversa pertence ao workspace atual ou sandbox
+				belongsToWorkspace := false
+				if conv.Summary != nil && len(conv.Summary.WorkspaceURIs) > 0 {
+					for _, uri := range conv.Summary.WorkspaceURIs {
+						cleanURI := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(uri, "%3a", ":"), "%3A", ":"))
+						cleanURI = strings.TrimPrefix(cleanURI, "file:///")
+						cleanURI = strings.TrimPrefix(cleanURI, "file://")
+						cleanURI = filepath.Clean(filepath.FromSlash(cleanURI))
+						if strings.Contains(normCwd, cleanURI) || strings.Contains(cleanURI, normCwd) || strings.Contains(cleanURI, "lumaestro") {
+							belongsToWorkspace = true
+							break
+						}
+					}
+				} else {
+					belongsToWorkspace = true
+				}
+
+				if !belongsToWorkspace {
+					continue
+				}
+
+				title := ""
+				if conv.Summary != nil && conv.Summary.Title != "" {
+					title = conv.Summary.Title
+				} else if conv.Summary != nil && conv.Summary.Preview != "" {
+					title = conv.Summary.Preview
+				}
+				if title == "" {
+					if len(convID) >= 8 {
+						title = "Sinfonia " + convID[:8]
+					} else {
+						title = "Sinfonia Antigravity"
+					}
+				}
+
+				updatedAt := ""
+				if conv.Summary != nil && conv.Summary.UpdatedAt != "" {
+					updatedAt = conv.Summary.UpdatedAt
+				} else if conv.LastModifiedTime != "" {
+					updatedAt = conv.LastModifiedTime
+				}
+
+				dbFile := filepath.Join(userHomeDir, ".gemini", "antigravity-cli", "conversations", convID+".db")
+
+				rawList = append(rawList, SessionInfo{
+					SessionID: convID,
+					Title:     title,
+					UpdatedAt: updatedAt,
+					File:      dbFile,
+				})
+			}
+		}
+	}
+
+	// 💾 Inclusão da última sessão do workspace se existir arquivo .db correspondente
+	lastSessionPath := filepath.Join(cwd, ".lumaestro", "last_session.json")
+	if data, err := os.ReadFile(lastSessionPath); err == nil {
+		var ls struct {
+			SessionID string `json:"sessionId"`
+		}
+		if json.Unmarshal(data, &ls) == nil && ls.SessionID != "" {
+			dbFile := filepath.Join(userHomeDir, ".gemini", "antigravity-cli", "conversations", ls.SessionID+".db")
+			if info, errStat := os.Stat(dbFile); errStat == nil {
+				title := "Sinfonia Ativa"
+				if len(ls.SessionID) >= 8 {
+					title = "Sinfonia Ativa (" + ls.SessionID[:8] + ")"
+				}
+				rawList = append(rawList, SessionInfo{
+					SessionID: ls.SessionID,
+					Title:     title,
+					UpdatedAt: info.ModTime().Format(time.RFC3339),
+					File:      dbFile,
+				})
 			}
 		}
 	}
