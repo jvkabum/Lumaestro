@@ -3,13 +3,94 @@ package core
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 
 	"Lumaestro/internal/agents/acp"
 	"Lumaestro/internal/provider"
 	"Lumaestro/internal/utils"
 )
+
+// ForkSession ramifica uma sessão de chat existente em uma nova linha independente de raciocínio.
+func (a *App) ForkSession(agent string, sessionID string) (string, error) {
+	if a.executor == nil {
+		return "", fmt.Errorf("executor indisponível")
+	}
+
+	sessions, err := a.executor.ListSessions(nil)
+	if err != nil {
+		return "", fmt.Errorf("erro ao listar sessões: %w", err)
+	}
+
+	var targetSession *acp.SessionInfo
+	if sessionID != "" {
+		for i := range sessions {
+			if sessions[i].SessionID == sessionID {
+				targetSession = &sessions[i]
+				break
+			}
+		}
+	} else if len(sessions) > 0 {
+		targetSession = &sessions[0]
+	}
+
+	newID := uuid.New().String()
+	newTitle := "Fork da Sessão"
+
+	if targetSession != nil && targetSession.File != "" {
+		origPath := targetSession.File
+		if targetSession.Title != "" {
+			newTitle = "Fork: " + targetSession.Title
+		}
+
+		data, errRead := os.ReadFile(origPath)
+		if errRead == nil {
+			dir := filepath.Dir(origPath)
+			ext := filepath.Ext(origPath)
+			if ext == "" {
+				ext = ".jsonl"
+			}
+			newPath := filepath.Join(dir, newID+ext)
+
+			content := string(data)
+			if strings.HasSuffix(ext, ".json") {
+				content = strings.Replace(content, targetSession.SessionID, newID, 1)
+			} else if strings.HasSuffix(ext, ".jsonl") {
+				lines := strings.Split(content, "\n")
+				if len(lines) > 0 {
+					lines[0] = strings.Replace(lines[0], targetSession.SessionID, newID, 1)
+					content = strings.Join(lines, "\n")
+				}
+			}
+
+			_ = os.WriteFile(newPath, []byte(content), 0644)
+			fmt.Printf("[Sinfonias] 🌿 Fork criado com sucesso: %s -> %s\n", origPath, newPath)
+		}
+	}
+
+	// Persiste o título da nova sessão
+	_ = acp.SaveSessionTitle(newID, newTitle)
+
+	// Persiste como última sessão do workspace
+	ws := a.getActiveWorkspace()
+	if ws != "" && ws != "." {
+		lastSessionPath := filepath.Join(ws, ".lumaestro", "last_session.json")
+		_ = os.WriteFile(lastSessionPath, []byte(fmt.Sprintf(`{"sessionId":"%s"}`, newID)), 0644)
+	}
+
+	// Notifica a UI do novo fork criado
+	utils.SafeEmit(a.ctx, "session:forked", map[string]string{
+		"oldSessionId": sessionID,
+		"newSessionId": newID,
+		"title":        newTitle,
+	})
+
+	return newID, nil
+}
 
 // RenameSession permite ao usuário renomear uma Sinfonia manualmente.
 func (a *App) RenameSession(sessionID string, newTitle string) error {

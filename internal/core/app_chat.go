@@ -96,7 +96,35 @@ func (a *App) SendAgentInput(agent string, input string, images []map[string]str
 
 	// 🚀 Suporte a Slash Commands de Alto Raciocínio (Antigravity CLI)
 	trimmedInput := strings.TrimSpace(input)
-	if strings.HasPrefix(trimmedInput, "/boost ") || trimmedInput == "/boost" {
+	if strings.HasPrefix(trimmedInput, "/rename ") {
+		newTitle := strings.TrimSpace(strings.TrimPrefix(trimmedInput, "/rename"))
+		if newTitle != "" {
+			activeSessID := ""
+			if a.executor != nil {
+				activeSessID = a.executor.GetActiveACPSessionID(agent)
+			}
+			if activeSessID == "" {
+				activeSessID = agent
+			}
+			_ = a.RenameSession(activeSessID, newTitle)
+			a.emitAgentStatus(agent, fmt.Sprintf("✏️ Sessão renomeada para: '%s'", newTitle), "status")
+			return nil
+		}
+	} else if trimmedInput == "/fork" || strings.HasPrefix(trimmedInput, "/fork ") {
+		activeSessID := ""
+		if a.executor != nil {
+			activeSessID = a.executor.GetActiveACPSessionID(agent)
+		}
+		newID, errFork := a.ForkSession(agent, activeSessID)
+		if errFork == nil {
+			prefixLen := 8
+			if len(newID) < prefixLen {
+				prefixLen = len(newID)
+			}
+			a.emitAgentStatus(agent, fmt.Sprintf("🌿 Sessão ramificada: %s", newID[:prefixLen]), "status")
+			return nil
+		}
+	} else if strings.HasPrefix(trimmedInput, "/boost ") || trimmedInput == "/boost" {
 		task := strings.TrimSpace(strings.TrimPrefix(trimmedInput, "/boost"))
 		a.emitAgentStatus(agent, "🚀 Boost: Ativando pipeline de raciocínio profundo de 3 fases...", "status")
 		input = fmt.Sprintf("[PIPELINE DE RACIOCÍNIO PROFUNDO — BOOST ATIVO]\nSua missão é resolver o desafio a seguir utilizando raciocínio multi-etapas com verificação independente:\n\nFASE 1: FORMULAÇÃO E ESTRATÉGIA\n- Inspecione o contexto do workspace, determine a causa raiz e elabore uma estratégia executável.\n\nFASE 2: EXECUÇÃO PARALELA E VERIFICAÇÃO LOCAL\n- Construa a solução, aplique os refatoramentos necessários e execute os testes locais para validar as hipóteses.\n\nFASE 3: SÍNTESE E ENTREGA VERIFICADA\n- Valide que todos os testes passaram e entregue um resumo conciso com as mudanças validadas.\n\nTAREFA: %s", task)

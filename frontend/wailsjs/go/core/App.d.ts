@@ -53,6 +53,8 @@ export function ExportTelemetry():Promise<string>;
 
 export function FixEnvironment():Promise<string>;
 
+export function ForkSession(arg1:string,arg2:string):Promise<string>;
+
 export function FullSync():Promise<string>;
 
 export function GenerateGeminiMD():Promise<string>;

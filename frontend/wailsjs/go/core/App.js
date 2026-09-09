@@ -94,6 +94,10 @@ export function FixEnvironment() {
   return window['go']['core']['App']['FixEnvironment']();
 }
 
+export function ForkSession(arg1, arg2) {
+  return window['go']['core']['App']['ForkSession'](arg1, arg2);
+}
+
 export function FullSync() {
   return window['go']['core']['App']['FullSync']();
 }
