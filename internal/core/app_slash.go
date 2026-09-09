@@ -434,3 +434,29 @@ func (a *App) GetSecurityPermissions() (*config.SecurityConfig, error) {
 	}
 	return &cfg.Security, nil
 }
+
+// GetAntigravitySettings retorna as configurações e permissões granulares do Antigravity CLI.
+func (a *App) GetAntigravitySettings() (*config.AntigravitySettings, error) {
+	settings, _, err := config.LoadAntigravitySettings()
+	return settings, err
+}
+
+// SaveAntigravityPermissionRule adiciona ou atualiza uma regra action(target) em allow, ask ou deny.
+func (a *App) SaveAntigravityPermissionRule(level string, action string, target string) error {
+	return config.AddPermissionRule(level, action, target)
+}
+
+// RemoveAntigravityPermissionRule remove uma regra action(target) do settings.json.
+func (a *App) RemoveAntigravityPermissionRule(rule string) error {
+	return config.RemovePermissionRule(rule)
+}
+
+// EvaluateAntigravityAction avalia se uma ação pretendida pelo agente é permitida, requer aprovação ou deve ser negada.
+func (a *App) EvaluateAntigravityAction(action string, target string) string {
+	settings, _, err := config.LoadAntigravitySettings()
+	if err != nil {
+		return "ask"
+	}
+	return config.EvaluatePermission(settings, action, target)
+}
+

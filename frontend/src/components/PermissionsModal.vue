@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { useOrchestratorStore } from '../stores/orchestrator'
 
 const orchestrator = useOrchestratorStore()
@@ -15,17 +15,64 @@ const config = ref({
   workspaces: []
 })
 
+// Estado de Permissões Granulares Antigravity CLI (action(target))
+const antigravitySettings = ref(null)
+const activePermTab = ref('allow') // 'allow', 'ask', 'deny'
+const newRuleLevel = ref('allow')
+const newRuleAction = ref('command')
+const newRuleTarget = ref('')
+
 const loadPermissions = async () => {
   isLoading.value = true
   try {
     const res = await orchestrator.getSecurityPermissions()
     if (res) config.value = res
+
+    const bridge = window.go?.core?.App || window.go?.main?.App
+    if (bridge && typeof bridge.GetAntigravitySettings === 'function') {
+      const agySettings = await bridge.GetAntigravitySettings()
+      if (agySettings) antigravitySettings.value = agySettings
+    }
   } catch (err) {
     console.error('[Permissions] Erro:', err)
   } finally {
     isLoading.value = false
   }
 }
+
+const addRule = async () => {
+  if (!newRuleTarget.value.trim()) return
+  try {
+    const bridge = window.go?.core?.App || window.go?.main?.App
+    if (bridge && typeof bridge.SaveAntigravityPermissionRule === 'function') {
+      await bridge.SaveAntigravityPermissionRule(newRuleLevel.value, newRuleAction.value, newRuleTarget.value.trim())
+      newRuleTarget.value = ''
+      await loadPermissions()
+      orchestrator.pushStatus(`🛡️ Regra adicionada: ${newRuleAction.value}(...) em ${newRuleLevel.value}`, 'success')
+    }
+  } catch (err) {
+    console.error('[Permissions] Erro ao salvar regra:', err)
+  }
+}
+
+const deleteRule = async (ruleStr) => {
+  try {
+    const bridge = window.go?.core?.App || window.go?.main?.App
+    if (bridge && typeof bridge.RemoveAntigravityPermissionRule === 'function') {
+      await bridge.RemoveAntigravityPermissionRule(ruleStr)
+      await loadPermissions()
+      orchestrator.pushStatus(`🗑️ Regra removida: ${ruleStr}`, 'status')
+    }
+  } catch (err) {
+    console.error('[Permissions] Erro ao deletar regra:', err)
+  }
+}
+
+const currentTabRules = computed(() => {
+  if (!antigravitySettings.value?.permissions) return []
+  const list = antigravitySettings.value.permissions[activePermTab.value]
+  return Array.isArray(list) ? list : []
+})
 
 watch(() => orchestrator.isPermissionsModalOpen, (isOpen) => {
   if (isOpen) {
@@ -152,6 +199,72 @@ const close = () => {
                 </span>
               </div>
               <span v-else class="empty-hint">Nenhuma pasta adicional na whitelist (apenas workspace ativo)</span>
+            </div>
+
+            <!-- Antigravity Fine-Grained Permissions (action(target)) -->
+            <div class="policy-section">
+              <div class="section-title-row">
+                <span class="section-title-text">REGRAS FINAS ANTIGRAVITY (action(target))</span>
+                <span class="priority-hint">Hierarquia: <strong>Deny > Ask > Allow</strong></span>
+              </div>
+
+              <!-- Tabs Allow / Ask / Deny -->
+              <div class="perm-rules-tabs">
+                <button 
+                  class="rule-tab-btn" 
+                  :class="{ active: activePermTab === 'allow', allow: activePermTab === 'allow' }"
+                  @click="activePermTab = 'allow'"
+                >
+                  🟢 Permitir ({{ antigravitySettings?.permissions?.allow?.length || 0 }})
+                </button>
+                <button 
+                  class="rule-tab-btn" 
+                  :class="{ active: activePermTab === 'ask', ask: activePermTab === 'ask' }"
+                  @click="activePermTab = 'ask'"
+                >
+                  🟡 Perguntar ({{ antigravitySettings?.permissions?.ask?.length || 0 }})
+                </button>
+                <button 
+                  class="rule-tab-btn" 
+                  :class="{ active: activePermTab === 'deny', deny: activePermTab === 'deny' }"
+                  @click="activePermTab = 'deny'"
+                >
+                  🔴 Bloquear ({{ antigravitySettings?.permissions?.deny?.length || 0 }})
+                </button>
+              </div>
+
+              <!-- Lista de Regras da Aba Ativa -->
+              <div class="rules-list-box" v-if="currentTabRules.length > 0">
+                <div v-for="rule in currentTabRules" :key="rule" class="rule-row">
+                  <span class="rule-text">{{ rule }}</span>
+                  <button class="rule-del-btn" @click="deleteRule(rule)" title="Remover regra">×</button>
+                </div>
+              </div>
+              <span v-else class="empty-hint">Nenhuma regra configurada para esta categoria.</span>
+
+              <!-- Formulário para Adicionar Nova Regra -->
+              <div class="add-rule-form">
+                <select v-model="newRuleLevel" class="rule-select level-select">
+                  <option value="allow">Allow (Permitir)</option>
+                  <option value="ask">Ask (Perguntar)</option>
+                  <option value="deny">Deny (Bloquear)</option>
+                </select>
+                <select v-model="newRuleAction" class="rule-select action-select">
+                  <option value="command">command</option>
+                  <option value="read">read</option>
+                  <option value="write">write</option>
+                  <option value="network">network</option>
+                  <option value="tool">tool</option>
+                </select>
+                <input 
+                  v-model="newRuleTarget" 
+                  type="text" 
+                  placeholder="Alvo (ex: git status, src/*, rm -rf)" 
+                  class="rule-input"
+                  @keydown.enter="addRule"
+                />
+                <button class="btn-add-rule" @click="addRule">+ Adicionar</button>
+              </div>
             </div>
           </div>
         </div>
@@ -452,6 +565,143 @@ const close = () => {
 
 .btn-done:hover {
   background: #1d4ed8;
+}
+
+/* Antigravity Fine-Grained Rules */
+.section-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.section-title-text {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: #94a3b8;
+}
+
+.priority-hint {
+  font-size: 10px;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.perm-rules-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.rule-tab-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #94a3b8;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.rule-tab-btn.active.allow {
+  background: rgba(34, 197, 94, 0.2);
+  border-color: rgba(34, 197, 94, 0.5);
+  color: #4ade80;
+}
+
+.rule-tab-btn.active.ask {
+  background: rgba(234, 179, 8, 0.2);
+  border-color: rgba(234, 179, 8, 0.5);
+  color: #facc15;
+}
+
+.rule-tab-btn.active.deny {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #f87171;
+}
+
+.rules-list-box {
+  max-height: 140px;
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.rule-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 11px;
+  color: #e2e8f0;
+}
+
+.rule-text {
+  word-break: break-all;
+}
+
+.rule-del-btn {
+  background: transparent;
+  border: none;
+  color: #ef4444;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.add-rule-form {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.rule-select {
+  background: #1e293b;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #f8fafc;
+  font-size: 11px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  outline: none;
+}
+
+.rule-input {
+  flex: 1;
+  background: #1e293b;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #f8fafc;
+  font-size: 11px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  outline: none;
+}
+
+.btn-add-rule {
+  background: #3b82f6;
+  border: none;
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
 }
 
 .perm-fade-enter-active, .perm-fade-leave-active {

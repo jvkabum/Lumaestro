@@ -69,6 +69,64 @@ export namespace acp {
 
 export namespace config {
 	
+	export class AntigravityPermissions {
+	    allow: string[];
+	    ask: string[];
+	    deny: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new AntigravityPermissions(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.allow = source["allow"];
+	        this.ask = source["ask"];
+	        this.deny = source["deny"];
+	    }
+	}
+	export class AntigravitySettings {
+	    agentMode: string;
+	    allowNonWorkspaceAccess: boolean;
+	    colorScheme: string;
+	    model: string;
+	    permissions: AntigravityPermissions;
+	    toolPermission: string;
+	    trustedWorkspaces: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new AntigravitySettings(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.agentMode = source["agentMode"];
+	        this.allowNonWorkspaceAccess = source["allowNonWorkspaceAccess"];
+	        this.colorScheme = source["colorScheme"];
+	        this.model = source["model"];
+	        this.permissions = this.convertValues(source["permissions"], AntigravityPermissions);
+	        this.toolPermission = source["toolPermission"];
+	        this.trustedWorkspaces = source["trustedWorkspaces"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class SecurityConfig {
 	    allow_read: boolean;
 	    allow_write: boolean;

@@ -230,4 +230,41 @@ func TestAppSlashOperations(t *testing.T) {
 			t.Errorf("Mensagem vazia ao deletar")
 		}
 	})
+
+	// Teste Permissões Finas do Antigravity (action(target) com Deny > Ask > Allow)
+	t.Run("Antigravity FineGrained Permissions", func(t *testing.T) {
+		settings, err := app.GetAntigravitySettings()
+		if err != nil {
+			t.Fatalf("GetAntigravitySettings falhou: %v", err)
+		}
+		if settings == nil {
+			t.Fatalf("settings retornou nil")
+		}
+
+		// Adiciona regra de Allow
+		if err := app.SaveAntigravityPermissionRule("allow", "command", "git status"); err != nil {
+			t.Fatalf("SaveAntigravityPermissionRule falhou: %v", err)
+		}
+
+		// Adiciona regra de Deny para comando perigoso
+		if err := app.SaveAntigravityPermissionRule("deny", "command", "rm -rf /"); err != nil {
+			t.Fatalf("SaveAntigravityPermissionRule deny falhou: %v", err)
+		}
+
+		// Avalia ação
+		lvlAllow := app.EvaluateAntigravityAction("command", "git status")
+		if lvlAllow != "allow" {
+			t.Errorf("esperava 'allow' para git status, obteve '%s'", lvlAllow)
+		}
+
+		lvlDeny := app.EvaluateAntigravityAction("command", "rm -rf /")
+		if lvlDeny != "deny" {
+			t.Errorf("esperava 'deny' para rm -rf /, obteve '%s'", lvlDeny)
+		}
+
+		// Remove regra
+		if err := app.RemoveAntigravityPermissionRule("command(rm -rf /)"); err != nil {
+			t.Fatalf("RemoveAntigravityPermissionRule falhou: %v", err)
+		}
+	})
 }

@@ -78,6 +78,10 @@ export function DetectLMStudioEmbeddingDimension(arg1) {
   return window['go']['core']['App']['DetectLMStudioEmbeddingDimension'](arg1);
 }
 
+export function EvaluateAntigravityAction(arg1, arg2) {
+  return window['go']['core']['App']['EvaluateAntigravityAction'](arg1, arg2);
+}
+
 export function ExecuteFullSync() {
   return window['go']['core']['App']['ExecuteFullSync']();
 }
@@ -112,6 +116,10 @@ export function GetAgentSecrets(arg1) {
 
 export function GetAgents() {
   return window['go']['core']['App']['GetAgents']();
+}
+
+export function GetAntigravitySettings() {
+  return window['go']['core']['App']['GetAntigravitySettings']();
 }
 
 export function GetAutonomousMode() {
@@ -298,6 +306,10 @@ export function RejectAction(arg1, arg2) {
   return window['go']['core']['App']['RejectAction'](arg1, arg2);
 }
 
+export function RemoveAntigravityPermissionRule(arg1) {
+  return window['go']['core']['App']['RemoveAntigravityPermissionRule'](arg1);
+}
+
 export function RemoveIdentity(arg1, arg2) {
   return window['go']['core']['App']['RemoveIdentity'](arg1, arg2);
 }
@@ -336,6 +348,10 @@ export function RunReconScan() {
 
 export function RunVectorDiagnostic() {
   return window['go']['core']['App']['RunVectorDiagnostic']();
+}
+
+export function SaveAntigravityPermissionRule(arg1, arg2, arg3) {
+  return window['go']['core']['App']['SaveAntigravityPermissionRule'](arg1, arg2, arg3);
 }
 
 export function SaveConfig(arg1) {
