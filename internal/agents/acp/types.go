@@ -6,6 +6,7 @@ import (
 	"io"
 	"os/exec"
 	"sync"
+	"time"
 
 	"Lumaestro/internal/lightning"
 	"Lumaestro/internal/utils"
@@ -116,6 +117,30 @@ type ACPSession struct {
 	ParentSessionID string                   `json:"parentSessionId,omitempty"`
 	Subagents       map[string]*ACPSession   `json:"-"`
 	SubagentMu      sync.RWMutex             `json:"-"`
+
+	// ⏱️ Monitor de Inatividade (Watchdog Dinâmico)
+	LastActivity time.Time    `json:"-"`
+	activityMu   sync.RWMutex `json:"-"`
+}
+
+// UpdateActivity renova o carimbo de atividade do agente
+func (s *ACPSession) UpdateActivity() {
+	if s == nil {
+		return
+	}
+	s.activityMu.Lock()
+	s.LastActivity = time.Now()
+	s.activityMu.Unlock()
+}
+
+// GetLastActivity retorna com segurança o último momento em que o agente produziu output
+func (s *ACPSession) GetLastActivity() time.Time {
+	if s == nil {
+		return time.Time{}
+	}
+	s.activityMu.RLock()
+	defer s.activityMu.RUnlock()
+	return s.LastActivity
 }
 
 // ACPRpcHandler lida com o despacho de mensagens do protocolo JSON-RPC.

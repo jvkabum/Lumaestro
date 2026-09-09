@@ -75,6 +75,8 @@ func (e *ACPExecutor) runAntigravityListener(s *ACPSession, stdout io.Reader) {
 			continue
 		}
 
+		s.UpdateActivity()
+
 		var evt AntigravityEvent
 		if err := json.Unmarshal([]byte(line), &evt); err != nil {
 			fmt.Printf("[AGY RECV-RAW] %s\n", line)
@@ -172,10 +174,13 @@ func (e *ACPExecutor) runAntigravityListener(s *ACPSession, stdout io.Reader) {
 					Type:    "message",
 				}
 
-				// Push para canal sincrono (AskSync)
+				// Push para canal sincrono (AskSync) - não-bloqueante para evitar deadlock em respostas longas
 				e.turnMu.Lock()
 				if ch, ok := e.turnChannels[s.ID]; ok {
-					ch <- step.TextDelta
+					select {
+					case ch <- step.TextDelta:
+					default:
+					}
 				}
 				e.turnMu.Unlock()
 			} else if step.StepType == "thought" && step.TextDelta != "" {
@@ -239,7 +244,10 @@ func (e *ACPExecutor) runAntigravityListener(s *ACPSession, stdout io.Reader) {
 
 					e.turnMu.Lock()
 					if ch, ok := e.turnChannels[s.ID]; ok {
-						ch <- res.Response
+						select {
+						case ch <- res.Response:
+						default:
+						}
 					}
 					e.turnMu.Unlock()
 				}

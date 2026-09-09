@@ -55,29 +55,41 @@ func (e *ACPExecutor) SendInput(sessionID string, input string, images []map[str
 		}
 		e.turnMu.Unlock()
 
-		// 🐕 WATCHDOG DE TURNO: Se o Antigravity não responder em 45s, destrava o frontend
+		session.UpdateActivity()
+
+		// 🐕 WATCHDOG DE TURNO BASEADO EM INATIVIDADE:
+		// Verifica periodicamente se houve silêncio total do motor por mais de 120s.
+		// Se o motor estiver chamando ferramentas ou gerando texto, a atividade se renova e ele NÃO é interrompido.
 		go func() {
-			time.Sleep(45 * time.Second)
+			silenceThreshold := 120 * time.Second
+			ticker := time.NewTicker(5 * time.Second)
+			defer ticker.Stop()
 
-			e.Mu.Lock()
-			_, stillActive := e.ActiveSessions[sessionID]
-			e.Mu.Unlock()
-			if !stillActive {
-				return
-			}
-
-			e.turnMu.Lock()
-			_, turnPending := e.turnChannels[sessionID]
-			e.turnMu.Unlock()
-
-			if turnPending {
-				fmt.Printf("[AGY] ⚠️ WATCHDOG: Turno sem resposta após 45s no Antigravity.\n")
-				e.LogChan <- ExecutionLog{
-					Source:  "SYSTEM",
-					Content: "🟡 O motor Antigravity demorou mais de 45s para responder. Destravando frontend.",
+			for range ticker.C {
+				e.Mu.Lock()
+				s, stillActive := e.ActiveSessions[sessionID]
+				e.Mu.Unlock()
+				if !stillActive || s == nil {
+					return
 				}
-				if e.Ctx != nil {
-					utils.SafeEmit(e.Ctx, "agent:turn_complete", session.AgentName)
+
+				e.turnMu.Lock()
+				_, turnPending := e.turnChannels[sessionID]
+				e.turnMu.Unlock()
+				if !turnPending {
+					return
+				}
+
+				if time.Since(s.GetLastActivity()) > silenceThreshold {
+					fmt.Printf("[AGY] ⚠️ WATCHDOG: Motor Antigravity silencioso por mais de %v. Destravando frontend.\n", silenceThreshold)
+					e.LogChan <- ExecutionLog{
+						Source:  "SYSTEM",
+						Content: fmt.Sprintf("🟡 O motor Antigravity ficou inativo por mais de %v. Destravando frontend.", silenceThreshold),
+					}
+					if e.Ctx != nil {
+						utils.SafeEmit(e.Ctx, "agent:turn_complete", session.AgentName)
+					}
+					return
 				}
 			}
 		}()
@@ -134,28 +146,36 @@ func (e *ACPExecutor) SendInput(sessionID string, input string, images []map[str
 		return err
 	}
 
-	// 🐕 WATCHDOG DE TURNO: Se a IA não responder em 45s, destrava o frontend
+	session.UpdateActivity()
+
+	// 🐕 WATCHDOG DE TURNO: Se a IA ficar inativa por mais de 120s, destrava o frontend
 	go func() {
-		time.Sleep(45 * time.Second)
-		
-		e.Mu.Lock()
-		_, stillActive := e.ActiveSessions[sessionID]
-		e.Mu.Unlock()
+		silenceThreshold := 120 * time.Second
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
 
-		if !stillActive {
-			return // Sessão encerrada, nada a fazer
-		}
+		for range ticker.C {
+			e.Mu.Lock()
+			s, stillActive := e.ActiveSessions[sessionID]
+			e.Mu.Unlock()
+			if !stillActive || s == nil {
+				return
+			}
 
-		// Verifica se a mensagem ainda não foi respondida (sem turn_complete)
-		e.turnMu.Lock()
-		_, turnPending := e.turnChannels[sessionID]
-		e.turnMu.Unlock()
+			e.turnMu.Lock()
+			_, turnPending := e.turnChannels[sessionID]
+			e.turnMu.Unlock()
+			if !turnPending {
+				return
+			}
 
-		if turnPending {
-			fmt.Printf("[ACP] ⚠️ WATCHDOG: Turno ID %d sem resposta após 45s. Destravando frontend.\n", promptID)
-			e.LogChan <- ExecutionLog{
-				Source:  "SYSTEM",
-				Content: "🟡 A IA demorou mais de 45s para responder. O processo pode estar processando em background ou a conexão com o Google pode ter falhado.",
+			if time.Since(s.GetLastActivity()) > silenceThreshold {
+				fmt.Printf("[ACP] ⚠️ WATCHDOG: Turno ID %d sem resposta por mais de %v. Destravando frontend.\n", promptID, silenceThreshold)
+				e.LogChan <- ExecutionLog{
+					Source:  "SYSTEM",
+					Content: fmt.Sprintf("🟡 A IA ficou inativa por mais de %v. O processo pode ter travado ou a conexão falhou.", silenceThreshold),
+				}
+				return
 			}
 		}
 	}()

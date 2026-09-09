@@ -95,6 +95,8 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 				}
 			}
 
+			h.Session.UpdateActivity()
+
 			if update.SessionUpdate == "agent_message_chunk" || update.SessionUpdate == "message_chunk" || update.SessionUpdate == "content_chunk" || 
 			   update.SessionUpdate == "user_message_chunk" || update.SessionUpdate == "user_message" || update.Content.Type == "user" {
 				
@@ -206,7 +208,10 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 			if update.SessionUpdate == "agent_message_chunk" && update.Content.Text != "" {
 				h.Executor.turnMu.Lock()
 				if ch, ok := h.Executor.turnChannels[h.Session.ID]; ok {
-					ch <- update.Content.Text
+					select {
+					case ch <- update.Content.Text:
+					default:
+					}
 				}
 				h.Executor.turnMu.Unlock()
 			}
