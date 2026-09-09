@@ -596,7 +596,7 @@ const applySlashCommand = (cmd) => {
     if (cmd.action === 'agents') orchestrator.toggleAgentsPanel(true);
     else if (cmd.action === 'codesearch') orchestrator.toggleCodeSearch(true);
     else if (cmd.action === 'diff') orchestrator.toggleDiffViewer(true);
-    else if (cmd.action === 'permissions') orchestrator.togglePermissionsModal(true);
+    else if (cmd.action === 'permissions') orchestrator.openSettings('seguranca');
     else if (cmd.action === 'voice') toggleVoice();
     else if (cmd.action === 'plan') orchestrator.cycleExecutionMode();
     else if (cmd.action === 'artifact') orchestrator.toggleArtifactModal(true);
@@ -823,7 +823,7 @@ const sendMessage = () => {
     return;
   }
   if (text === '/permissions') {
-    orchestrator.togglePermissionsModal(true);
+    orchestrator.openSettings('seguranca');
     messageText.value = '';
     return;
   }

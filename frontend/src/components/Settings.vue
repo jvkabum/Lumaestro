@@ -20,6 +20,73 @@ const { install, setup } = useSettingsTools()
 const { addMCPServer, listMCPServers } = useSettingsMCP()
 const { handleAddAccount, handleLoginAccount, handleSwitchAccount, handleRemoveAccount } = useSettingsAccounts()
 
+// ── REGRAS GRANULARES ANTIGRAVITY (action(target)) ──
+const antigravitySettings = ref(null)
+const activePermTab = ref('allow') // 'allow', 'ask', 'deny'
+const newRuleLevel = ref('allow')
+const newRuleAction = ref('command')
+const newRuleTarget = ref('')
+
+const loadAntigravityPermissions = async () => {
+  try {
+    const bridge = window.go?.core?.App || window.go?.main?.App
+    if (bridge && typeof bridge.GetAntigravitySettings === 'function') {
+      const res = await bridge.GetAntigravitySettings()
+      if (res) antigravitySettings.value = res
+    }
+  } catch (err) {
+    console.error('[Settings] Erro ao carregar permissões Antigravity:', err)
+  }
+}
+
+const addAntigravityRule = async () => {
+  if (!newRuleTarget.value.trim()) return
+  try {
+    const bridge = window.go?.core?.App || window.go?.main?.App
+    if (bridge && typeof bridge.SaveAntigravityPermissionRule === 'function') {
+      await bridge.SaveAntigravityPermissionRule(newRuleLevel.value, newRuleAction.value, newRuleTarget.value.trim())
+      newRuleTarget.value = ''
+      await loadAntigravityPermissions()
+      store.notify(`🛡️ Regra adicionada: ${newRuleAction.value}(...) em ${newRuleLevel.value}`, 'success')
+    }
+  } catch (err) {
+    console.error('[Settings] Erro ao adicionar regra:', err)
+    store.notify('Erro ao salvar regra Antigravity', 'error')
+  }
+}
+
+const deleteAntigravityRule = async (ruleStr) => {
+  try {
+    const bridge = window.go?.core?.App || window.go?.main?.App
+    if (bridge && typeof bridge.RemoveAntigravityPermissionRule === 'function') {
+      await bridge.RemoveAntigravityPermissionRule(ruleStr)
+      await loadAntigravityPermissions()
+      store.notify(`🗑️ Regra removida: ${ruleStr}`, 'success')
+    }
+  } catch (err) {
+    console.error('[Settings] Erro ao remover regra:', err)
+    store.notify('Erro ao remover regra Antigravity', 'error')
+  }
+}
+
+const currentTabRules = computed(() => {
+  if (!antigravitySettings.value?.permissions) return []
+  const list = antigravitySettings.value.permissions[activePermTab.value]
+  return Array.isArray(list) ? list : []
+})
+
+watch(() => store.activeTab, (tab) => {
+  if (tab === 'seguranca') {
+    loadAntigravityPermissions()
+  }
+})
+
+onMounted(() => {
+  if (store.activeTab === 'seguranca') {
+    loadAntigravityPermissions()
+  }
+})
+
 // ── IDENTIDADE MULTI-PROVEDOR ──
 const selectedAccountProvider = ref('google')
 const showQuickSwitch = ref(false)
@@ -1258,6 +1325,95 @@ runtime.EventsOn("native:progress", (data) => {
          <button @click="save" class="btn-glow-red" style="margin-top: 3rem; width: 100%;">
            SALVAR E REVALIDAR PROTOCOLOS DE SEGURANÇA 🔐
          </button>
+
+         <!-- REGRAS GRANULARES ANTIGRAVITY CLI (action(target)) -->
+         <div class="antigravity-permissions-section">
+            <div class="header-with-badge" style="display: flex; justify-content: space-between; align-items: flex-start; margin-top: 3.5rem; margin-bottom: 2rem;">
+              <div>
+                <h3 class="section-title" style="color: #60a5fa; letter-spacing: 4px; font-size: 1.4rem;">
+                  ⚡ Regras Granulares Antigravity CLI
+                </h3>
+                <p style="color: var(--p-text-dim); margin-top: 6px; font-size: 0.9rem;">
+                  Controle baseado em <code>action(target)</code> sincronizado com <code>~/.gemini/antigravity-cli/settings.json</code>
+                </p>
+              </div>
+              <div class="security-level-badge" style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); color: #60a5fa; padding: 5px 15px; border-radius: 20px; font-size: 0.65rem; font-weight: 900; letter-spacing: 2px;">
+                HIERARQUIA: DENY > ASK > ALLOW
+              </div>
+            </div>
+
+            <!-- Abas Allow / Ask / Deny -->
+            <div class="rule-tabs-row" style="display: flex; gap: 10px; margin-bottom: 1.5rem;">
+              <button 
+                type="button"
+                class="rule-tab tab-allow" 
+                :class="{ active: activePermTab === 'allow' }"
+                @click="activePermTab = 'allow'"
+              >
+                🟢 Permitir ({{ antigravitySettings?.permissions?.allow?.length || 0 }})
+              </button>
+              <button 
+                type="button"
+                class="rule-tab tab-ask" 
+                :class="{ active: activePermTab === 'ask' }"
+                @click="activePermTab = 'ask'"
+              >
+                🟡 Perguntar ({{ antigravitySettings?.permissions?.ask?.length || 0 }})
+              </button>
+              <button 
+                type="button"
+                class="rule-tab tab-deny" 
+                :class="{ active: activePermTab === 'deny' }"
+                @click="activePermTab = 'deny'"
+              >
+                🔴 Bloquear ({{ antigravitySettings?.permissions?.deny?.length || 0 }})
+              </button>
+            </div>
+
+            <!-- Lista de Regras da Categoria Selecionada -->
+            <div class="rules-list-container">
+              <div v-if="currentTabRules.length === 0" class="rules-empty-hint">
+                Nenhuma regra ativa para a categoria <strong>{{ activePermTab.toUpperCase() }}</strong>.
+              </div>
+              <div v-else v-for="rule in currentTabRules" :key="rule" class="rule-item-row">
+                <span class="rule-code-badge">{{ rule }}</span>
+                <button type="button" class="rule-del-btn" @click="deleteAntigravityRule(rule)" title="Remover regra">×</button>
+              </div>
+            </div>
+
+            <!-- Formulário para Criar Nova Regra -->
+            <div class="add-rule-bar" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+              <select v-model="newRuleLevel" class="maestro-input" style="width: auto; min-width: 150px;">
+                <option value="allow">Allow (Permitir)</option>
+                <option value="ask">Ask (Perguntar)</option>
+                <option value="deny">Deny (Bloquear)</option>
+              </select>
+              <select v-model="newRuleAction" class="maestro-input" style="width: auto; min-width: 130px;">
+                <option value="command">command</option>
+                <option value="read">read</option>
+                <option value="write">write</option>
+                <option value="network">network</option>
+                <option value="tool">tool</option>
+              </select>
+              <input 
+                v-model="newRuleTarget" 
+                type="text" 
+                class="maestro-input" 
+                placeholder="Alvo (ex: git *, rm -rf *, C:\keys\*)" 
+                style="flex: 1; min-width: 220px;"
+                @keydown.enter.prevent="addAntigravityRule"
+              />
+              <button 
+                type="button"
+                @click="addAntigravityRule" 
+                class="btn-glow-blue" 
+                style="padding: 12px 24px; white-space: nowrap;"
+                :disabled="!newRuleTarget.trim()"
+              >
+                + Adicionar Regra
+              </button>
+            </div>
+         </div>
       </section>
 
       <!-- ABA MCP -->

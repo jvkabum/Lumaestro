@@ -11,7 +11,6 @@ import SubagentPanel from './SubagentPanel.vue'
 import TerminalView from './TerminalView.vue'
 import CodeSearchModal from './CodeSearchModal.vue'
 import DiffViewerModal from './DiffViewerModal.vue'
-import PermissionsModal from './PermissionsModal.vue'
 
 // Props e Emits
 const props = defineProps({ 
@@ -111,7 +110,7 @@ const sendChatMessage = async (payload) => {
     }
 
     if (text === '/permissions') {
-      orchestrator.togglePermissionsModal(true)
+      orchestrator.openSettings('seguranca')
       return
     }
 
@@ -195,9 +194,6 @@ const handleSessionEnded = (agent) => {
 
     <!-- 📑 Visualizador de Alterações Git (/diff) -->
     <DiffViewerModal />
-
-    <!-- 🛡️ Políticas de Segurança & Sandbox (/permissions) -->
-    <PermissionsModal />
 
     <header class="panel-header glass" :class="{ 'is-minimized': props.isMinimized }">
       <!-- 🚀 LADO ESQUERDO: Identidade e Status Compacto -->
@@ -311,7 +307,7 @@ const handleSessionEnded = (agent) => {
         </button>
 
         <!-- 🛡️ Atalho Segurança & Sandbox -->
-        <button v-show="!props.isMinimized" @click="orchestrator.togglePermissionsModal()" class="action-btn" :class="{ 'btn-active': orchestrator.isPermissionsModalOpen }" title="Permissões & Sandbox (/permissions)">
+        <button v-show="!props.isMinimized" @click="orchestrator.openSettings('seguranca')" class="action-btn" title="Segurança & Permissões (/permissions)">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
           </svg>

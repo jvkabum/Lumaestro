@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref, watch } from 'vue';
 import { EventsOn } from '../../wailsjs/runtime/runtime';
+import { useSettingsStore } from './settings';
 
 // Helper para chamar funções do Wails com segurança
 const safeCall = async (pkg, func, ...args) => {
@@ -824,8 +825,20 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     isDiffViewerOpen.value = (typeof state === 'boolean') ? state : !isDiffViewerOpen.value;
   };
 
-  const togglePermissionsModal = (state) => {
-    isPermissionsModalOpen.value = (typeof state === 'boolean') ? state : !isPermissionsModalOpen.value;
+  const currentView = ref('orchestrator');
+
+  const openSettings = (tab = 'geral') => {
+    currentView.value = 'settings';
+    try {
+      const settingsStore = useSettingsStore();
+      settingsStore.activeTab = tab;
+    } catch (e) {
+      console.warn('[Store] Erro ao trocar aba de configurações:', e);
+    }
+  };
+
+  const togglePermissionsModal = () => {
+    openSettings('seguranca');
   };
 
   const toggleArtifactModal = (state) => {
@@ -864,6 +877,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     selectWorkspace, clearWorkspace, loadWorkspace,
     fetchCustomAgents, killSubagent, runCodeSearch, getWorkspaceDiff, getSecurityPermissions,
     toggleAgentsPanel, toggleCodeSearch, toggleDiffViewer, togglePermissionsModal, toggleArtifactModal, forkSession,
+    currentView, openSettings,
     confirm, confirmModal
   };
 });

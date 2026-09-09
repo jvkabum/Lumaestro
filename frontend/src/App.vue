@@ -1,5 +1,6 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
+import { storeToRefs } from 'pinia'
 import { CheckConnection, GetProjectDoc, GetToolsStatus } from '../wailsjs/go/core/App'
 import { EventsOn } from '../wailsjs/runtime'
 import ChatPanel from './components/ChatPanel.vue'
@@ -17,7 +18,7 @@ const CACHE_BUST = "2026-04-21T17:44:00" // 🚀 Bypass de Cache
 
 const orchestrator = useOrchestratorStore()
 const settingsStore = useSettingsStore()
-const currentView = ref('orchestrator') // views: orchestrator, settings, swarm
+const { currentView } = storeToRefs(orchestrator)
 const isOnline = ref(false)
 const connectionError = ref('Aguardando sincronização com o Maestro (Frontend Booting)...')
 
