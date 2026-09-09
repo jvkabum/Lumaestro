@@ -164,6 +164,11 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 
 		// 📁 Se for diretório, emite como um Planeta ou Sistema Solar
 		if info.IsDir() {
+			dirName := info.Name()
+			if dirName == ".git" || dirName == "node_modules" || dirName == ".lumaestro" || dirName == ".vscode" || dirName == ".obsidian" || dirName == "dist" || dirName == "build" || dirName == "bin" || dirName == "tmp" || (strings.HasPrefix(dirName, ".") && dirName != ".") {
+				return filepath.SkipDir
+			}
+
 			folderID := "planet:" + pathHash + ":" + strings.ToLower(relPath)
 			folderName := info.Name()
 			
@@ -534,6 +539,13 @@ func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.P
 
 			relPath, _ := filepath.Rel(repo.Path, path)
 			if relPath == "." { return nil }
+
+			if info.IsDir() {
+				dirName := info.Name()
+				if dirName == ".git" || dirName == "node_modules" || dirName == ".lumaestro" || dirName == ".vscode" || dirName == "dist" || dirName == "build" || dirName == "bin" || dirName == "tmp" || (strings.HasPrefix(dirName, ".") && dirName != ".") {
+					return filepath.SkipDir
+				}
+			}
 
 			pathLower := strings.ToLower(path)
 			if strings.Contains(pathLower, "node_modules") || 

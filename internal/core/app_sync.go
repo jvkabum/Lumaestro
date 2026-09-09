@@ -2,6 +2,8 @@ package core
 
 import (
 	"Lumaestro/internal/config"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -268,8 +270,25 @@ func (a *App) PurgeCache() string {
 
 // TopologyCache representa o snapshot completo do grafo para carregamento instantâneo.
 type TopologyCache struct {
-	Nodes []map[string]interface{} `json:"nodes"`
-	Edges []map[string]interface{} `json:"edges"`
+	Workspace string                   `json:"workspace"`
+	Nodes     []map[string]interface{} `json:"nodes"`
+	Edges     []map[string]interface{} `json:"edges"`
+}
+
+// Retorna o caminho do cache isolado por workspace
+func (a *App) getTopologyCachePath() string {
+	targetWs := a.getActiveWorkspace()
+	if targetWs == "" && a.config != nil {
+		targetWs = a.config.ObsidianVaultPath
+	}
+	if targetWs == "" {
+		return ".lumaestro/cache/topology.json"
+	}
+	h := sha256.New()
+	h.Write([]byte(filepath.Clean(targetWs)))
+	hash := hex.EncodeToString(h.Sum(nil))[:8]
+	os.MkdirAll(".lumaestro/cache", 0755)
+	return fmt.Sprintf(".lumaestro/cache/topology_%s.json", hash)
 }
 
 // Sincronização e I/O Desacoplado do Motor Físico
@@ -279,23 +298,34 @@ func (a *App) saveTopologyCache(nodes []map[string]interface{}, edges []map[stri
 		fmt.Println("[Sync] ⚠️ Ignorando gravação de cache vazio (0 nós). Cache anterior preservado.")
 		return
 	}
+	cachePath := a.getTopologyCachePath()
 	cache := TopologyCache{
-		Nodes: nodes,
-		Edges: edges,
+		Workspace: a.getActiveWorkspace(),
+		Nodes:     nodes,
+		Edges:     edges,
 	}
 	data, err := json.Marshal(cache)
 	if err == nil {
-		os.WriteFile(".lumaestro/cache/topology.json", data, 0644)
+		os.WriteFile(cachePath, data, 0644)
 	}
 }
 
 func (a *App) loadTopologyCache() *TopologyCache {
-	data, err := os.ReadFile(".lumaestro/cache/topology.json")
+	cachePath := a.getTopologyCachePath()
+	data, err := os.ReadFile(cachePath)
 	if err != nil {
-		return nil
+		data, err = os.ReadFile(".lumaestro/cache/topology.json")
+		if err != nil {
+			return nil
+		}
 	}
 	var cache TopologyCache
 	if err := json.Unmarshal(data, &cache); err != nil {
+		return nil
+	}
+	// Se o cache for de outro workspace, descarta para evitar contaminação
+	targetWs := a.getActiveWorkspace()
+	if cache.Workspace != "" && targetWs != "" && filepath.Clean(cache.Workspace) != filepath.Clean(targetWs) {
 		return nil
 	}
 	return &cache
@@ -365,9 +395,22 @@ func (a *App) UpdateNodePositions(nodes []map[string]interface{}) string {
 
 	// 2. Persistência de Carregamento Rápido (Topology Cache)
 	cache := a.loadTopologyCache()
+	targetWs := a.getActiveWorkspace()
+	if targetWs == "" && a.config != nil {
+		targetWs = a.config.ObsidianVaultPath
+	}
+
+	// Recupera arestas existentes do cache ou do DuckDB para NUNCA zerar as arestas
+	var edgesToKeep []map[string]interface{}
+	if cache != nil && len(cache.Edges) > 0 {
+		edgesToKeep = cache.Edges
+	} else if a.LStore != nil {
+		_, edges, _ := a.LStore.GetFullGraph(targetWs)
+		edgesToKeep = edges
+	}
+
 	if cache == nil {
-		// Se não existe cache, cria um novo com o que recebemos
-		a.saveTopologyCache(nodes, []map[string]interface{}{})
+		a.saveTopologyCache(nodes, edgesToKeep)
 	} else {
 		nodeMap := make(map[string]int)
 		for i, n := range cache.Nodes {
@@ -387,6 +430,9 @@ func (a *App) UpdateNodePositions(nodes []map[string]interface{}) string {
 				// Adiciona novo nó descoberto ao cache!
 				cache.Nodes = append(cache.Nodes, n)
 			}
+		}
+		if len(cache.Edges) == 0 && len(edgesToKeep) > 0 {
+			cache.Edges = edgesToKeep
 		}
 		a.saveTopologyCache(cache.Nodes, cache.Edges)
 	}
