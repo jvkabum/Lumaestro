@@ -127,6 +127,8 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   // Estado para histórico e checkpoints (Sinfonias)
   const sessions = ref([]);
   const currentACPID = ref(null);
+  const isCreatingNewSession = ref(false);
+  const hasInitialRestored = ref(false);
   
   // Estado para revisões de segurança pendentes
   const pendingReview = ref(null);
@@ -258,9 +260,17 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     EventsOn('sessions:current', async (sessionId) => {
       console.log("[Store] 🎼 Sinfonia sincronizada com o backend:", sessionId);
       if (sessionId) {
+        // Se havia uma sinfonia placeholder temporária 'nova-*', substitui pelo ID real recebido
+        if (currentACPID.value && String(currentACPID.value).startsWith('nova-')) {
+          const tempIndex = sessions.value.findIndex(s => s.sessionId === currentACPID.value);
+          if (tempIndex !== -1) {
+            sessions.value[tempIndex].sessionId = sessionId;
+            sessions.value[tempIndex].title = `Sinfonia Ativa (${sessionId.substring(0, 8)})`;
+          }
+        }
         currentACPID.value = sessionId;
         isThinking.value = false; // 🚀 Destrava a tela inicial imediatamente
-        if (messages.value.length === 0) {
+        if (messages.value.length === 0 && !isCreatingNewSession.value) {
           await restoreSessionMessages(sessionId);
         }
       }
@@ -663,19 +673,27 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   const fetchSessions = async (agent) => {
     if (!agent) return;
     try {
-      const list = await safeCall('main', 'ListAgentSessions', agent);
+      const list = await safeCall('core', 'ListAgentSessions', agent);
       if (list) {
-          // Ordenar por data (mais recente primeiro)
-          sessions.value = list.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+          // Se estivermos no meio da criação de nova sinfonia temporária, preserva-a no topo
+          const tempSession = isCreatingNewSession.value ? sessions.value.find(s => String(s.sessionId).startsWith('nova-')) : null;
 
-          // 🚀 Auto-restauração na inicialização se o chat estiver vazio
-          if (messages.value.length === 0) {
+          // Ordenar por data (mais recente primeiro)
+          let sorted = list.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+          if (tempSession) {
+            sorted = [tempSession, ...sorted.filter(s => s.sessionId !== tempSession.sessionId)];
+          }
+          sessions.value = sorted;
+
+          // 🚀 Auto-restauração APENAS na montagem inicial se o chat estiver vazio E não estivermos criando nova sessão
+          if (messages.value.length === 0 && !isCreatingNewSession.value && !hasInitialRestored.value) {
             const targetId = currentACPID.value || (sessions.value.length > 0 ? sessions.value[0].sessionId : null);
             if (targetId) {
               console.log("[Store] 🚀 Auto-restaurando mensagens da sinfonia mais recente:", targetId);
               currentACPID.value = targetId;
               await restoreSessionMessages(targetId);
             }
+            hasInitialRestored.value = true;
           }
       }
     } catch (err) {
@@ -704,7 +722,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     messages.value = []; // Limpa o chat para receber o novo contexto restaurado
     
     try {
-      await safeCall('main', 'LoadAgentSession', agent, acpID);
+      await safeCall('core', 'LoadAgentSession', agent, acpID);
       await restoreSessionMessages(acpID);
       await fetchSessions(agent); // Atualiza a lista lateral
     } catch (err) {
@@ -717,17 +735,33 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
 
   const newSession = async (agent) => {
     console.log(`[Store] Iniciando nova Sinfonia personalizada...`);
+    const targetAgent = agent || activeAgent.value || 'antigravity';
+    isCreatingNewSession.value = true;
+    hasInitialRestored.value = true;
     isThinking.value = true;
     currentACPID.value = null;
     messages.value = [];
     
+    // Adiciona uma sinfonia placeholder imediata no topo para feedback instantâneo de 0ms
+    const tempId = 'nova-' + Date.now();
+    currentACPID.value = tempId;
+    sessions.value.unshift({
+      sessionId: tempId,
+      title: 'Nova Sinfonia',
+      updatedAt: new Date().toISOString(),
+      workspace: workspace.value?.name || 'Workspace'
+    });
+
     try {
-      await safeCall('main', 'NewAgentSession', agent);
-      await fetchSessions(agent);
+      await safeCall('core', 'NewAgentSession', targetAgent);
+      await fetchSessions(targetAgent);
     } catch (err) {
       messages.value.push({ role: 'assistant', text: `❌ Erro ao criar: ${err}`, mode: 'system' });
     } finally {
       isThinking.value = false;
+      setTimeout(() => {
+        isCreatingNewSession.value = false;
+      }, 1500);
     }
   };
 

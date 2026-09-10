@@ -1,10 +1,14 @@
 package core
 
 import (
-	"Lumaestro/internal/agents/acp"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"time"
+
+	"Lumaestro/internal/agents/acp"
 
 	"github.com/google/uuid"
 )
@@ -32,9 +36,18 @@ func (a *App) StartLoginSession(agent string) string {
 // TERMINAL ACP — JSON RPC 2.0 (O CÉREBRO)
 // ============================================================
 
+func normalizeAgentKey(agent string) string {
+	norm := strings.ToLower(strings.TrimSpace(agent))
+	if norm == "gemini" || norm == "agy" || norm == "antigravity" || norm == "" {
+		return "antigravity"
+	}
+	return norm
+}
+
 // StartAgentSession inicia a CLI do Antigravity/Gemini em modo seguro ACP (JSON RPC 2.0).
 func (a *App) StartAgentSession(agent string) error {
-	sessionID := agent // 🚨 Unificação de ID: Usar o nome do agente diretamente para sessão ACP
+	normAgent := normalizeAgentKey(agent)
+	sessionID := normAgent // 🚨 Unificação de ID: Usar o nome do agente diretamente para sessão ACP
 
 	// 🕵️⚡ Trava Imediata: Se já houver uma sessão ativa para este agente, retorna instantaneamente (0ms!)
 	a.executor.Mu.Lock()
@@ -46,7 +59,7 @@ func (a *App) StartAgentSession(agent string) error {
 	}
 
 	// 🛡️ Gatekeeper de Autenticação: Bloqueia inicialização de instâncias "zumbis" se não houver credenciais.
-	if (agent == "gemini" || agent == "antigravity" || agent == "agy") && a.config != nil && !a.config.UseGeminiAPIKey && !a.installer.CheckGeminiAuth() {
+	if (normAgent == "gemini" || normAgent == "antigravity" || normAgent == "agy") && a.config != nil && !a.config.UseGeminiAPIKey && !a.installer.CheckGeminiAuth() {
 		return fmt.Errorf("falha de Autenticação: O motor Antigravity/Gemini requer uma API Key ou Login OAuth (GCloud ADC) para iniciar o processo ACP")
 	}
 	if agent == "claude" && a.config != nil && !a.config.UseClaudeAPIKey && !a.installer.CheckClaudeAuth() {
@@ -114,8 +127,9 @@ func (a *App) ListAgentSessions(agent string) ([]acp.SessionInfo, error) {
 
 // LoadAgentSession encerra a atual e carrega uma antiga (Checkpoint)
 func (a *App) LoadAgentSession(agent string, acpSessionID string) error {
-	fmt.Printf("[App] Trocando para sessão: %s\n", acpSessionID)
-	sessionID := agent
+	normAgent := normalizeAgentKey(agent)
+	fmt.Printf("[App] Trocando para sessão: %s (motor: %s)\n", acpSessionID, normAgent)
+	sessionID := normAgent
 
 	// 🛡️ HOT SWAP DIRETO: Se já houver uma sessão ativa, verifica o tipo de motor
 	a.executor.Mu.Lock()
@@ -129,32 +143,45 @@ func (a *App) LoadAgentSession(agent string, acpSessionID string) error {
 			// Antigravity opera via stream-json e deve ser reiniciado apontando para a conversa desejada
 			fmt.Printf("[App] 🔄 Reiniciando motor Antigravity CLI com a conversa: %s\n", acpSessionID)
 			_ = a.executor.StopSession(sessionID)
-			return a.executor.StartSession(a.ctx, agent, sessionID, acpSessionID, uuid.Nil, nil, false, nil)
+			return a.executor.StartSession(a.ctx, normAgent, sessionID, acpSessionID, uuid.Nil, nil, false, nil)
 		}
 		fmt.Printf("[App] ♻️ Hot Swap Direto: Carregando sessão %s no processo ativo\n", acpSessionID)
 		return a.executor.LoadSession(existingSession, acpSessionID)
 	}
 
 	// Se não houver processo ativo, faz o fluxo completo (inicia processo + carrega sessão)
-	return a.executor.StartSession(a.ctx, agent, sessionID, acpSessionID, uuid.Nil, nil, false, nil)
+	return a.executor.StartSession(a.ctx, normAgent, sessionID, acpSessionID, uuid.Nil, nil, false, nil)
 }
 
 // NewAgentSession força a criação de um novo chat (limpa o contexto)
 func (a *App) NewAgentSession(agent string) error {
-	fmt.Println("[App] Iniciando NOVO chat (limpando contexto)...")
-	sessionID := agent
+	normAgent := normalizeAgentKey(agent)
+	fmt.Printf("[App] Iniciando NOVO chat para '%s' (limpando contexto)...\n", normAgent)
+	sessionID := normAgent
 
+	// 1. Encerra qualquer sessão ativa existente para este motor (limpeza total)
 	a.executor.Mu.Lock()
-	existingSession, exists := a.executor.ActiveSessions[sessionID]
-	isAlive := exists && existingSession.Cmd != nil && existingSession.Cmd.ProcessState == nil
-	isAntigravity := isAlive && existingSession.IsAntigravity
+	var sessionsToStop []string
+	for id, sess := range a.executor.ActiveSessions {
+		if sess != nil && (id == sessionID || (normAgent == "antigravity" && (id == "gemini" || id == "agy"))) {
+			sessionsToStop = append(sessionsToStop, id)
+		}
+	}
 	a.executor.Mu.Unlock()
 
-	if isAntigravity {
-		_ = a.executor.StopSession(sessionID)
+	for _, id := range sessionsToStop {
+		_ = a.executor.StopSession(id)
 	}
 
-	return a.executor.StartSession(a.ctx, agent, sessionID, "NEW", uuid.Nil, nil, false, nil)
+	// 2. Remove o last_session.json da órbita ativa para não apontar mais para a conversa anterior
+	ws := a.getActiveWorkspace()
+	if ws != "" && ws != "." {
+		lastSessionPath := filepath.Join(ws, ".lumaestro", "last_session.json")
+		_ = os.Remove(lastSessionPath)
+	}
+
+	// 3. Inicia um novo processo CLI em modo "NEW"
+	return a.executor.StartSession(a.ctx, normAgent, sessionID, "NEW", uuid.Nil, nil, false, nil)
 }
 
 func (a *App) ResizeTerminal(agent string, cols int, rows int) {
@@ -163,13 +190,14 @@ func (a *App) ResizeTerminal(agent string, cols int, rows int) {
 
 // StopAgentSession encerra a sessão ativa.
 func (a *App) StopAgentSession(agent string) error {
-	sessionID := agent
+	normAgent := normalizeAgentKey(agent)
+	sessionID := normAgent
 	err := a.executor.StopSession(sessionID)
 	if err != nil {
-		return fmt.Errorf("nenhuma sessão ativa ACP encontrada para %s", agent)
+		return fmt.Errorf("nenhuma sessão ativa ACP encontrada para %s", normAgent)
 	}
 
-	a.emitEvent("terminal:closed", agent)
+	a.emitEvent("terminal:closed", normAgent)
 	return nil
 }
 

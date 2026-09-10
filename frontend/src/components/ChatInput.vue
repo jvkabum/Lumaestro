@@ -40,14 +40,14 @@
                     <label>⚡ GERAÇÃO 3 (FLASH & SPEED)</label>
                     <div 
                       class="menu-item" 
-                      :class="{ selected: activeGeminiModel === 'gemini-3.8-flash-high' || activeGeminiModel === 'gemini-3.8-flash' }"
-                      @click="selectModel('gemini-3.8-flash-high')"
+                      :class="{ selected: activeGeminiModel === 'gemini-3.8-flash' }"
+                      @click="selectModel('gemini-3.8-flash')"
                     >
-                      <span class="item-icon">⚡</span>
+                      <span class="item-icon">🚀</span>
                       <div class="item-info">
                         <div class="item-header">
                           <span class="item-name">Antigravity (3.8 Flash)</span>
-                          <span class="item-badge high">High</span>
+                          <span class="item-badge high">Topo</span>
                           <span class="item-badge fast">Fast</span>
                         </div>
                         <span class="item-desc">Raciocínio profundo ultrarrápido</span>
@@ -56,14 +56,13 @@
 
                     <div 
                       class="menu-item" 
-                      :class="{ selected: activeGeminiModel === 'gemini-3.7-flash-medium' || activeGeminiModel === 'gemini-3.7-flash' }"
-                      @click="selectModel('gemini-3.7-flash-medium')"
+                      :class="{ selected: activeGeminiModel === 'gemini-3.7-flash' }"
+                      @click="selectModel('gemini-3.7-flash')"
                     >
-                      <span class="item-icon">🚀</span>
+                      <span class="item-icon">⚡</span>
                       <div class="item-info">
                         <div class="item-header">
                           <span class="item-name">Antigravity (3.7 Flash)</span>
-                          <span class="item-badge med">Medium</span>
                           <span class="item-badge fast">Fast</span>
                         </div>
                         <span class="item-desc">Equilíbrio perfeito de contexto e lógica</span>
@@ -72,14 +71,13 @@
 
                     <div 
                       class="menu-item" 
-                      :class="{ selected: activeGeminiModel === 'gemini-3.6-flash-medium' || activeGeminiModel === 'gemini-3.6-flash' }"
-                      @click="selectModel('gemini-3.6-flash-medium')"
+                      :class="{ selected: activeGeminiModel === 'gemini-3.6-flash' }"
+                      @click="selectModel('gemini-3.6-flash')"
                     >
                       <span class="item-icon">⚡</span>
                       <div class="item-info">
                         <div class="item-header">
                           <span class="item-name">Antigravity (3.6 Flash)</span>
-                          <span class="item-badge med">Medium</span>
                           <span class="item-badge fast">Fast</span>
                         </div>
                         <span class="item-desc">Desempenho estável e ágil</span>
@@ -88,16 +86,63 @@
 
                     <div 
                       class="menu-item" 
-                      :class="{ selected: activeGeminiModel === 'gemini-3.1-flash-lite' || activeGeminiModel === 'gemini-3.1-flash-lite-preview' }"
+                      :class="{ selected: activeGeminiModel === 'gemini-3.5-flash' }"
+                      @click="selectModel('gemini-3.5-flash')"
+                    >
+                      <span class="item-icon">🏆</span>
+                      <div class="item-info">
+                        <div class="item-header">
+                          <span class="item-name">Antigravity (3.5 Flash)</span>
+                          <span class="item-badge high">Principal</span>
+                        </div>
+                        <span class="item-desc">Flash 3.5 — confirmado e confiável</span>
+                      </div>
+                    </div>
+
+                    <div 
+                      class="menu-item" 
+                      :class="{ selected: activeGeminiModel === 'gemini-3.1-flash-lite' }"
                       @click="selectModel('gemini-3.1-flash-lite')"
                     >
                       <span class="item-icon">🏎️</span>
                       <div class="item-info">
                         <div class="item-header">
-                          <span class="item-name">Antigravity (3.1 Lite)</span>
+                          <span class="item-name">Antigravity (3.1 Flash Lite)</span>
                           <span class="item-badge zero">Zero Latency</span>
+                          <span class="item-badge fast">Maior RPM</span>
                         </div>
-                        <span class="item-desc">Eficiência máxima / Latência zero</span>
+                        <span class="item-desc">Eficiência máxima / Alta frequência</span>
+                      </div>
+                    </div>
+
+                    <div 
+                      class="menu-item" 
+                      :class="{ selected: activeGeminiModel === 'gemini-3.5-flash-lite' }"
+                      @click="selectModel('gemini-3.5-flash-lite')"
+                    >
+                      <span class="item-icon">🚀</span>
+                      <div class="item-info">
+                        <div class="item-header">
+                          <span class="item-name">Antigravity (3.5 Flash Lite)</span>
+                          <span class="item-badge med">Volume</span>
+                          <span class="item-badge fast">Escala</span>
+                        </div>
+                        <span class="item-desc">Desempenho estável — alto volume</span>
+                      </div>
+                    </div>
+
+                    <div 
+                      class="menu-item" 
+                      :class="{ selected: activeGeminiModel === 'gemini-3-flash' }"
+                      @click="selectModel('gemini-3-flash')"
+                    >
+                      <span class="item-icon">⚖️</span>
+                      <div class="item-info">
+                        <div class="item-header">
+                          <span class="item-name">Antigravity (3 Flash)</span>
+                          <span class="item-badge med">Estável</span>
+                        </div>
+                        <span class="item-desc">Flash 3 — equilibrado e confiável</span>
                       </div>
                     </div>
                   </div>
@@ -106,14 +151,14 @@
                     <label>🧠 RACIOCÍNIO AVANÇADO & PRO</label>
                     <div 
                       class="menu-item" 
-                      :class="{ selected: activeGeminiModel === 'gemini-3.1-pro-preview' || activeGeminiModel === 'gemini-3.1-pro' || activeGeminiModel === 'gemini-3.1-pro-low' }"
-                      @click="selectModel('gemini-3.1-pro-preview')"
+                      :class="{ selected: activeGeminiModel === 'gemini-3.1-pro' }"
+                      @click="selectModel('gemini-3.1-pro')"
                     >
                       <span class="item-icon">🧠</span>
                       <div class="item-info">
                         <div class="item-header">
                           <span class="item-name">Antigravity (3.1 Pro)</span>
-                          <span class="item-badge pro">Low / Pro</span>
+                          <span class="item-badge pro">Pro</span>
                         </div>
                         <span class="item-desc">Máxima lógica, refatoração e arquitetura</span>
                       </div>
@@ -376,15 +421,18 @@ import { useSettingsStore } from '../stores/settings';
 
 const settings = useSettingsStore();
 const orchestrator = useOrchestratorStore();
-const activeGeminiModel = ref('gemini-3.8-flash-high');
+const activeGeminiModel = ref('gemini-3.8-flash');
 
 const currentModelLabel = computed(() => {
   const m = activeGeminiModel.value;
-  if (m === 'gemini-3.8-flash-high' || m === 'gemini-3.8-flash') return 'Antigravity (3.8 Flash)';
-  if (m === 'gemini-3.7-flash-medium' || m === 'gemini-3.7-flash') return 'Antigravity (3.7 Flash)';
-  if (m === 'gemini-3.6-flash-medium' || m === 'gemini-3.6-flash') return 'Antigravity (3.6 Flash)';
-  if (m === 'gemini-3.1-pro-preview' || m === 'gemini-3.1-pro' || m === 'gemini-3.1-pro-low') return 'Antigravity (3.1 Pro)';
-  if (m === 'gemini-3.1-flash-lite' || m === 'gemini-3.1-flash-lite-preview') return 'Antigravity (3.1 Lite)';
+  if (m === 'gemini-3.8-flash') return 'Antigravity (3.8 Flash)';
+  if (m === 'gemini-3.7-flash') return 'Antigravity (3.7 Flash)';
+  if (m === 'gemini-3.6-flash') return 'Antigravity (3.6 Flash)';
+  if (m === 'gemini-3.5-flash') return 'Antigravity (3.5 Flash)';
+  if (m === 'gemini-3.1-flash-lite') return 'Antigravity (3.1 Flash Lite)';
+  if (m === 'gemini-3.5-flash-lite') return 'Antigravity (3.5 Flash Lite)';
+  if (m === 'gemini-3-flash') return 'Antigravity (3 Flash)';
+  if (m === 'gemini-3.1-pro') return 'Antigravity (3.1 Pro)';
   if (m === 'claude-sonnet-4-6') return 'Claude Sonnet 4.6';
   if (m === 'claude-opus-4-6') return 'Claude Opus 4.6';
   if (m === 'openai/gpt-oss-120b' || m === 'gpt-oss-120b') return 'GPT-OSS 120B';

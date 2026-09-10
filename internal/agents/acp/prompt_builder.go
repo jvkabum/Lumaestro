@@ -66,7 +66,7 @@ func NewPromptBuilder() *PromptBuilder {
 //   - AutonomyDirective    → apenas se autonomous=true (modo inativo é o default implícito).
 func (b *PromptBuilder) Build(profile AgentProfile, ctx BuildContext) string {
 	var sb strings.Builder
-	sb.Grow(512) // Pre-alocação para reduzir realocações
+	sb.Grow(len(ctx.RAGContext) + 512) // Pre-alocação dinâmica para evitar realocações
 
 	// 1. Core Identity (sempre presente)
 	sb.WriteString(prompts.GetLanguageDirective())
@@ -109,9 +109,10 @@ func (b *PromptBuilder) Build(profile AgentProfile, ctx BuildContext) string {
 		sb.WriteByte('\n')
 	}
 
-
-	// 4. Contexto RAG (Obsidian) - Silenciado em Órbita Zero
+	// 4. Contexto RAG (Qdrant + Grafo 3D) - Silenciado em Órbita Zero
 	if ctx.RAGContext != "" && !isZeroOrbit {
+		sb.WriteString(prompts.GetRAGAwarenessDirective())
+		sb.WriteByte('\n')
 		sb.WriteString("CONTEXTO:\n")
 		sb.WriteString(ctx.RAGContext)
 		sb.WriteByte('\n')

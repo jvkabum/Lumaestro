@@ -56,10 +56,10 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 
 	if s, ok := e.ActiveSessions[sessionID]; ok {
 		if s.Cmd != nil && s.Cmd.ProcessState == nil {
-			// Se for Antigravity e uma sessão específica diferente foi solicitada (ou "NEW"),
+			// Se uma sessão específica diferente foi solicitada ou "NEW",
 			// encerra o processo anterior para reiniciar com a nova conversa
-			if s.IsAntigravity && (loadSessionID == "NEW" || (loadSessionID != "" && loadSessionID != "LATEST" && s.ACPSessID != loadSessionID)) {
-				fmt.Printf("[ACP] 🔄 Reiniciando processo Antigravity para trocar de conversa (%s -> %s)\n", s.ACPSessID, loadSessionID)
+			if loadSessionID == "NEW" || (s.IsAntigravity && loadSessionID != "" && loadSessionID != "LATEST" && s.ACPSessID != loadSessionID) {
+				fmt.Printf("[ACP] 🔄 Reiniciando processo para nova conversa/troca (%s -> %s)\n", s.ACPSessID, loadSessionID)
 				if s.Cancel != nil {
 					s.Cancel()
 				}
@@ -1072,21 +1072,42 @@ func (e *ACPExecutor) ListSessions(s *ACPSession) ([]SessionInfo, error) {
 		}
 		if json.Unmarshal(data, &ls) == nil && ls.SessionID != "" {
 			dbFile := filepath.Join(userHomeDir, ".gemini", "antigravity-cli", "conversations", ls.SessionID+".db")
-			if info, errStat := os.Stat(dbFile); errStat == nil {
-				title := "Sinfonia Ativa"
-				if len(ls.SessionID) >= 8 {
-					title = "Sinfonia Ativa (" + ls.SessionID[:8] + ")"
-				}
-				rawList = append(rawList, SessionInfo{
-					SessionID: ls.SessionID,
-					Title:     title,
-					UpdatedAt: info.ModTime().Format(time.RFC3339),
-					File:      dbFile,
-					Workspace: projectName,
-				})
+			title := "Sinfonia Ativa"
+			if len(ls.SessionID) >= 8 {
+				title = "Sinfonia Ativa (" + ls.SessionID[:8] + ")"
 			}
+			updatedAt := time.Now().Format(time.RFC3339)
+			if info, errStat := os.Stat(dbFile); errStat == nil {
+				updatedAt = info.ModTime().Format(time.RFC3339)
+			}
+			rawList = append(rawList, SessionInfo{
+				SessionID: ls.SessionID,
+				Title:     title,
+				UpdatedAt: updatedAt,
+				File:      dbFile,
+				Workspace: projectName,
+			})
 		}
 	}
+
+	// ⚡ Sessões ativas em memória (garante visibilidade imediata de novas sinfonias)
+	e.Mu.Lock()
+	for _, act := range e.ActiveSessions {
+		if act != nil && act.ACPSessID != "" {
+			title := "Sinfonia Ativa"
+			if len(act.ACPSessID) >= 8 {
+				title = "Sinfonia Ativa (" + act.ACPSessID[:8] + ")"
+			}
+			rawList = append(rawList, SessionInfo{
+				SessionID: act.ACPSessID,
+				Title:     title,
+				UpdatedAt: time.Now().Format(time.RFC3339),
+				File:      filepath.Join(userHomeDir, ".gemini", "antigravity-cli", "conversations", act.ACPSessID+".db"),
+				Workspace: projectName,
+			})
+		}
+	}
+	e.Mu.Unlock()
 
 	// 🛡️ DEDUPLICAÇÃO E ORDENAÇÃO
 	sessionMap := make(map[string]SessionInfo)

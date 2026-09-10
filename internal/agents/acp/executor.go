@@ -186,9 +186,9 @@ func (e *ACPExecutor) SetSessionModel(sessionID string, model string) error {
 	targetModel := model
 	switch model {
 	case "auto-gemini-3":
-		targetModel = "gemini-3.8-flash-high"
+		targetModel = "gemini-3.8-flash" // ID real confirmado
 	case "auto-gemini-2.5":
-		targetModel = "gemini-2.5-pro"
+		targetModel = "gemini-2.5-flash"
 	}
 
 	// 🚀 Antigravity CLI: Reinicia o processo com o novo modelo preservando a conversa

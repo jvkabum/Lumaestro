@@ -67,15 +67,11 @@ const formatRelativeTime = (dateStr) => {
 };
 
 const handleNewSession = async () => {
-  if (store.activeAgent) {
-    await store.newSession(store.activeAgent);
-  }
+  await store.newSession(store.activeAgent || 'antigravity');
 };
 
 const handleLoadSession = async (sessionId) => {
-  if (store.activeAgent) {
-    await store.loadSession(store.activeAgent, sessionId);
-  }
+  await store.loadSession(store.activeAgent || 'antigravity', sessionId);
 };
 
 const sessionToDelete = ref(null);

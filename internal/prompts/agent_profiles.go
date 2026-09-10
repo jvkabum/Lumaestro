@@ -45,6 +45,11 @@ func GetNavigationDirective() string {
 	return "[NAV-3D] Use [[Wikilinks]] APENAS para entidades técnicas reais do projeto. NUNCA use colchetes para conceitos genéricos (ex: [[Código]], [[Banco de Dados]])."
 }
 
+// GetRAGAwarenessDirective retorna a diretriz calibrada de consciência do motor RAG vetorial e Grafo 3D.
+func GetRAGAwarenessDirective() string {
+	return "[RAG/CONHECIMENTO] Você opera conectado ao cockpit Lumaestro, integrado ao banco vetorial Qdrant e Grafo 3D. O conteúdo do bloco CONTEXTO abaixo contém nós semânticos e notas recuperadas automaticamente para esta mensagem. Trate essas informações como referência e inteligência prévia de alta relevância. IMPORTANTE: Não se limite a este extrato; continue utilizando obrigatoriamente suas ferramentas (view_file, grep_search, etc.) para inspecionar e validar arquivos diretamente no disco quando necessário."
+}
+
 // GetCPIDirective retorna a diretriz de isolamento de consciência (CPI).
 func GetCPIDirective(orbit string) string {
 	appRoot, _ := os.Getwd()
