@@ -64,18 +64,20 @@ func (p *GoogleProvider) GenerateContentWithRetry(ctx context.Context, contents 
 	models := cfg.ActiveGoogleModels
 
 	// Fallback de Segurança caso a lista esteja vazia
+	// ATENÇÃO: Use apenas IDs oficiais da API. Consulte: https://ai.google.dev/gemini-api/docs/models
 	if len(models) == 0 {
 		models = []string{
-			"gemini-3.8-flash-high",
-			"gemini-3.7-flash-medium",
-			"gemini-3.6-flash-medium",
-			"gemini-3.1-pro-preview",
-			"gemini-3.1-flash-lite-preview", // 🚀 Velocidade de Triplas (Lite 3.1)
-			"gemini-2.5-flash",              // 🏆 Capitão Confirmado (Flash 2.5)
-			"gemini-3-flash-preview",        // ⚖️ Moderno (Flash 3)
-			"gemini-2.5-flash-lite",         // 📦 Escala de Volume
-			"gemma-4-31b-it",                // 🛡️ O Tanque (Resiliência)
-			"gemma-4-26b-a4b-it",            // 🐘 Reserva Tática
+			"gemini-3.8-flash",      // 🚀 Topo da frota — Flash 3.8
+			"gemini-3.7-flash",      // ⚡ Flash 3.7
+			"gemini-3.6-flash",      // ⚡ Flash 3.6
+			"gemini-3.5-flash",      // 🏆 Flash 3.5 (confirmado ativo)
+			"gemini-3.1-flash-lite", // 🏎️ Alta velocidade — Lite 3.1 (maior RPM)
+			"gemini-3.5-flash-lite", // 🚀 Lite 3.5 (volume/escala)
+			"gemini-3-flash",        // ⚖️ Flash 3 estável
+			"gemini-2.5-flash",      // 🥈 Flash 2.5 (fallback testado)
+			"gemini-2.5-flash-lite", // 📦 Flash Lite 2.5 (volume)
+			"gemma-4-31b-it",        // 🛡️ Gemma 4 31B (resiliência open-weight)
+			"gemma-4-26b-it",        // 🐘 Gemma 4 26B (reserva tática)
 		}
 	}
 

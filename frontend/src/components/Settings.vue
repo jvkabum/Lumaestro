@@ -218,16 +218,18 @@ const toggleGroqModel = (modelId) => {
 
 // ── GOOGLE FLEET MANAGER ──
 const availableGoogleModels = [
-  { id: 'gemini-3.8-flash-high', label: 'Gemini 3.8 Flash (High/Fast)', icon: '⚡', tier: 'Fleet 3.8' },
-  { id: 'gemini-3.7-flash-medium', label: 'Gemini 3.7 Flash (Medium/Fast)', icon: '🚀', tier: 'Fleet 3.7' },
-  { id: 'gemini-3.6-flash-medium', label: 'Gemini 3.6 Flash (Medium/Fast)', icon: '⚡', tier: 'Fleet 3.6' },
-  { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro (Low/Pro)', icon: '🧠', tier: 'Pro' },
-  { id: 'gemini-3.1-flash-lite-preview', label: 'Flash 3.1 (Lite)', icon: '🏎️', tier: 'Speed' },
-  { id: 'gemini-2.5-flash', label: 'Capitão Flash 2.5', icon: '🏆', tier: 'Premium' },
-  { id: 'gemini-3-flash-preview', label: 'Modern Flash 3', icon: '⚖️', tier: 'Preview' },
-  { id: 'gemini-2.5-flash-lite', label: 'Escala de Volume', icon: '📦', tier: 'Quota' },
-  { id: 'gemma-4-31b-it', label: 'O Tanque (31B)', icon: '🛡️', tier: 'Resilient' },
-  { id: 'gemma-4-26b-a4b-it', label: 'Reserva Tática', icon: '🐘', tier: 'Gemma' }
+  { id: 'gemini-3.8-flash',      label: 'Gemini 3.8 Flash',                  icon: '🚀', tier: 'Flash 3.8' },
+  { id: 'gemini-3.7-flash',      label: 'Gemini 3.7 Flash',                  icon: '⚡', tier: 'Flash 3.7' },
+  { id: 'gemini-3.6-flash',      label: 'Gemini 3.6 Flash',                  icon: '⚡', tier: 'Flash 3.6' },
+  { id: 'gemini-3.5-flash',      label: 'Gemini 3.5 Flash (Principal)',       icon: '🏆', tier: 'Flash 3.5' },
+  { id: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite (Alta RPM)',   icon: '🏎️', tier: 'Speed' },
+  { id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash Lite (Volume)',     icon: '🚀', tier: 'Quota' },
+  { id: 'gemini-3-flash',        label: 'Gemini 3 Flash (Estável)',            icon: '⚖️', tier: 'Stable' },
+  { id: 'gemini-2.5-flash',      label: 'Gemini 2.5 Flash (Fallback)',        icon: '🥈', tier: 'Premium' },
+  { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite (Volume)',     icon: '📦', tier: 'Quota' },
+  { id: 'gemini-3.1-pro',        label: 'Gemini 3.1 Pro (Avançado)',          icon: '🧠', tier: 'Pro' },
+  { id: 'gemma-4-31b-it',        label: 'Gemma 4 31B (Tanque)',               icon: '🛡️', tier: 'Resilient' },
+  { id: 'gemma-4-26b-it',        label: 'Gemma 4 26B (Reserva)',              icon: '🐘', tier: 'Gemma' },
 ]
 
 const isGoogleModelActive = (modelId) => {

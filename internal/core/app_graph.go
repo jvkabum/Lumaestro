@@ -72,12 +72,33 @@ func (a *App) AnalyzeGraphHealth() (map[string]interface{}, error) {
 		return nil, fmt.Errorf("banco vetorial offline")
 	}
 
-	// 📂 Contagem Estrita e Fiel à Renderização Visual
-	// Consultamos diretamente o banco vetorial, pois ele é a fonte da verdade do motor D3
+	targetWs := a.getActiveWorkspace()
+	if targetWs == "" && a.config != nil {
+		targetWs = a.config.ObsidianVaultPath
+	}
+
+	wsNodeCount := 0
+	if a.LStore != nil && targetWs != "" {
+		dbCount, err := a.LStore.GetNodeCount(targetWs)
+		if err == nil && dbCount > 0 {
+			wsNodeCount = dbCount
+		}
+	}
+	if wsNodeCount == 0 {
+		cache := a.loadTopologyCache()
+		if cache != nil && len(cache.Nodes) > 0 {
+			wsNodeCount = len(cache.Nodes)
+		}
+	}
+
 	obsidianCount, _ := a.qdrant.CountPoints("obsidian_knowledge")
 	memoryCount, _ := a.qdrant.CountPoints("knowledge_graph")
 	
-	count := obsidianCount + memoryCount
+	count := wsNodeCount
+	if count < obsidianCount {
+		count = obsidianCount
+	}
+	count += memoryCount
 
 	// Cálculo de Densidade Orgânica (Progressão Logarítmica)
 	densityValue := 0.05 // Base 5%

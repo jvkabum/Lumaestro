@@ -75,7 +75,7 @@ const connectionLabel = computed(() => {
             </button>
           </div>
           <div class="stat-item">
-            <span class="val">{{ store.graphHealth.active_nodes || nodesCount }}</span>
+            <span class="val">{{ Math.max(nodesCount, store.graphHealth.active_nodes || 0) }}</span>
             <span class="lab">NOTAS</span>
           </div>
         </div>

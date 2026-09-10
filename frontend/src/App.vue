@@ -14,10 +14,12 @@ import ReposManager from './components/ReposManager.vue'
 import MaestroConfirm from './components/MaestroConfirm.vue'
 import { useOrchestratorStore } from './stores/orchestrator'
 import { useSettingsStore } from './stores/settings'
+import { useGraphStore } from './stores/graph'
 const CACHE_BUST = "2026-04-21T17:44:00" // 🚀 Bypass de Cache
 
 const orchestrator = useOrchestratorStore()
 const settingsStore = useSettingsStore()
+const graphStore = useGraphStore()
 const { currentView } = storeToRefs(orchestrator)
 const isOnline = ref(false)
 const connectionError = ref('Aguardando sincronização com o Maestro (Frontend Booting)...')
@@ -113,6 +115,8 @@ onMounted(async () => {
       // Limpa o grafo anterior para que os nós e arestas da nova órbita apareçam com fidelidade
       state.nodes.splice(0, state.nodes.length)
       state.edges.splice(0, state.edges.length)
+      graphStore.nodes = []
+      graphStore.edges = []
 
       // 🚀 Carrega instantaneamente os nós da nova órbita a partir do cache local
       const bridge = window.go?.core?.App || window.go?.main?.App
@@ -154,11 +158,13 @@ onMounted(async () => {
     if (freshNodes.length > 0) {
       state.nodes.push(...freshNodes)
     }
+    graphStore.nodes = state.nodes
   })
 
   EventsOn('graph:edges:batch', (batchEdges) => {
     if (!batchEdges || batchEdges.length === 0) return
     state.edges.push(...batchEdges)
+    graphStore.edges = state.edges
   })
 
   // 🚀 [Mixer v3] Buffer de Acumulação para Nós e Arestas individuais (anti-flood)
@@ -170,11 +176,15 @@ onMounted(async () => {
     if (nodeBuffer.length > 0) {
       const fresh = nodeBuffer.filter(n => !nodeIdSet.has(n.id))
       for (const n of fresh) nodeIdSet.add(n.id)
-      if (fresh.length > 0) state.nodes.push(...fresh)
+      if (fresh.length > 0) {
+        state.nodes.push(...fresh)
+        graphStore.nodes = state.nodes
+      }
       nodeBuffer = []
     }
     if (edgeBuffer.length > 0) {
       state.edges.push(...edgeBuffer)
+      graphStore.edges = state.edges
       edgeBuffer = []
     }
   }
