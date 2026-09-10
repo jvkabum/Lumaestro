@@ -19,9 +19,10 @@ type GoogleProvider struct {
 	Mu            sync.Mutex
 	keys          []string
 	CurrentKeyIdx int
+	QuotaManager  *QuotaManager
 }
 
-// NewGoogleProvider inicializa o provedor Google com o pool de chaves configurado.
+// NewGoogleProvider inicializa o provedor Google com o pool de chaves configurado e QuotaManager integrado.
 func NewGoogleProvider(ctx context.Context, apiKey string) (*GoogleProvider, error) {
 	cfg, _ := config.Load()
 	var keys []string
@@ -45,15 +46,18 @@ func NewGoogleProvider(ctx context.Context, apiKey string) (*GoogleProvider, err
 		return nil, fmt.Errorf("falha ao criar cliente Google GenAI: %w", err)
 	}
 
+	qm := GetGlobalQuotaManager(keys)
+
 	return &GoogleProvider{
 		Client:        client,
 		ctx:           ctx,
 		keys:          keys,
 		CurrentKeyIdx: 0,
+		QuotaManager:  qm,
 	}, nil
 }
 
-// GenerateContentWithRetry é o motor generativo unificado com Cascata de Modelos (Gemini -> Gemma) e Rotação de Chaves.
+// GenerateContentWithRetry é o motor generativo unificado com Cascata de Modelos (Gemini -> Gemma), Rotação de Chaves e QuotaManager (Gesttik Engine).
 func (p *GoogleProvider) GenerateContentWithRetry(ctx context.Context, contents []*genai.Content) (*genai.GenerateContentResponse, error) {
 	// Super Frota Dinâmica (Lê os modelos ativos da configuração do Maestro)
 	cfg, _ := config.Load()
@@ -79,54 +83,102 @@ func (p *GoogleProvider) GenerateContentWithRetry(ctx context.Context, contents 
 		return nil, fmt.Errorf("nenhuma chave Google configurada para geração de conteúdo")
 	}
 
+	qm := p.QuotaManager
+	if qm == nil {
+		qm = GetGlobalQuotaManager(p.keys)
+		p.QuotaManager = qm
+	}
+
 	maxFleetCycles := 3
 	cycles := 0
 
 	for {
 		cycles++
 		for _, model := range models {
-			// Tenta todas as chaves disponíveis para o modelo atual
-			for i, key := range p.keys {
-				// Garantir que o cliente usa a chave correta para esta tentativa
-				client, _ := genai.NewClient(ctx, &genai.ClientConfig{APIKey: key, Backend: genai.BackendGeminiAPI})
+			// Tenta as chaves disponíveis para o modelo atual com balanceamento round-robin
+			for i := 0; i < len(p.keys); i++ {
+				p.Mu.Lock()
+				actualKeyIdx := (p.CurrentKeyIdx + i) % len(p.keys)
+				p.Mu.Unlock()
+				key := p.keys[actualKeyIdx]
 
-				fmt.Printf("[ResilienceFleet] 🚀 Tentando modelo: %s (Chave %d/%d)\n", model, i+1, len(p.keys))
+				// Verifica se a chave+modelo está exaurida (RPD, RPM exponencial ou Circuit Breaker)
+				if qm.IsExhausted(key, model) {
+					continue
+				}
+
+				// Cliente usando a chave da tentativa
+				client, err := genai.NewClient(ctx, &genai.ClientConfig{APIKey: key, Backend: genai.BackendGeminiAPI})
+				if err != nil {
+					qm.HandleError(key, actualKeyIdx, model, err)
+					qm.LogRequest(model, actualKeyIdx, key, "FAILED", err.Error())
+					continue
+				}
+
+				masked := qm.MaskAPIKey(key)
+				fmt.Printf("[ResilienceFleet] 🚀 Tentando modelo: %s (Chave [%d] %s)\n", model, actualKeyIdx+1, masked)
 
 				temp := float32(0.0)
-				config := &genai.GenerateContentConfig{
+				genConfig := &genai.GenerateContentConfig{
 					Temperature: &temp,
 				}
 
-				resp, err := client.Models.GenerateContent(ctx, model, contents, config)
-				if err == nil {
-					// Sincroniza a chave de sucesso no estado do provedor
+				resp, err := client.Models.GenerateContent(ctx, model, contents, genConfig)
+				if err == nil && resp != nil {
+					// Sucesso: reseta cooldowns e registra log positivo
+					qm.MarkSuccess(key, model)
+					qm.LogRequest(model, actualKeyIdx, key, "SUCCESS", "")
+
+					// Sincroniza o cliente de sucesso no estado do provedor
 					p.Mu.Lock()
-					p.CurrentKeyIdx = i
+					p.CurrentKeyIdx = (actualKeyIdx + 1) % len(p.keys)
 					p.Client = client
 					p.Mu.Unlock()
 					return resp, nil
 				}
 
+				// Registra e processa erro via QuotaManager
+				qm.HandleError(key, actualKeyIdx, model, err)
+				errMsg := ""
+				if err != nil {
+					errMsg = err.Error()
+				}
+				qm.LogRequest(model, actualKeyIdx, key, "FAILED", errMsg)
+
 				if utils.IsQuotaError(err) {
-					fmt.Printf("[ResilienceFleet] ⚠️ Cota exaurida no modelo %s (Chave %d). Rotacionando chave...\n", model, i+1)
+					fmt.Printf("[ResilienceFleet] ⚠️ Cota exaurida no modelo %s (Chave [%d] %s). Rotacionando chave...\n", model, actualKeyIdx+1, masked)
 					continue
 				}
 
-				if err != nil && (err.Error() == "PERMISSION_DENIED" || utils.IsSuspendedError(err)) {
-					fmt.Printf("[ResilienceFleet] 🚫 Chave SUSPENSA detectada (%d). Pulando para o próximo modelo...\n", i+1)
-					break 
+				if utils.IsSuspendedError(err) {
+					fmt.Printf("[ResilienceFleet] 🚫 Chave SUSPENSA detectada ([%d] %s). Quarentena ativada.\n", actualKeyIdx+1, masked)
+					continue
 				}
 
-				fmt.Printf("[ResilienceFleet] 🚩 Erro no modelo %s: %v. Pulando para o próximo...\n", model, err)
-				break 
+				fmt.Printf("[ResilienceFleet] 🚩 Erro no modelo %s: %v. Pulando para o próximo modelo...\n", model, err)
+				break
 			}
 		}
 
 		if cycles >= maxFleetCycles {
 			return nil, fmt.Errorf("falha persistente: frotas Google/Gemma falharam após %d ciclos", maxFleetCycles)
 		}
-		fmt.Println("⏳ [ResilienceFleet] 🚨 Todos os modelos e chaves falharam! Hibernação de 30s... 😴")
-		time.Sleep(30 * time.Second)
+
+		// Calcula tempo exato de cooldown pendente com o QuotaManager
+		shortestWait := qm.GetShortestCooldown(models)
+		if shortestWait > 60*time.Second {
+			shortestWait = 60 * time.Second
+		}
+		if shortestWait < 5*time.Second {
+			shortestWait = 5 * time.Second
+		}
+
+		fmt.Printf("⏳ [ResilienceFleet] 🚨 Todos os modelos e chaves em cooldown! Aguardando %v para liberação do próximo slot... 😴\n", shortestWait.Round(time.Second))
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(shortestWait):
+		}
 	}
 }
 

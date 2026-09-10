@@ -56,6 +56,7 @@ func InitDB() error {
 		&CostEvent{},
 		&Approval{},
 		&ActivityLog{},
+		&AiQuota{},
 	)
 	if err != nil {
 		log.Printf("Falha ao migrar schemas no SQLite: %v\n", err)

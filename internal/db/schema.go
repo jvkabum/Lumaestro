@@ -212,3 +212,21 @@ type ActivityLog struct {
 	EntityID   string `json:"entity_id"`
 	Details    string `json:"details"`
 }
+
+// 7.11 AiQuota gerencia o estado de cota, backoff exponencial e estabilidade de chaves API
+type AiQuota struct {
+	ID                 uint           `gorm:"primaryKey" json:"id"`
+	CreatedAt          time.Time      `json:"created_at"`
+	UpdatedAt          time.Time      `json:"updated_at"`
+	DeletedAt          gorm.DeletedAt `gorm:"index" json:"-"`
+	KeyID              string         `gorm:"uniqueIndex:idx_key_model" json:"key_id"` // Identificador da chave + Modelo
+	ExhaustedAt        *time.Time     `json:"exhausted_at,omitempty"`                  // Esgotamento diário (RPD)
+	TempExhaustedUntil *time.Time     `json:"temp_exhausted_until,omitempty"`          // Cooldown temporário (RPM / Backoff exponencial)
+	FailureCount       int            `gorm:"default:0" json:"failure_count"`          // Contagem de falhas (instabilidade / circuit breaker)
+	LastFailure        *time.Time     `json:"last_failure,omitempty"`
+	BackoffCount       int            `gorm:"default:0" json:"backoff_count"`          // Para backoff exponencial progressivo
+}
+
+func (AiQuota) TableName() string {
+	return "ai_quotas"
+}

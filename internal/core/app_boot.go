@@ -17,11 +17,8 @@ import (
 func (a *App) bootSequence() {
 	// 🔌 Injeção imediata de contexto para habilitar comunicações seguras
 	a.injectContexts()
-	
-	// ⚡ Início a Frio: Carrega o mapa instantaneamente do cache enquanto o resto inicializa
-	go a.LoadFastGraph()
 
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(300 * time.Millisecond)
 	a.emitBoot("config", "⚙️", "Carregando configurações...")
 
 	if err := a.initServices(); err != nil {
@@ -134,6 +131,10 @@ func (a *App) initServices() error {
 
 	// 📡 Sincroniza o workspace ativo com o Frontend no boot
 	a.emitEvent("workspace:changed", a.GetWorkspace())
+
+	// ⚡ Início a Frio: Agora que o Workspace ativo e a Configuração estão definidos,
+	// emite instantaneamente o mapa de nós e arestas em 3D do cache local!
+	go a.LoadFastGraph()
 
 	// 1. LM Studio
 	if cfg.LMStudioEnabled && cfg.LMStudioURL != "" {

@@ -317,8 +317,30 @@ func (a *App) saveTopologyCache(nodes []map[string]interface{}, edges []map[stri
 }
 
 func (a *App) loadTopologyCache() *TopologyCache {
+	targetWs := a.getActiveWorkspace()
+	if targetWs == "" && a.config != nil {
+		targetWs = a.config.ObsidianVaultPath
+	}
+
 	cachePath := a.getTopologyCachePath()
 	data, err := os.ReadFile(cachePath)
+	if err != nil {
+		// 🔎 Varredura proativa: busca qualquer topology_*.json cujo workspace seja compatível
+		files, _ := filepath.Glob(".lumaestro/cache/topology_*.json")
+		for _, f := range files {
+			d, readErr := os.ReadFile(f)
+			if readErr == nil {
+				var candidate TopologyCache
+				if json.Unmarshal(d, &candidate) == nil {
+					if candidate.Workspace != "" && targetWs != "" && strings.EqualFold(filepath.Clean(candidate.Workspace), filepath.Clean(targetWs)) {
+						data = d
+						err = nil
+						break
+					}
+				}
+			}
+		}
+	}
 	if err != nil {
 		data, err = os.ReadFile(".lumaestro/cache/topology.json")
 		if err != nil {
@@ -330,8 +352,7 @@ func (a *App) loadTopologyCache() *TopologyCache {
 		return nil
 	}
 	// Se o cache for de outro workspace, descarta para evitar contaminação
-	targetWs := a.getActiveWorkspace()
-	if cache.Workspace != "" && targetWs != "" && filepath.Clean(cache.Workspace) != filepath.Clean(targetWs) {
+	if cache.Workspace != "" && targetWs != "" && !strings.EqualFold(filepath.Clean(cache.Workspace), filepath.Clean(targetWs)) {
 		return nil
 	}
 	return &cache
@@ -339,8 +360,8 @@ func (a *App) loadTopologyCache() *TopologyCache {
 
 // LoadFastGraph realiza o "Início a Frio": emite o grafo do cache/DuckDB instantaneamente
 func (a *App) LoadFastGraph() {
-	// Aguarda um pouco para o Wails Handshake estabilizar
-	time.Sleep(1500 * time.Millisecond)
+	// Aguarda um instante breve para o Wails Handshake estabilizar
+	time.Sleep(200 * time.Millisecond)
 	
 	fmt.Println("[Sync] ⚡ Acionando Início a Frio (Fast-Track)...")
 
@@ -350,8 +371,8 @@ func (a *App) LoadFastGraph() {
 		fmt.Printf("[Sync] 🚀 Emitindo %d nós do cache para carregamento instantâneo.\n", len(cache.Nodes))
 		a.emitEvent("graph:nodes:batch", cache.Nodes)
 
-		// Delay maior para garantir que o Deck.gl montou a camada de nós antes das arestas
-		time.Sleep(500 * time.Millisecond)
+		// Delay curto para garantir que o Deck.gl montou a camada de nós antes das arestas
+		time.Sleep(250 * time.Millisecond)
 		fmt.Printf("[Sync] 🚀 Emitindo %d arestas do cache.\n", len(cache.Edges))
 		a.emitEvent("graph:edges:batch", cache.Edges)
 		return
@@ -523,7 +544,20 @@ func (a *App) SyncAllNodes() {
 		edgesBatch = append(edgesBatch, edge)
 	}
 
-	// 🛠️ FALLBACK: Se Qdrant estiver vazio, tenta carregar a estrutura básica do DuckDB (Fase 1)
+	// 🛠️ FALLBACK 1: Se Qdrant estiver vazio/conectando, carrega instantaneamente do Cache de Topologia Local
+	if len(points) == 0 {
+		cache := a.loadTopologyCache()
+		if cache != nil && len(cache.Nodes) > 0 {
+			fmt.Printf("[Sync] ⚡ Qdrant sem pontos imediatos. Emitindo %d nós do Cache Local...\n", len(cache.Nodes))
+			a.emitEvent("graph:nodes:batch", cache.Nodes)
+			if len(cache.Edges) > 0 {
+				a.emitEvent("graph:edges:batch", cache.Edges)
+			}
+			return
+		}
+	}
+
+	// 🛠️ FALLBACK 2: Se Qdrant estiver vazio, tenta carregar a estrutura básica do DuckDB (Fase 1)
 	if len(points) == 0 && a.LStore != nil {
 		fmt.Println("[Sync] ⚠️ Qdrant vazio. Utilizando estrutura local do DuckDB (Modo Estrutural)...")
 		dbNodes, dbEdges, _ := a.LStore.GetFullGraph(targetWs)
@@ -813,6 +847,9 @@ finalize_sync:
 // TriggerInitialSync é chamado pelo frontend ao montar o componente para garantir que os dados apareçam.
 func (a *App) TriggerInitialSync() string {
 	fmt.Println("[Sync] 📥 Requisição de Sincronização Inicial recebida do Frontend.")
+	// ⚡ Garante o carregamento instantâneo do cache de topologia local primeiro
+	go a.LoadFastGraph()
+	// 🔄 Executa sincronização completa em background
 	go a.SyncAllNodes()
 	return "Sincronização em lote solicitada."
 }

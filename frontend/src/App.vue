@@ -113,6 +113,12 @@ onMounted(async () => {
       // Limpa o grafo anterior para que os nós e arestas da nova órbita apareçam com fidelidade
       state.nodes.splice(0, state.nodes.length)
       state.edges.splice(0, state.edges.length)
+
+      // 🚀 Carrega instantaneamente os nós da nova órbita a partir do cache local
+      const bridge = window.go?.core?.App || window.go?.main?.App
+      if (bridge?.LoadFastGraph) {
+        bridge.LoadFastGraph()
+      }
     }
   })
 
