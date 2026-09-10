@@ -28,65 +28,94 @@ export function createSimulation({
 
     // 2. Registro de Forças (Arsenal Premium - d3-force-registry inspired)
     const registry = {
-        // 1. Força de Elástico (Links) - Estilo Dente-de-Leão com Lógica Semântica (Mixer Dev)
+        // 1. Força de Elástico (Links) - Espaçamento Cosmológico Dente-de-Leão
         link: d3.forceLink(linksData).id(d => d.id)
             .distance(link => {
-                const getRadius = (n) => {
-                    const c = n['celestial-type'] || 'moon';
-                    if (c === 'galaxy') return 60;
-                    if (c === 'solar-system') return 35;
-                    if (c === 'planet') return 18;
-                    return 5;
-                };
-                
-                const rS = getRadius(link.source);
-                const rT = getRadius(link.target);
-                
-                // 🌌 EXPANSÃO COSMOLÓGICA: Aumentamos o buffer para 80 pixels para dar ar ao dente-de-leão
-                const baseDist = rS + rT + 80;
+                const getCelestial = (n) => n['celestial-type'] || (n.id.startsWith('planet:') ? 'planet' : (n.id.startsWith('galaxy:') ? 'galaxy' : 'moon'));
+                const cS = getCelestial(link.source);
+                const cT = getCelestial(link.target);
+                const edgeType = link['edge-type'] || link.relation_type;
 
-                const sDeg = nodeDegrees.get(link.source.id) || 0;
-                const tDeg = nodeDegrees.get(link.target.id) || 0;
-                
-                // Hubs ganham uma órbita explosiva (2.5x) para espalhar os milhares de planetas
-                if (sDeg > 5 || tDeg > 5) return baseDist * 2.5;
-                return baseDist;
+                // 🪐 Galáxia -> Planetas principais (Sistemas Solares Primários)
+                // Distância ampla para cada diretório ter seu próprio espaço estelar
+                if (cS === 'galaxy' || cT === 'galaxy') {
+                    return 1400;
+                }
+
+                // 📁 Planeta -> Planeta (Subdiretórios)
+                if (cS === 'planet' && cT === 'planet') {
+                    return 650;
+                }
+
+                // 📄 Planeta -> Luas (Arquivos na pasta)
+                if (edgeType === 'orbital') {
+                    const sDeg = nodeDegrees.get(link.source.id) || 0;
+                    const tDeg = nodeDegrees.get(link.target.id) || 0;
+                    const deg = Math.max(sDeg, tDeg);
+                    // Pastas densas abrem a corola do dente-de-leão mais amplamente
+                    return 240 + Math.min(deg * 5, 350);
+                }
+
+                // 🧠 Sinapses Semânticas e Memórias
+                // Distância maior e frouxa para não puxar galáxias distantes umas contra as outras
+                if (edgeType === 'semantic' || edgeType === 'memory') {
+                    return 900;
+                }
+
+                return 350;
             })
             .strength(link => {
-                if (link['edge-type'] === 'semantic') return 0.05;
-                if (link['edge-type'] === 'orbital') return 0.3; // Mais suave para permitir expansão
-                return 0.6;
+                const edgeType = link['edge-type'] || link.relation_type;
+                if (edgeType === 'semantic') return 0.015; // Muito suave: guia visual sem amassar clusters
+                if (edgeType === 'memory') return 0.02;
+                if (edgeType === 'orbital') return 0.22;   // Flexível para permitir expansão
+                return 0.25;
             }),
 
         // 2. Força Customizada (Expansão de Clusters e Z-Push) - RESTAURADA
         custom: forceAll(communityCenters, parentMap),
 
-        // 3. Repulsão (ManyBody) - Aumentada para -8000 para forçar o distanciamento galáctico
-        charge: d3.forceManyBody().strength(d => -8000).distanceMax(15000),
+        // 3. Repulsão Hierárquica Diferenciada (ManyBody)
+        // Galáxias e planetas se repelem fortemente; arquivos florescem suavemente
+        charge: d3.forceManyBody()
+            .strength(d => {
+                const c = d['celestial-type'] || (d.id.startsWith('planet:') ? 'planet' : (d.id.startsWith('galaxy:') ? 'galaxy' : (d.id.startsWith('asteroid:') ? 'asteroid' : 'moon')));
+                if (c === 'galaxy') return -65000;
+                if (c === 'solar-system') return -30000;
+                if (c === 'planet') return -16000;
+                if (c === 'moon') return -1400;
+                if (c === 'asteroid') return -180;
+                return -800;
+            })
+            .distanceMin(40)
+            .distanceMax(35000),
 
-        // 🧲 Força Magnética, Radial e Limit (Restauradas do Main para controle UI, iniciam zeradas/suaves)
+        // 🧲 Força Magnética, Radial e Limit (iniciam suaves)
         magnetic: d3.forceManyBody().strength(d => (d.weight || 1.0) * -15).distanceMin(20).distanceMax(800),
         radial: d3.forceRadial(200, 0, 0, 0).strength(0),
         limit: d3.forceRadial(0, 0, 0, 0).strength(0),
 
-        // 4. Centro Global
-        center: d3.forceCenter(0, 0, 0).strength(0.01),
+        // 4. Centro Global suave
+        center: d3.forceCenter(0, 0, 0).strength(0.008),
 
-        // 5. Colisão física (Mixer Dev)
+        // 5. Colisão física estendida com amortecimento de respiro
         collide: d3.forceCollide(node => {
-            // 📏 SINCRONIA CELESTIAL: O raio de colisão deve bater com o tamanho visual (NodeLayer.js)
-            const celestial = node['celestial-type'] || 'moon';
+            const celestial = node['celestial-type'] || (node.id.startsWith('planet:') ? 'planet' : (node.id.startsWith('galaxy:') ? 'galaxy' : (node.id.startsWith('asteroid:') ? 'asteroid' : 'moon')));
             let baseMass = node.mass || 4.0;
-            if (celestial === 'galaxy') baseMass = 60.0;
-            if (celestial === 'solar-system') baseMass = 35.0;
-            if (celestial === 'planet') baseMass = 18.0;
-            if (celestial === 'asteroid') baseMass = 1.2;
+            if (celestial === 'galaxy') baseMass = 80.0;
+            if (celestial === 'solar-system') baseMass = 45.0;
+            if (celestial === 'planet') baseMass = 25.0;
+            if (celestial === 'asteroid') baseMass = 2.0;
 
             const importance = (node.pagerank && node.pagerank > 0) ? (node.pagerank * 15) : (nodeDegrees.get(node.id) || 0);
             const visualRadius = (baseMass + Math.pow(importance, 0.5) * 1.5);
             
-            return visualRadius + 4; // Borda de respiro de 4 pixels
-        })
+            // Margem de respiro proporcional para evitar nós amontoados
+            if (celestial === 'galaxy') return visualRadius + 60;
+            if (celestial === 'solar-system') return visualRadius + 40;
+            if (celestial === 'planet') return visualRadius + 28;
+            return visualRadius + 14;
+        }).iterations(3)
     };
 
     // 3. Aplica as forças do registro na simulação

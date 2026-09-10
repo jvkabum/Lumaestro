@@ -75,7 +75,7 @@ export function computeCommunityCenters(nodesData) {
     const communityCenters = new Map();
     const numC = Math.max(communityMap.size, 1);
     const golden = Math.PI * (Math.sqrt(5) - 1);
-    const gR = 800; // SUPERNOVA expansion (escalado para D3 Padrão)
+    const gR = 3600; // EXPANSÃO SUPERNOVA: espalha centros de comunidades no espaço 3D profundo
 
     Array.from(communityMap.keys()).forEach((cid, i) => {
         const yNorm = 1 - (i / Math.max(numC - 1, 1)) * 2;

@@ -78,22 +78,22 @@ export function useInputDriver() {
         layoutMode = (layoutMode + 1) % 3
 
         if (layoutMode === 0) {
-          // 0: Modo Supernova (Bolha Gigante Expandida)
-          updateForce('charge', { strength: -4200, distanceMax: 10000 })
-          updateForce('center', { strength: 0.01 })
-          console.log("🌌 [Layout] Modo Supernova (Bolha) ativado")
+          // 0: Modo Supernova (Cosmos Expandido)
+          updateForce('charge', { strength: -16000, distanceMax: 35000 })
+          updateForce('center', { strength: 0.005 })
+          console.log("🌌 [Layout] Modo Supernova (Cosmos Expandido) ativado")
         }
         else if (layoutMode === 1) {
-          // 1: Modo Orgânico (Dente-de-Leão / Árvore Natural)
-          updateForce('charge', { strength: -400, distanceMax: 2000 })
-          updateForce('center', { strength: 0.08 }) // Mais gravidade para unir
-          console.log("🌼 [Layout] Modo Orgânico (Dente-de-Leão) ativado")
+          // 1: Modo Orgânico (Dente-de-Leão Espaçoso)
+          updateForce('charge', { strength: -8000, distanceMax: 20000 })
+          updateForce('center', { strength: 0.01 })
+          console.log("🌼 [Layout] Modo Orgânico (Dente-de-Leão Espaçoso) ativado")
         }
         else if (layoutMode === 2) {
-          // 2: Modo Denso (Galáxia Compacta para X-Ray)
-          updateForce('charge', { strength: -100, distanceMax: 500 })
-          updateForce('center', { strength: 0.15 }) // Muita gravidade
-          console.log("🪐 [Layout] Modo Galáxia (Denso) ativado")
+          // 2: Modo Equilibrado
+          updateForce('charge', { strength: -4000, distanceMax: 12000 })
+          updateForce('center', { strength: 0.02 })
+          console.log("🪐 [Layout] Modo Equilibrado ativado")
         }
         return
       }
