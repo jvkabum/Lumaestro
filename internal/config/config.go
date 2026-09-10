@@ -165,6 +165,27 @@ func (c *Config) NormalizeProviders() {
 			"gemma-4-31b-it",        // 🛡️ Gemma 4 31B (resiliência open-weight)
 			"gemma-4-26b-it",        // 🐘 Gemma 4 26B (reserva tática)
 		}
+	} else {
+		// Higienização ativa de modelos existentes no JSON com sufixos falsos
+		for i, m := range c.ActiveGoogleModels {
+			switch m {
+			case "gemini-3.8-flash-high":
+				c.ActiveGoogleModels[i] = "gemini-3.8-flash"
+			case "gemini-3.7-flash-medium":
+				c.ActiveGoogleModels[i] = "gemini-3.7-flash"
+			case "gemini-3.6-flash-medium":
+				c.ActiveGoogleModels[i] = "gemini-3.6-flash"
+			case "gemini-3.1-pro-preview":
+				c.ActiveGoogleModels[i] = "gemini-3.1-pro"
+			case "gemini-3-flash-preview":
+				c.ActiveGoogleModels[i] = "gemini-3-flash"
+			case "gemma-4-26b-a4b-it":
+				c.ActiveGoogleModels[i] = "gemma-4-26b-it"
+			default:
+				clean := strings.TrimSuffix(strings.TrimSuffix(m, "-high"), "-medium")
+				c.ActiveGoogleModels[i] = clean
+			}
+		}
 	}
 	if len(c.ActiveNativeModels) == 0 {
 		c.ActiveNativeModels = []string{

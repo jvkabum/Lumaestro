@@ -27,17 +27,25 @@ export function useInteractionPilot() {
     // --- LEGACO (MANTIDO P/ STORECONTRACT E UI CLÁSSICA) ---
     const focusNode = (deckInstance, currentViewState, node) => {
         if (!deckInstance || !node) return;
+        const nx = Number(node.x) || 0;
+        const ny = Number(node.y) || 0;
+        const nz = Number(node.z) || 0;
+
         const targetViewState = {
             ...currentViewState.value,
-            target: [node.x, node.y, node.z],
-            zoom: 0.5, // Reduzido de 3.5 para 1.5 para a câmera parar mais longe do nó
-            transitionDuration: 3500, // Efeito "nave viajando"
-            pitch: 35, // Inclinação leve para profundidade 3D
-            bearing: -15, // Rotação leve para estética
+            target: [nx, ny, nz],
+            zoom: 0.5,
+            rotationX: 30,
+            rotationOrbit: -25,
+            transitionDuration: 2000,
             transitionInterpolator: NAV_CONFIG.transitionInterpolator
         };
         deckInstance.setProps({ viewState: targetViewState });
-        currentViewState.value = targetViewState;
+        currentViewState.value = {
+            ...targetViewState,
+            transitionDuration: 0,
+            transitionInterpolator: null
+        };
     };
 
     /**
@@ -51,21 +59,28 @@ export function useInteractionPilot() {
 
         // 1. Busca Exata (O(1) - Alta Performance)
         let node = (nodeMap instanceof Map) ? nodeMap.get(targetId) : (nodeMap[targetId] || nodeMap[id]);
+        if (!node && cleanId !== targetId) {
+            node = (nodeMap instanceof Map) ? nodeMap.get(cleanId) : nodeMap[cleanId];
+        }
 
         // 2. [Mixer Vermelho] Busca por Aproximação / Nome Normalizado (Plano B)
         if (!node) {
-            console.log(`[Pilot] ⚠️ ID direto não encontrado. Iniciando busca radial...`);
-            const normalizedTarget = cleanId.replace(/[\s\-_]+/g, ' ');
+            const normalizedTarget = cleanId.replace(/[\s\-_:]+/g, ' ');
             const allNodes = (nodeMap instanceof Map) ? Array.from(nodeMap.values()) : Object.values(nodeMap);
             
             node = allNodes.find(n => {
-                const nid = String(n.id).toLowerCase().trim().replace(/[\s\-_]+/g, ' ');
-                const nName = String(n.name || '').toLowerCase().trim().replace(/[\s\-_]+/g, ' ');
-                return nid === normalizedTarget || nName === normalizedTarget || nid.includes(cleanId);
+                const nid = String(n.id).toLowerCase().trim().replace(/[\s\-_:]+/g, ' ');
+                const nName = String(n.name || '').toLowerCase().trim().replace(/[\s\-_:]+/g, ' ');
+                return nid === normalizedTarget || 
+                       nName === normalizedTarget || 
+                       nid.endsWith(' ' + normalizedTarget) ||
+                       nid.includes(cleanId) ||
+                       (nName.length >= 3 && cleanId.includes(nName));
             });
         }
 
         if (node) {
+            console.log(`[Pilot] 🎯 Focando nó encontrado: "${node.name || node.id}" em [${node.x}, ${node.y}, ${node.z}]`);
             focusNode(deckInstance, currentViewState, node);
             return node;
         }
@@ -76,12 +91,19 @@ export function useInteractionPilot() {
         if (!deckInstance) return;
         const targetViewState = {
             ...currentViewState.value,
-            target: [0, 0, 0], zoom: -3.2, rotationX: 30, rotationOrbit: -25,
+            target: [0, 0, 0],
+            zoom: -3.2,
+            rotationX: 30,
+            rotationOrbit: -25,
             transitionDuration: 1500,
             transitionInterpolator: NAV_CONFIG.transitionInterpolator
         };
         deckInstance.setProps({ viewState: targetViewState });
-        currentViewState.value = targetViewState;
+        currentViewState.value = {
+            ...targetViewState,
+            transitionDuration: 0,
+            transitionInterpolator: null
+        };
     };
 
     const panTarget = (deckInstance, currentViewState, moveRawX, moveRawY, moveRawZ) => {

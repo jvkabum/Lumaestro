@@ -32,18 +32,11 @@ export function useStoreContract({
                 return;
             }
 
-            // 🛡️ [PROTEÇÃO] Evita múltiplas buscas simultâneas que podem travar a câmera
-            if (store.discoveryStatus === 'searching') return;
-            store.discoveryStatus = 'searching';
-
             const node = focusNodeById(id);
-            
             if (node) {
                 console.log("[Contract] ✅ Nó identificado via Contrato:", node.id);
-                
-                // 🧠 AUTO-DETAIL: Abre a descrição do nó e busca contexto (Mixer Vermelho)
                 store.setSelectedNode(node);
-                store.setNodeDetails({ loading: true, path: '', content: '', isVirtual: false });
+                store.discoveryStatus = 'found';
 
                 const bridge = (window.go?.core?.App) || (window.go?.main?.App);
                 if (bridge && bridge.GetNeuralNodeContext) {
@@ -53,25 +46,15 @@ export function useStoreContract({
                                 loading: false,
                                 path: res.path || 'Memória Virtual',
                                 content: res.content || res.summary || 'Sem metadados',
-                                isVirtual: res.type === 'memory' // Padronizado conforme backend core/app.go
+                                isVirtual: res.type === 'memory'
                             });
-                            store.discoveryStatus = 'found';
-                        } else {
-                            store.setNodeDetails({ 
-                                loading: false, 
-                                path: 'Informativo', 
-                                content: 'Nota identificada, mas conteúdo ainda em processamento.' 
-                            });
-                            store.discoveryStatus = 'failed';
                         }
                     }).catch(err => {
-                        console.error("[Contract] Erro ao buscar contexto automático:", err);
-                        store.discoveryStatus = 'failed';
+                        console.error("[Contract] Erro ao buscar contexto:", err);
                     });
                 }
             } else {
-                console.warn("[Contract] ❌ Nó não localizado para ID:", id);
-                store.discoveryStatus = 'failed';
+                console.warn("[Contract] ⚠️ Nó não localizado diretamente para ID:", id);
             }
         };
  
@@ -81,6 +64,7 @@ export function useStoreContract({
             cameraPosition,
             panTarget,
             focusNode, // Agora usa a versão robusta com feedback
+            focusNodeById, // ⚡ Exposto para BridgeDriver, GraphProvenance e Chat
             // Busca exposta sem side-effects
             search: (id) => focusNodeById(id),
             graphData: (newData) => {

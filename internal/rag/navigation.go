@@ -96,10 +96,13 @@ func (n *GraphNavigator) SearchByKeyword(ctx context.Context, input string) []ma
 				fullNode, err := n.Qdrant.SearchByField("obsidian_knowledge", "id", nodeID)
 				if err == nil && fullNode != nil {
 					results = append(results, fullNode)
-					seenIDs[nodeID] = true
+				} else {
+					// Fallback com dados do DuckDB caso o nó ainda não esteja no Qdrant
+					results = append(results, res)
 				}
+				seenIDs[nodeID] = true
 			}
-			if len(results) >= 3 { // Reduzi para 3 para ser mais ágil
+			if len(results) >= 1 {
 				fmt.Printf("[RADAR] ✅ DuckDB entregou %d resultados de elite.\n", len(results))
 				return results
 			}

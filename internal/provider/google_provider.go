@@ -5,6 +5,7 @@ import (
 	"Lumaestro/internal/utils"
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -57,11 +58,43 @@ func NewGoogleProvider(ctx context.Context, apiKey string) (*GoogleProvider, err
 	}, nil
 }
 
+// cleanGoogleModelID normaliza e remove sufixos inválidos (-high, -medium) de IDs da API Google.
+func cleanGoogleModelID(id string) string {
+	switch id {
+	case "gemini-3.8-flash-high":
+		return "gemini-3.8-flash"
+	case "gemini-3.7-flash-medium":
+		return "gemini-3.7-flash"
+	case "gemini-3.6-flash-medium":
+		return "gemini-3.6-flash"
+	case "gemini-3.1-pro-preview":
+		return "gemini-3.1-pro"
+	case "gemini-3-flash-preview":
+		return "gemini-3-flash"
+	case "gemma-4-26b-a4b-it":
+		return "gemma-4-26b-it"
+	default:
+		id = strings.TrimSuffix(id, "-high")
+		id = strings.TrimSuffix(id, "-medium")
+		return id
+	}
+}
+
 // GenerateContentWithRetry é o motor generativo unificado com Cascata de Modelos (Gemini -> Gemma), Rotação de Chaves e QuotaManager (Gesttik Engine).
 func (p *GoogleProvider) GenerateContentWithRetry(ctx context.Context, contents []*genai.Content) (*genai.GenerateContentResponse, error) {
 	// Super Frota Dinâmica (Lê os modelos ativos da configuração do Maestro)
 	cfg, _ := config.Load()
-	models := cfg.ActiveGoogleModels
+	var models []string
+	if cfg != nil && len(cfg.ActiveGoogleModels) > 0 {
+		seen := make(map[string]bool)
+		for _, m := range cfg.ActiveGoogleModels {
+			clean := cleanGoogleModelID(m)
+			if clean != "" && !seen[clean] {
+				models = append(models, clean)
+				seen[clean] = true
+			}
+		}
+	}
 
 	// Fallback de Segurança caso a lista esteja vazia
 	// ATENÇÃO: Use apenas IDs oficiais da API. Consulte: https://ai.google.dev/gemini-api/docs/models

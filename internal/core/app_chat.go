@@ -289,8 +289,13 @@ func (a *App) SendAgentInput(agent string, input string, images []map[string]str
 func (a *App) buildHybridContext(agent string, input string, previewInput string) string {
 	contextInfo := ""
 
-	// 🔒 Validação de Resiliência: Só executa o RAG se o Vault estiver mapeado e os motores estiverem online.
-	if a.embedder == nil || a.navigator == nil || a.GetConfig().ObsidianVaultPath == "" {
+	targetWs := a.getActiveWorkspace()
+	if targetWs == "" {
+		targetWs = a.GetConfig().ObsidianVaultPath
+	}
+
+	// 🔒 Validação de Resiliência: Precisa do navegador e de um workspace ou vault ativo.
+	if a.navigator == nil || targetWs == "" {
 		return contextInfo
 	}
 
@@ -315,46 +320,48 @@ func (a *App) buildHybridContext(agent string, input string, previewInput string
 	}
 
 	// 🧠 2. ENGINE SEMÂNTICO (IA): Enriquecimento Vectorial e Memórias
-	vector, err := a.embedder.GenerateEmbedding(a.ctx, input, true)
-	if err == nil {
-		a.emitAgentStatus(agent, "Buscando referências semânticas relevantes", "memory")
+	if a.embedder != nil && a.qdrant != nil {
+		vector, err := a.embedder.GenerateEmbedding(a.ctx, input, true)
+		if err == nil {
+			a.emitAgentStatus(agent, "Buscando referências semânticas relevantes", "memory")
 
-		semanticNotes, _ := a.qdrant.Search("obsidian_knowledge", vector, 5) // Busca expandida (Top 5)
-		semanticMems, _ := a.qdrant.Search("knowledge_graph", vector, 3)     // Memórias recentes (Top 3)
+			semanticNotes, _ := a.qdrant.Search("obsidian_knowledge", vector, 5) // Busca expandida (Top 5)
+			semanticMems, _ := a.qdrant.Search("knowledge_graph", vector, 3)     // Memórias recentes (Top 3)
 
-		seen := make(map[string]bool)
-		for _, n := range nodes {
-			if name, ok := n["name"].(string); ok {
-				seen[name] = true
+			seen := make(map[string]bool)
+			for _, n := range nodes {
+				if name, ok := n["name"].(string); ok {
+					seen[name] = true
+				}
 			}
+
+			// 🛡️ RANKING DE MERGE E LIMITE DE NÓS (Prevenção de Context Overflow)
+			const MAX_NODES = 12 // Teto absoluto de nós injetados no prompt
+
+			for _, sn := range semanticNotes {
+				if len(nodes) >= MAX_NODES {
+					break
+				}
+				if name, ok := sn["name"].(string); ok && !seen[name] {
+					nodes = append(nodes, sn)
+					seen[name] = true
+				}
+			}
+
+			for _, sm := range semanticMems {
+				if len(nodes) >= MAX_NODES {
+					break
+				}
+				if subj, ok := sm["subject"].(string); ok && !seen[subj] {
+					sm["name"] = subj
+					sm["document-type"] = "memory"
+					nodes = append(nodes, sm)
+					seen[subj] = true
+				}
+			}
+		} else {
+			fmt.Printf("[RAG] ⚠️ Falha na API de Vetores (%v). Operando apenas no modo Degredado (Radar).\n", err)
 		}
-
-		// 🛡️ RANKING DE MERGE E LIMITE DE NÓS (Prevenção de Context Overflow)
-		const MAX_NODES = 12 // Teto absoluto de nós injetados no prompt
-
-		for _, sn := range semanticNotes {
-			if len(nodes) >= MAX_NODES {
-				break
-			}
-			if name, ok := sn["name"].(string); ok && !seen[name] {
-				nodes = append(nodes, sn)
-				seen[name] = true
-			}
-		}
-
-		for _, sm := range semanticMems {
-			if len(nodes) >= MAX_NODES {
-				break
-			}
-			if subj, ok := sm["subject"].(string); ok && !seen[subj] {
-				sm["name"] = subj
-				sm["document-type"] = "memory"
-				nodes = append(nodes, sm)
-				seen[subj] = true
-			}
-		}
-	} else {
-		fmt.Printf("[RAG] ⚠️ Falha na API de Vetores (%v). Operando apenas no modo Degredado (Radar).\n", err)
 	}
 
 	// 🎬 3. MONTAGEM FINAL DO CONTEXTO
