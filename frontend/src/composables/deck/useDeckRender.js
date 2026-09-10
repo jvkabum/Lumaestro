@@ -42,7 +42,7 @@ export function useDeckRender() {
         updateForce, terminatePhysics // ← updateForce restaurado
     } = usePhysicsDriver();
 
-    const { purify, bootstrapCoordinates, syncIncremental, mapLinks } = useDataEngineer();
+    const { purify, bootstrapCoordinates, syncIncremental, mapLinks, buildLookupIndex, resolveNode } = useDataEngineer();
     const { 
         focusNode: pilotFocus, 
         focusNodeById: pilotFocusNodeById, // ← Importando a lógica de busca base
@@ -75,6 +75,7 @@ export function useDeckRender() {
         nodeMap,
         currentLinksRef: currentLinks,
         syncPositions,
+        resolveNode,
         onUpdate: () => updateLayers(),
         onStabilized: (positions) => savePositions(positions) // ← Auto-save ativado
     });
@@ -174,7 +175,8 @@ export function useDeckRender() {
             nodeMap.set(sid, n);
             nodeMap.set(sid.toLowerCase(), n);
         });
-        currentLinks.value = mapLinks(rawEdges, nodeMap);
+        const lookup = buildLookupIndex(currentNodes.value);
+        currentLinks.value = mapLinks(rawEdges, nodeMap, lookup);
 
         deckInstance.value = createDeck({
             containerRef,
@@ -187,7 +189,7 @@ export function useDeckRender() {
         });
 
         // 2. Física e Telemetria
-        physicsWorker = initPhysics(currentNodes.value, purify(rawEdges));
+        physicsWorker = initPhysics(currentNodes.value, currentLinks.value);
         setupReceiver(physicsWorker);
 
         // 3. Ativação dos Contratos e Relógio
@@ -223,8 +225,9 @@ export function useDeckRender() {
     const updateGraph = (rawNodes, rawEdges) => {
         if (!physicsWorker || !deckInstance.value) return;
         const pureNodes = syncIncremental(rawNodes, nodeMap, currentNodes);
-        currentLinks.value = mapLinks(rawEdges, nodeMap);
-        updatePhysicsData(pureNodes, purify(rawEdges));
+        const lookup = buildLookupIndex(pureNodes);
+        currentLinks.value = mapLinks(rawEdges, nodeMap, lookup);
+        updatePhysicsData(pureNodes, currentLinks.value);
     };
 
     /**

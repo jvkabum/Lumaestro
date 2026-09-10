@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -416,8 +417,9 @@ func (s *DuckDBStore) GetNodeCount(workspacePath string) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	normWs := strings.ReplaceAll(filepath.Clean(strings.TrimSpace(workspacePath)), "\\", "/")
 	var count int
-	err := s.db.QueryRow(`SELECT count(*) FROM graph_nodes WHERE workspace_path = ?`, workspacePath).Scan(&count)
+	err := s.db.QueryRow(`SELECT count(*) FROM graph_nodes WHERE REPLACE(workspace_path, '\', '/') = ?`, normWs).Scan(&count)
 	return count, err
 }
 
@@ -441,11 +443,12 @@ func (s *DuckDBStore) GetFullGraph(workspacePath string) ([]map[string]interface
 			return nil, nil, err
 		}
 	} else {
-		rowsN, err = s.db.Query(`SELECT id, name, type, pos_x, pos_y, pos_z, parent_id, metadata FROM graph_nodes WHERE workspace_path = ?`, cleanWs)
+		normWs := strings.ReplaceAll(filepath.Clean(cleanWs), "\\", "/")
+		rowsN, err = s.db.Query(`SELECT id, name, type, pos_x, pos_y, pos_z, parent_id, metadata FROM graph_nodes WHERE REPLACE(workspace_path, '\', '/') = ?`, normWs)
 		if err != nil {
 			return nil, nil, err
 		}
-		rowsE, err = s.db.Query(`SELECT source_id, target_id, weight, relation_type FROM graph_edges WHERE workspace_path = ?`, cleanWs)
+		rowsE, err = s.db.Query(`SELECT source_id, target_id, weight, relation_type FROM graph_edges WHERE REPLACE(workspace_path, '\', '/') = ?`, normWs)
 		if err != nil {
 			rowsN.Close()
 			return nil, nil, err

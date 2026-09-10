@@ -4,7 +4,7 @@
  * Responsável por processar as mensagens vindas do WebWorker de Física.
  * Sincroniza posições e realiza a "auto-cura" de links (referências perdidas).
  */
-export function usePhysicsReceiver({ nodeMap, currentLinksRef, syncPositions, onUpdate, onStabilized }) {
+export function usePhysicsReceiver({ nodeMap, currentLinksRef, syncPositions, resolveNode, onUpdate, onStabilized }) {
     
     const setupReceiver = (worker) => {
         if (!worker) return;
@@ -21,8 +21,8 @@ export function usePhysicsReceiver({ nodeMap, currentLinksRef, syncPositions, on
                     if (!link.sourceObj || !link.targetObj) {
                         const sid = String(typeof link.source === 'object' ? link.source.id : link.source);
                         const tid = String(typeof link.target === 'object' ? link.target.id : link.target);
-                        if (!link.sourceObj) link.sourceObj = nodeMap.get(sid);
-                        if (!link.targetObj) link.targetObj = nodeMap.get(tid);
+                        if (!link.sourceObj) link.sourceObj = (resolveNode ? resolveNode(sid, nodeMap) : null) || nodeMap.get(sid) || nodeMap.get(sid.toLowerCase());
+                        if (!link.targetObj) link.targetObj = (resolveNode ? resolveNode(tid, nodeMap) : null) || nodeMap.get(tid) || nodeMap.get(tid.toLowerCase());
                     }
                 });
 
@@ -30,10 +30,23 @@ export function usePhysicsReceiver({ nodeMap, currentLinksRef, syncPositions, on
                 if (onUpdate) onUpdate();
             }
             else if (type === 'PRUNED_LINKS') {
-                // Recebendo a Árvore Limpa: 
-                // A física isolou o lixo. Agora ordenamos ao Frontend ignorar as teias extras.
-                currentLinksRef.value = payload.links;
-                console.log(`[PhysicsReceiver] Visão Limpa! Desenhando ${payload.links.length} arestas isoladas.`);
+                // Recebendo a Árvore Limpa: cura referências de nós para os objetos vivos da memória
+                const healedLinks = (payload.links || []).map(link => {
+                    const sid = String(typeof link.source === 'object' ? link.source.id : link.source);
+                    const tid = String(typeof link.target === 'object' ? link.target.id : link.target);
+                    const sObj = (resolveNode ? resolveNode(sid, nodeMap) : null) || nodeMap.get(sid) || nodeMap.get(sid.toLowerCase());
+                    const tObj = (resolveNode ? resolveNode(tid, nodeMap) : null) || nodeMap.get(tid) || nodeMap.get(tid.toLowerCase());
+                    return {
+                        ...link,
+                        source: sid,
+                        target: tid,
+                        sourceObj: sObj,
+                        targetObj: tObj
+                    };
+                }).filter(l => l.sourceObj && l.targetObj);
+
+                currentLinksRef.value = healedLinks;
+                console.log(`[PhysicsReceiver] Visão Limpa! Desenhando ${healedLinks.length} arestas isoladas.`);
                 if (onUpdate) onUpdate();
             }
             else if (type === 'STABILIZED') {

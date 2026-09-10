@@ -44,15 +44,15 @@ export function repairCoordinates(nodesData) {
 export function processDegrees(links, idMap) {
     const nodeDegrees = new Map();
     links.forEach(l => {
-        const sid = typeof l.source === 'object' ? l.source.id : l.source;
-        const tid = typeof l.target === 'object' ? l.target.id : l.target;
+        const sid = String(typeof l.source === 'object' ? l.source.id : l.source);
+        const tid = String(typeof l.target === 'object' ? l.target.id : l.target);
         nodeDegrees.set(sid, (nodeDegrees.get(sid) || 0) + 1);
         nodeDegrees.set(tid, (nodeDegrees.get(tid) || 0) + 1);
     });
 
     const validLinks = links.filter(l => {
-        const sid = typeof l.source === 'object' ? l.source.id : l.source;
-        const tid = typeof l.target === 'object' ? l.target.id : l.target;
+        const sid = String(typeof l.source === 'object' ? l.source.id : l.source);
+        const tid = String(typeof l.target === 'object' ? l.target.id : l.target);
         if (!idMap.has(sid) || !idMap.has(tid)) return false;
 
         const sDeg = nodeDegrees.get(sid) || 0;
@@ -104,7 +104,8 @@ export function mapHierarchy(nodesData, idMap) {
 /**
  * 🌳 Poda Mágica: BFS Spanning Forest
  * Converte qualquer teia/malha complexa em uma árvore radial (Star/Tree Topology)
- * baseando-se no centro de gravidade (Root) de maior PageRank/Degree.
+ * baseando-se no centro de gravidade (Root) de maior PageRank/Degree, preservando
+ * sinapses semânticas importantes.
  */
 export function convertToBFSTree(nodesData, validLinks, nodeDegrees) {
     const treeLinks = [];
@@ -120,8 +121,8 @@ export function convertToBFSTree(nodesData, validLinks, nodeDegrees) {
     // 2. Mapa de Adjacência Rápido (O(L))
     const adj = new Map();
     validLinks.forEach(l => {
-        const s = typeof l.source === 'object' ? l.source.id : l.source;
-        const t = typeof l.target === 'object' ? l.target.id : l.target;
+        const s = String(typeof l.source === 'object' ? l.source.id : l.source);
+        const t = String(typeof l.target === 'object' ? l.target.id : l.target);
         if(!adj.has(s)) adj.set(s, []);
         if(!adj.has(t)) adj.set(t, []);
         adj.get(s).push({ target: t, original: l });
@@ -153,6 +154,28 @@ export function convertToBFSTree(nodesData, validLinks, nodeDegrees) {
                     queue.push(edge.target); 
                     treeLinks.push(edge.original);
                 }
+            }
+        }
+    }
+
+    // 4. Preserva conexões semânticas e de memória além da árvore estrutural
+    const treeEdgeSet = new Set(treeLinks.map(l => {
+        const s = String(typeof l.source === 'object' ? l.source.id : l.source);
+        const t = String(typeof l.target === 'object' ? l.target.id : l.target);
+        return `${s}->${t}`;
+    }));
+
+    let extraSemanticCount = 0;
+    for (const l of validLinks) {
+        const edgeType = l['edge-type'] || l['relation_type'] || l.relation_type;
+        if (edgeType === 'semantic' || edgeType === 'memory' || edgeType === 'link') {
+            const s = String(typeof l.source === 'object' ? l.source.id : l.source);
+            const t = String(typeof l.target === 'object' ? l.target.id : l.target);
+            if (!treeEdgeSet.has(`${s}->${t}`) && !treeEdgeSet.has(`${t}->${s}`)) {
+                treeLinks.push(l);
+                treeEdgeSet.add(`${s}->${t}`);
+                extraSemanticCount++;
+                if (extraSemanticCount >= 1000) break;
             }
         }
     }

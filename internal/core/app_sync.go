@@ -571,6 +571,40 @@ func (a *App) SyncAllNodes() {
 		}
 	}
 
+	// Mapeador auxiliar de arquivos para pastas orbitais no workspace ativo
+	fileToParentPlanet := make(map[string]string)
+	if targetWs != "" {
+		h := sha256.New()
+		h.Write([]byte(filepath.Clean(targetWs)))
+		pathHash := hex.EncodeToString(h.Sum(nil))[:6]
+		galaxyID := "galaxy:" + pathHash + ":" + strings.ToLower(filepath.Base(targetWs))
+
+		_ = filepath.Walk(targetWs, func(p string, info os.FileInfo, err error) error {
+			if err != nil || info == nil {
+				return nil
+			}
+			if info.IsDir() {
+				if info.Name() == ".git" || info.Name() == "node_modules" || info.Name() == ".lumaestro" {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			rel, _ := filepath.Rel(targetWs, p)
+			if rel == "." {
+				return nil
+			}
+			ext := filepath.Ext(p)
+			baseName := strings.ToLower(strings.TrimSuffix(info.Name(), ext))
+			parentDir := filepath.Dir(rel)
+			if parentDir == "." {
+				fileToParentPlanet[baseName] = galaxyID
+			} else {
+				fileToParentPlanet[baseName] = fmt.Sprintf("planet:%s:%s", pathHash, strings.ToLower(parentDir))
+			}
+			return nil
+		})
+	}
+
 	for _, n := range structuralNodes {
 		id, _ := n["id"].(string)
 		if id == "" {
@@ -593,9 +627,63 @@ func (a *App) SyncAllNodes() {
 			docType = "source"
 		}
 		parent, _ := n["parent_gravity_id"].(string)
+		if parent == "" {
+			parent, _ = n["parent_id"].(string)
+		}
+
+		// Dedução inteligente de parentesco para planetas (estruturas de pastas)
+		if parent == "" && strings.HasPrefix(id, "planet:") {
+			parts := strings.SplitN(id, ":", 3)
+			if len(parts) == 3 {
+				hash := parts[1]
+				relPath := parts[2]
+				cleanRel := filepath.Clean(strings.ReplaceAll(relPath, "/", "\\"))
+				dir := filepath.Dir(cleanRel)
+				if dir == "." || dir == "" {
+					for _, cand := range structuralNodes {
+						candID, _ := cand["id"].(string)
+						if strings.HasPrefix(candID, "galaxy:"+hash+":") {
+							parent = candID
+							break
+						}
+					}
+					if parent == "" && targetWs != "" {
+						parent = fmt.Sprintf("galaxy:%s:%s", hash, strings.ToLower(filepath.Base(targetWs)))
+					}
+				} else {
+					parent = fmt.Sprintf("planet:%s:%s", hash, strings.ToLower(dir))
+				}
+			}
+		}
+
+		// Dedução inteligente de parentesco para luas (arquivos de código/mídia)
+		if parent == "" && strings.HasPrefix(id, "moon:") {
+			parts := strings.SplitN(id, ":", 3)
+			if len(parts) == 3 {
+				moonBase := strings.ToLower(parts[2])
+				if pPlanet, found := fileToParentPlanet[moonBase]; found {
+					parent = pPlanet
+				}
+			}
+		}
 
 		a.GEngine.AddNode(id, name, docType)
-		nameToID[strings.ToLower(name)] = id
+		nameLower := strings.ToLower(name)
+		nameToID[nameLower] = id
+		parts := strings.Split(id, ":")
+		if len(parts) >= 3 {
+			sub := strings.ToLower(parts[2])
+			nameToID[sub] = id
+			nameToID[strings.ReplaceAll(sub, "\\", "/")] = id
+			nameToID[strings.ReplaceAll(sub, "/", "\\")] = id
+			base := filepath.Base(sub)
+			if _, exists := nameToID[base]; !exists {
+				nameToID[base] = id
+			}
+		}
+		if strings.HasPrefix(id, "asteroid:") {
+			nameToID[strings.TrimPrefix(id, "asteroid:")] = id
+		}
 
 		nodeData := make(map[string]interface{})
 		for k, v := range n {
@@ -613,6 +701,12 @@ func (a *App) SyncAllNodes() {
 			nodeData["z"] = pos[2]
 		}
 		addNode(nodeData)
+
+		// Gera aresta física de órbita garantida
+		if parent != "" && parent != id {
+			a.GEngine.AddEdge(parent, id, 3.0, "orbital")
+			addEdge(parent, id, 3.0, "orbital")
+		}
 	}
 
 	for _, e := range structuralEdges {
@@ -699,13 +793,24 @@ func (a *App) SyncAllNodes() {
 			if linksRaw, ok := p["links"].([]interface{}); ok {
 				for _, target := range linksRaw {
 					if t, ok := target.(string); ok && t != "" {
-						targetNameLower := strings.ToLower(t)
-						targetID := targetNameLower
+						targetNameLower := strings.ToLower(strings.TrimSpace(t))
+						targetID := ""
 						if realID, ok := nameToID[targetNameLower]; ok {
 							targetID = realID
+						} else if _, exists := batchIndex[targetNameLower]; exists {
+							targetID = targetNameLower
+						} else if realID, ok := nameToID[strings.ReplaceAll(targetNameLower, "/", "\\")]; ok {
+							targetID = realID
+						} else if realID, ok := nameToID[strings.ReplaceAll(targetNameLower, "\\", "/")]; ok {
+							targetID = realID
+						} else if _, exists := batchIndex["asteroid:"+targetNameLower]; exists {
+							targetID = "asteroid:" + targetNameLower
 						}
-						a.GEngine.AddEdge(nodeID, targetID, 1.0, "link")
-						addEdge(nodeID, targetID, 1.0, "link")
+
+						if targetID != "" && targetID != nodeID {
+							a.GEngine.AddEdge(nodeID, targetID, 1.0, "link")
+							addEdge(nodeID, targetID, 1.0, "link")
+						}
 					}
 				}
 			}
@@ -715,13 +820,24 @@ func (a *App) SyncAllNodes() {
 				for _, t := range triplesRaw {
 					if tm, ok := t.(map[string]interface{}); ok {
 						if obj, ok := tm["object"].(string); ok && obj != "" {
-							targetNameLower := strings.ToLower(obj)
-							targetID := targetNameLower
+							targetNameLower := strings.ToLower(strings.TrimSpace(obj))
+							targetID := ""
 							if realID, ok := nameToID[targetNameLower]; ok {
 								targetID = realID
+							} else if _, exists := batchIndex[targetNameLower]; exists {
+								targetID = targetNameLower
+							} else if realID, ok := nameToID[strings.ReplaceAll(targetNameLower, "/", "\\")]; ok {
+								targetID = realID
+							} else if realID, ok := nameToID[strings.ReplaceAll(targetNameLower, "\\", "/")]; ok {
+								targetID = realID
+							} else if _, exists := batchIndex["asteroid:"+targetNameLower]; exists {
+								targetID = "asteroid:" + targetNameLower
 							}
-							a.GEngine.AddEdge(nodeID, targetID, 2.0, "semantic")
-							addEdge(nodeID, targetID, 2.0, "semantic")
+
+							if targetID != "" && targetID != nodeID {
+								a.GEngine.AddEdge(nodeID, targetID, 2.0, "semantic")
+								addEdge(nodeID, targetID, 2.0, "semantic")
+							}
 						}
 					}
 				}
